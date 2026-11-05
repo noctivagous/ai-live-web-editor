@@ -170,7 +170,13 @@ export default defineConfig({
       envFile: path.resolve(dir, '../../.env'),
     }),
   ],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    host: true,
+    headers: {
+      'Content-Security-Policy': "frame-ancestors http://localhost:4112 http://127.0.0.1:4112",
+    },
+  },
   devtools: {
     apply: 'serve',
     builtinDevTools: false,

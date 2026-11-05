@@ -4,12 +4,13 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { currentModelId, hasAiKey, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, saveAiConfig, setPlaywrightPool } from './env.js'
-import { mapMastraChunk } from './chatStream.js'
+import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool } from './env.js'
+import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
 import { createProject, ensureWorkspace, getFsRoot, listProjects, readActiveId, selectProject, WORKSPACE_ROOT } from './launcher.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
+import { mountPoolPage, openPoolBrowser } from './poolPage.js'
 import chokidar from 'chokidar'
 
 loadDotEnv()
@@ -20,12 +21,16 @@ const PORT = Number(process.env.LAUNCHER_PORT) || 4112
 
 function publicConfig() {
   const hasKey = hasAiKey()
+  const provider = publicProvider()
   return {
     ok: true,
     hasApiKey: hasKey,
     hasOpenAiKey: hasKey,
-    model: currentModelId(),
+    model: openaiModelName(),
     modelName: openaiModelName(),
+    modelId: currentModelId(),
+    providerId: provider?.id || null,
+    providerName: provider?.name || null,
     baseUrl: openaiBaseUrl(),
     launcherUrl: `http://localhost:${PORT}`,
     previewStaticUrl: '/projects/',
@@ -34,11 +39,13 @@ function publicConfig() {
     activeProject: readActiveId(),
     fsRoot: getFsRoot(),
     playwrightPool: playwrightPoolEnabled(),
+    liveTarget: liveTarget(),
   }
 }
 app.use(cors({ origin: '*' }))
-app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"); next()})
+app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src *"); next()})
 app.use(express.json({ limit: '20mb' }))
+mountPoolPage(app)
 
 ensureWorkspace()
 markLauncherOwner()
@@ -85,6 +92,29 @@ app.post('/api/projects/create', (req, res) => {
   }
 })
 
+const projectSse = new Set<express.Response>()
+function pushProjectList() {
+  const payload = `data: ${JSON.stringify({ ok: true, active: readActiveId(), projects: listProjects() })}\n\n`
+  for (const res of projectSse) {
+    try { res.write(payload) } catch { /* closed */ }
+  }
+}
+
+app.get('/api/projects/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders?.()
+  projectSse.add(res)
+  res.write(`data: ${JSON.stringify({ ok: true, active: readActiveId(), projects: listProjects() })}\n\n`)
+  const ping = setInterval(() => { try { res.write(': ping\n\n') } catch { /* closed */ } }, 15000)
+  req.on('close', () => {
+    clearInterval(ping)
+    projectSse.delete(res)
+  })
+})
+
 // --- Launcher config (presence flags only: never expose secrets) ---
 app.get('/api/config', (req, res) => {
   res.json(publicConfig())
@@ -111,6 +141,8 @@ app.post('/api/config/pool', async (req, res) => {
     if (!enabled) {
       const { closePool } = await import('./browserPool.js')
       await closePool()
+    } else {
+      void openPoolBrowser().catch((e) => console.error('[browser]', e))
     }
     res.json({ ...publicConfig(), saved: true })
   } catch (e: any) {
@@ -242,29 +274,7 @@ app.post('/api/chat', async (req, res) => {
 })
 
 app.post('/api/chat/stream', async (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
-  res.setHeader('Cache-Control', 'no-cache, no-transform')
-  res.setHeader('Connection', 'keep-alive')
-  res.setHeader('X-Accel-Buffering', 'no')
-  res.flushHeaders?.()
-  const send = (obj: unknown) => { res.write(`data: ${JSON.stringify(obj)}\n\n`) }
-  try {
-    const { messages } = req.body
-    const { mastra } = await import('./mastra/index.js')
-    const agent = mastra.getAgent('editorAgent')
-    const result = await agent.stream(messages, { maxSteps: 12 })
-    for await (const chunk of result.fullStream) {
-      if (req.aborted) break
-      const mapped = mapMastraChunk(chunk)
-      if (mapped) send(mapped)
-    }
-    send({ type: 'done' })
-    res.end()
-  } catch (e: any) {
-    console.error(e)
-    try { send({ type: 'error', error: e.message }) } catch { /* closed */ }
-    res.end()
-  }
+  await pipeAgentChatStream(req.body?.messages, res, req)
 })
 
 // --- Live-edit submit: page annotations -> agent applies -> files + live DOM ---
@@ -322,16 +332,31 @@ app.get('*', (req, res) => {
   else res.send(`<html><body style="font-family:system-ui;padding:24px"><h1>AI Live Editor Launcher running</h1><p>API at /api/fs/health</p><p>FS root: ${getFsRoot()}</p><p>Vite for the active project starts with this process on localhost:5173</p><p>UI not built yet - run npm run ui:build</p></body></html>`)
 })
 
-// watcher for HMR-like logs
+// watcher: log file edits + refresh the 4112 project list when folders appear/disappear
 const watcher = chokidar.watch(WORKSPACE_ROOT, { ignored: /(^|[\/\\])\../, persistent: true, ignoreInitial: true })
 watcher.on('change', p => console.log('[fs] changed', path.relative(WORKSPACE_ROOT, p)))
+let projectPushTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleProjectPush() {
+  if (projectPushTimer) clearTimeout(projectPushTimer)
+  projectPushTimer = setTimeout(() => {
+    pushProjectList()
+    console.log('[workspace] projects', listProjects().map(p => p.id).join(', ') || '(none)')
+  }, 400)
+}
+watcher.on('addDir', scheduleProjectPush)
+watcher.on('unlinkDir', scheduleProjectPush)
+watcher.on('add', (p) => { if (path.basename(p) === 'package.json') scheduleProjectPush() })
+watcher.on('unlink', (p) => { if (path.basename(p) === 'package.json') scheduleProjectPush() })
 
 const server = app.listen(PORT, () => {
   console.log(`[launcher] running at http://localhost:${PORT}`)
   console.log(`[launcher] FS root: ${getFsRoot()}`)
   console.log(`[launcher] Health: http://localhost:${PORT}/api/fs/health`)
   console.log(`[launcher] Projects: http://localhost:${PORT}/projects/`)
-  console.log(`[launcher] Playwright pool: ${playwrightPoolEnabled() ? 'on (lazy)' : 'off — npm run dev:pool to enable'}`)
+  console.log(`[launcher] Playwright pool: ${playwrightPoolEnabled() ? 'on' : 'off'} · live target: ${liveTarget()}${liveTarget() === 'pool' ? ' (no Vite bridge)' : ''}`)
+  if (playwrightPoolEnabled()) {
+    void openPoolBrowser().catch((e) => console.error('[browser]', e))
+  }
 })
 
 server.on('error', (err: any) => {

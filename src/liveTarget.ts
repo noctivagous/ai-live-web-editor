@@ -1,4 +1,4 @@
-import { playwrightPoolEnabled } from './env.js'
+import { liveTarget, playwrightPoolEnabled } from './env.js'
 import { pageCommand, type PageOp } from './pageBridge.js'
 
 const VITE_ORIGIN = process.env.VITE_ORIGIN || 'http://localhost:5173'
@@ -21,6 +21,11 @@ export function isViteAppUrl(url?: string | null) {
   } catch {
     return true
   }
+}
+
+function usePlaywrightLive(url?: string) {
+  if (liveTarget() === 'pool') return true
+  return Boolean(url && !isViteAppUrl(url))
 }
 
 export async function runPoolOp(op: 'inspect' | 'patch' | 'eval' | 'open', payload: Record<string, unknown>) {
@@ -52,10 +57,10 @@ async function localPool(op: 'inspect' | 'patch' | 'eval' | 'open', payload: Rec
   return { via: 'playwright', ...(await evalJS(String(payload.code || ''), url)) }
 }
 
-/** inspect/patch/eval: Vite page bridge unless `url` is another origin and the pool is on. */
+/** inspect/patch/eval: Vite page bridge unless LIVE_TARGET=pool or `url` is another origin. */
 export async function livePageOp(op: PageOp, payload: Record<string, unknown> = {}) {
   const url = typeof payload.url === 'string' ? payload.url : undefined
-  if (url && !isViteAppUrl(url)) {
+  if (usePlaywrightLive(url)) {
     if (op === 'layout-snapshot') return liveLayoutSnapshot(payload, url)
     return runPoolOp(op, payload)
   }
@@ -70,7 +75,7 @@ export async function poolOpen(url: string) {
 }
 
 export async function liveLayoutSnapshot(params: Record<string, unknown> = {}, url?: string) {
-  if (url && !isViteAppUrl(url)) {
+  if (usePlaywrightLive(url)) {
     const denied = requirePlaywrightPool()
     if (denied) return denied
     const { captureLayoutSnapshot, summarizeLayoutSnapshot } = await import('./browserPool.js')

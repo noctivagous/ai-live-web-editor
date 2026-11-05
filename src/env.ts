@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { inferProvider } from './providers.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let envPath = path.join(ROOT, '.env')
@@ -49,8 +50,13 @@ export function openaiModelName(): string {
   return DEFAULT_MODEL
 }
 
+/** Mastra's OpenAI-compatible adapter id (`openai/…` is the protocol, not the company). */
 export function currentModelId(): string {
   return `openai/${openaiModelName()}`
+}
+
+export function publicProvider() {
+  return inferProvider(openaiApiKey(), openaiBaseUrl())
 }
 
 /** OpenAI-compatible config, resolved at generate time so a wizard-saved key is used immediately. */
@@ -68,7 +74,23 @@ function truthyEnv(v: string | undefined) {
   return n === '1' || n === 'true' || n === 'yes' || n === 'on'
 }
 
+/** `bridge` = Vite page in the user's tab. `pool` = Playwright Chrome (skip the Vite bridge). */
+export function liveTarget(): 'bridge' | 'pool' {
+  const v = (process.env.LIVE_TARGET || '').trim().toLowerCase()
+  if (v === 'pool' || v === 'playwright') return 'pool'
+  try {
+    const text = fs.readFileSync(getEnvPath(), 'utf-8')
+    const m = text.match(/^LIVE_TARGET=(.*)$/m)
+    if (m) {
+      const n = m[1].trim().replace(/^["']|["']$/g, '').toLowerCase()
+      if (n === 'pool' || n === 'playwright') return 'pool'
+    }
+  } catch { /* no .env */ }
+  return 'bridge'
+}
+
 export function playwrightPoolEnabled(): boolean {
+  if (liveTarget() === 'pool') return true
   if (process.env.PLAYWRIGHT_POOL !== undefined && process.env.PLAYWRIGHT_POOL !== '') {
     return truthyEnv(process.env.PLAYWRIGHT_POOL)
   }

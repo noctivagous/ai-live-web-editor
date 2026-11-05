@@ -2,27 +2,33 @@ import express from 'express'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { currentModelId, hasAiKey, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, saveAiConfig, setPlaywrightPool } from './env.js'
-import { mapMastraChunk } from './chatStream.js'
+import { currentModelId, hasAiKey, liveTarget, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool } from './env.js'
+import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
 import { getFsRoot } from './launcher.js'
 import { mountPageBridge } from './pageBridge.js'
+import { mountPoolPage } from './poolPage.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function publicConfig(publicUrl: string) {
   const hasKey = hasAiKey()
+  const provider = publicProvider()
   return {
     ok: true,
     hasApiKey: hasKey,
     hasOpenAiKey: hasKey,
-    model: currentModelId(),
+    model: openaiModelName(),
     modelName: openaiModelName(),
+    modelId: currentModelId(),
+    providerId: provider?.id || null,
+    providerName: provider?.name || null,
     baseUrl: openaiBaseUrl(),
     launcherUrl: publicUrl,
     previewStaticUrl: '/',
     previewHmrUrl: publicUrl,
     playwrightPool: playwrightPoolEnabled(),
+    liveTarget: liveTarget(),
   }
 }
 
@@ -44,6 +50,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   app.use(express.json({ limit: '20mb' }))
   const url = () => opts.publicUrl?.() || ''
   mountPageBridge(app)
+  mountPoolPage(app)
 
   app.get('/api/fs/health', (_req, res) => {
     const root = getFsRoot()
@@ -75,6 +82,9 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       if (!enabled) {
         const { closePool } = await import('./browserPool.js')
         await closePool()
+      } else {
+        const { openPoolBrowser } = await import('./poolPage.js')
+        void openPoolBrowser().catch((e) => console.error('[browser]', e))
       }
       res.json({ ...publicConfig(url()), saved: true })
     } catch (e: any) {
@@ -164,29 +174,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   })
 
   app.post('/api/chat/stream', async (req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.flushHeaders?.()
-    const send = (obj: unknown) => { res.write(`data: ${JSON.stringify(obj)}\n\n`) }
-    try {
-      const { messages } = req.body
-      const { mastra } = await import('./mastra/index.js')
-      const agent = mastra.getAgent('editorAgent')
-      const result = await agent.stream(messages, { maxSteps: 12 })
-      for await (const chunk of result.fullStream) {
-        if (req.aborted) break
-        const mapped = mapMastraChunk(chunk)
-        if (mapped) send(mapped)
-      }
-      send({ type: 'done' })
-      res.end()
-    } catch (e: any) {
-      console.error(e)
-      try { send({ type: 'error', error: e.message }) } catch { /* closed */ }
-      res.end()
-    }
+    await pipeAgentChatStream(req.body?.messages, res, req)
   })
 
   app.post('/api/live-edit/submit', async (req, res) => {

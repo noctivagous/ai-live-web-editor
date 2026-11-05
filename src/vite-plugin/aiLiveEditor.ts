@@ -77,7 +77,7 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
       markPageOwner()
       server.middlewares.use((req, res, next) => {
         const pathname = req.url?.split('?')[0] || ''
-        if (pathname.startsWith('/api') || pathname === '/live-edit/overlay.js') {
+        if (pathname.startsWith('/api') || pathname === '/live-edit/overlay.js' || pathname === '/pool') {
           api(req as any, res as any, next)
           return
         }
@@ -125,7 +125,7 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
       order: 'post',
       handler(_html, ctx) {
         const p = ctx.path || ''
-        if (p === '/chat-embed' || p.startsWith('/chat-embed')) return []
+        if (p === '/chat-embed' || p.startsWith('/chat-embed') || p === '/pool') return []
         return [
           {
             tag: 'script',

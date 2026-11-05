@@ -26,6 +26,9 @@ export interface LauncherConfig {
   hasOpenAiKey: boolean
   model: string
   modelName: string
+  modelId?: string
+  providerId?: string | null
+  providerName?: string | null
   baseUrl: string
   launcherUrl: string
   previewStaticUrl: string
@@ -34,6 +37,7 @@ export interface LauncherConfig {
   activeProject?: string
   fsRoot?: string
   playwrightPool?: boolean
+  liveTarget?: 'bridge' | 'pool'
 }
 
 export interface ProjectInfo { id: string, root: string }
@@ -122,7 +126,10 @@ export async function chat(messages: {role:string, content:string}[]) {
 }
 
 export type ChatStreamEvent =
+  | { type: 'status'; text: string }
+  | { type: 'reasoning-delta'; text: string }
   | { type: 'tool-call'; id: string; name: string; detail: string }
+  | { type: 'tool-delta'; id: string; name: string; text: string }
   | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
   | { type: 'text-delta'; text: string }
   | { type: 'error'; error: string }

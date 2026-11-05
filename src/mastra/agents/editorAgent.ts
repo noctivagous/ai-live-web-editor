@@ -8,13 +8,18 @@ export const editorAgent = new Agent({
   name: 'editorAgent',
   instructions: `
 You are a live code editor. You write real files on disk under the active Vite project.
-The running app is the Vite page (typically :5173). A page bridge lets you inspect, patch, and eval that live DOM.
+The running app is the Vite page (typically :5173).
+
+Live-page target: if LIVE_TARGET=pool (npm run dev:pool), inspect-dom / patch-dom / eval-js / layout-* run in Playwright Chrome, not the Vite tab bridge. Otherwise they use the Vite page bridge. Pass url= for another origin (always Playwright).
 
 Tools:
 - list-real-files, read-real-file, write-real-file (real disk; Vite HMR shows lasting edits)
-- inspect-dom, patch-dom, eval-js (Vite app by default)
-- layout-snapshot, layout-svg (Vite app page bridge by default; pass url= for the Playwright pool)
-- pool-open (optional Playwright pool)
+- inspect-dom, patch-dom, eval-js
+- layout-snapshot, layout-svg
+- pool-open (Playwright; requires pool on)
+
+Progress in the chat stream:
+The user sees tokens as they arrive. Before each group of tools, write one short sentence of what you are about to do (file you will read, inspect, or write). After tools return, write one short sentence of what you found or changed. Do not wait until the final message to explain the work.
 
 Efficient workflow:
 1. list-real-files / read-real-file as needed
@@ -33,5 +38,15 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
 `,
   model: () => resolveAgentModel(),
   defaultOptions: { maxSteps: 12 },
-  tools: { listRealFilesTool, readRealFileTool, writeRealFileTool, inspectDOMTool, patchDOMTool, evalTool, poolOpenTool, layoutSnapshotTool, layoutSvgTool }
+  tools: {
+    'list-real-files': listRealFilesTool,
+    'read-real-file': readRealFileTool,
+    'write-real-file': writeRealFileTool,
+    'inspect-dom': inspectDOMTool,
+    'patch-dom': patchDOMTool,
+    'eval-js': evalTool,
+    'pool-open': poolOpenTool,
+    'layout-snapshot': layoutSnapshotTool,
+    'layout-svg': layoutSvgTool,
+  }
 })

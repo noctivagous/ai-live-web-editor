@@ -57,6 +57,14 @@ body{
 .pill.warn{color:#fde68a; border-color:rgba(245,158,11,.4)}
 .pill.warn .dot{background:var(--amber)}
 .pill.mono, .mono{font-family:var(--mono)}
+select.pill{
+  appearance:none; -webkit-appearance:none;
+  cursor:pointer; color:inherit; max-width:220px;
+  padding-right:22px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23a1a1aa' d='M0 0l5 6 5-6z'/></svg>");
+  background-repeat:no-repeat; background-position:right 9px center;
+}
+select.pill:disabled{cursor:default; opacity:.7}
 
 .deck-btn{
   display:inline-flex; align-items:center; gap:6px;
@@ -116,6 +124,25 @@ body{
 .check-row.wait .mark{background:var(--card-hover); color:var(--muted); border:1px solid var(--border)}
 .check-row small{display:block; color:var(--muted); font-size:12px; margin-top:2px; line-height:1.5}
 .check-row code{font-family:var(--mono); font-size:11.5px; color:#c9c9d1}
+.chat-tools{
+  margin:6px 0 10px; padding:6px 8px;
+  background:var(--card); border:1px solid var(--border); border-radius:8px;
+}
+.chat-tool{
+  font-family:var(--mono); font-size:11.5px; line-height:1.55; color:#86efac;
+}
+.chat-tool.running{color:#fde68a}
+.chat-tool.error{color:#fca5a5}
+.chat-tool-result{color:var(--muted); padding-left:14px; font-size:11px}
+.chat-think{
+  margin:6px 0 10px; padding:8px 10px;
+  background:#121216; border:1px dashed #2a2a32; border-radius:8px;
+}
+.chat-think b{display:block; font-size:11px; color:#a78bfa; font-weight:600; margin-bottom:4px}
+.chat-think pre{
+  white-space:pre-wrap; margin:0; color:#a1a1aa;
+  font-family:inherit; font-size:12px; line-height:1.5;
+}
 
 @media (max-width:900px){
   .topbar{flex-wrap:wrap; padding:8px 10px; gap:8px}

@@ -207,7 +207,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
 
         {step === 1 && (
           <div>
-            <CheckRow check={keyCheck} title={config ? `Model: ${config.model}` : 'AI key status'} />
+            <CheckRow check={keyCheck} title={config ? config.modelName : 'AI key status'} />
             <label className="field-label" htmlFor="wizard-api-key" style={{ marginTop: 10 }}>
               {keyReady ? 'Replace API key' : 'API key'}
             </label>

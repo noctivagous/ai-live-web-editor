@@ -9,7 +9,7 @@ import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
 import {
-  listFiles, readFile, writeFile, getConfig,
+  listFiles, readFile, writeFile, getConfig, probeModels, saveAiConfig,
   listProjects, selectProject, createProject,
   type LauncherConfig, type ProjectInfo,
 } from './lib/api'
@@ -35,6 +35,7 @@ export default function App() {
 
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [activeProject, setActiveProject] = useState('')
+  const [models, setModels] = useState<string[]>([])
   const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
 
   async function loadFiles() {
@@ -56,7 +57,32 @@ export default function App() {
   }
 
   async function refreshConfig() {
-    try { setConfig(await getConfig()) } catch { setConfig(null) }
+    try {
+      const data = await getConfig()
+      setConfig(data)
+      if (data.hasApiKey || data.hasOpenAiKey) {
+        try {
+          const listed = await probeModels()
+          const current = data.modelName || data.model
+          const ids = listed.models?.length ? listed.models : []
+          setModels(current && !ids.includes(current) ? [current, ...ids] : ids)
+        } catch {
+          const current = data.modelName || data.model
+          setModels(current ? [current] : [])
+        }
+      } else setModels([])
+    } catch { setConfig(null); setModels([]) }
+  }
+
+  async function handleModel(id: string) {
+    if (!id || id === (config?.modelName || config?.model)) return
+    try {
+      const next = await saveAiConfig({ model: id })
+      setConfig(next)
+      setStatus(`model ${id}`)
+    } catch (e: unknown) {
+      setStatus('model save failed: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   async function save(silent = false) {
@@ -116,6 +142,12 @@ export default function App() {
 
   useEffect(() => { loadFiles(); refreshConfig(); loadProjects() }, [])
 
+  useEffect(() => {
+    const es = new EventSource('/api/projects/events')
+    es.onmessage = () => { void loadProjects() }
+    return () => es.close()
+  }, [])
+
   function finishSetup() {
     localStorage.setItem(SETUP_DONE_KEY, SETUP_DONE_VALUE)
     setSetupDone(true)
@@ -151,20 +183,42 @@ export default function App() {
           <span className={`pill mono ${connTone(status)}`} title={status}>
             <span className="dot" />{status.startsWith('real FS:') ? status.replace('real FS: ', '') : status.slice(0, 42)}
           </span>
-          <span className={`pill mono ${keyTone}`} title={config ? `Model ${config.model}` : 'Launcher config unknown'}>
-            <span className="dot" />{config ? (hasKey ? config.model : 'no API key') : 'config…'}
-          </span>
+          <select
+            className={`pill mono ${keyTone}`}
+            value={hasKey ? (config?.modelName || '') : ''}
+            disabled={!hasKey}
+            onChange={e => { void handleModel(e.target.value) }}
+            title="Chat model"
+          >
+            {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
+            {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
+              <option value={config.modelName}>{config.modelName}</option>
+            )}
+            {models.map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
           <select
             className="deck-btn"
             value={activeProject}
-            onChange={e => { void handleSelectProject(e.target.value) }}
+            onChange={e => {
+              const id = e.target.value
+              if (id === '__refresh') {
+                void loadProjects()
+                void loadFiles()
+                return
+              }
+              void handleSelectProject(id)
+            }}
             title="Active project"
-            style={{ maxWidth: 160 }}
+            style={{ maxWidth: 180 }}
           >
             {projects.length === 0 && <option value="">no projects</option>}
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.id}</option>
             ))}
+            <hr />
+            <option value="__refresh">Refresh list</option>
           </select>
           <button className="deck-btn" onClick={() => { void handleNewProject() }} title="Create a new app under projects/">New project</button>
         </div>
@@ -194,7 +248,12 @@ export default function App() {
           </div>
           <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
           <div style={{ height: `${previewH}%`, borderTop: '1px solid #1e1e23', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <Preview key={activeProject} onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }} onResult={setNotice} />
+            <Preview
+              key={activeProject}
+              hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
+              onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
+              onResult={setNotice}
+            />
           </div>
         </div>
         <VDivider onMouseDown={colDrag(setRightW, -1)} title="Drag to resize chat" />

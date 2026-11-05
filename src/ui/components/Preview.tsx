@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { fetchOverlaySource, staticPreviewUrl, submitLiveEdit, type PageNote } from '../lib/api'
 
 const STATIC_URL = '/projects/'
-const HMR_URL = 'http://localhost:5173'
+const DEFAULT_HMR = 'http://localhost:5173'
 
 async function probe(url: string, timeoutMs = 4000): Promise<boolean> {
   const ctrl = new AbortController()
@@ -38,8 +38,13 @@ async function ensureOverlay(iframe: HTMLIFrameElement | null): Promise<boolean>
   } catch { return false }
 }
 
-export function Preview({ onChanged, onResult }: { onChanged: () => void, onResult: (text: string) => void }) {
-  const [url, setUrl] = useState(STATIC_URL)
+export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult }: {
+  hmrUrl?: string
+  onChanged: () => void
+  onResult: (text: string) => void
+}) {
+  const liveUrl = hmrUrl || DEFAULT_HMR
+  const [url, setUrl] = useState(liveUrl)
   const [key, setKey] = useState(0)
   const [hmr, setHmr] = useState<'unknown' | 'up' | 'down'>('unknown')
   const [checking, setChecking] = useState(false)
@@ -52,14 +57,29 @@ export function Preview({ onChanged, onResult }: { onChanged: () => void, onResu
     setAnnotating(false)
     setNoteCount(0)
     setUrl(next)
-    if (next === HMR_URL) {
+    if (next === liveUrl) {
       setChecking(true)
       setHmr(await probe(next) ? 'up' : 'down')
       setChecking(false)
     }
   }
 
-  const onHmr = url === HMR_URL
+  useEffect(() => {
+    let cancelled = false
+    setAnnotating(false)
+    setNoteCount(0)
+    setUrl(liveUrl)
+    setChecking(true)
+    setHmr('unknown')
+    probe(liveUrl).then((up) => {
+      if (cancelled) return
+      setHmr(up ? 'up' : 'down')
+      setChecking(false)
+    })
+    return () => { cancelled = true }
+  }, [liveUrl])
+
+  const onHmr = url === liveUrl
   const showDown = onHmr && hmr === 'down'
 
   // Poll the in-page note count while annotate mode is on.
@@ -153,11 +173,11 @@ export function Preview({ onChanged, onResult }: { onChanged: () => void, onResu
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           <button onClick={() => setKey(k => k + 1)} style={{ padding: '2px 8px', fontSize: 11 }}>Reload</button>
           <button onClick={() => void switchUrl(STATIC_URL)} style={{ padding: '2px 8px', fontSize: 11 }}>Static</button>
-          <button onClick={() => void switchUrl(HMR_URL)} style={{ padding: '2px 8px', fontSize: 11 }}>Vite HMR :5173</button>
+          <button onClick={() => void switchUrl(liveUrl)} style={{ padding: '2px 8px', fontSize: 11 }}>Live :5173</button>
           <button
             onClick={() => void toggleAnnotate()}
             style={{ padding: '2px 8px', fontSize: 11, background: annotating ? '#16a34a' : undefined, color: annotating ? '#fff' : undefined, border: annotating ? 'none' : undefined, borderRadius: 4 }}
-            title={onHmr ? 'On Vite HMR, use the Annotate control on the previewed page (DevTools action, next to the chat overlay)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
+            title={onHmr ? 'On the live Vite app, use Annotate on the previewed page (DevTools action, next to the chat overlay)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
             disabled={onHmr}
           >
             {annotating ? 'Annotating…' : 'Annotate'}
@@ -174,12 +194,12 @@ export function Preview({ onChanged, onResult }: { onChanged: () => void, onResu
           <div style={{ maxWidth: 420 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Preview server not running</div>
             <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
-              Nothing is listening on <span className="mono">localhost:5173</span>.
-              Start it with <span className="mono">npm run projects:dev</span>, then press Reload —
-              or switch back to Static preview, which is served by the launcher itself.
+              Nothing is listening on <span className="mono">{liveUrl.replace(/^https?:\/\//, '')}</span>.
+              Start the launcher with <span className="mono">npm run dev</span>, then press Reload —
+              or switch to Static, which is only raw files (a Vite app will be blank).
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
-              <button className="deck-btn" onClick={() => { setKey(k => k + 1); void switchUrl(HMR_URL) }}>Retry :5173</button>
+              <button className="deck-btn" onClick={() => { setKey(k => k + 1); void switchUrl(liveUrl) }}>Retry live</button>
               <button className="deck-btn" onClick={() => void switchUrl(STATIC_URL)}>Use Static</button>
             </div>
           </div>

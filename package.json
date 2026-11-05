@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "tsx src/server.ts",
-    "dev:pool": "PLAYWRIGHT_POOL=1 tsx src/server.ts",
+    "dev:pool": "PLAYWRIGHT_POOL=1 LIVE_TARGET=pool tsx src/server.ts",
     "projects:dev": "cd projects/lumen && npm run dev",
     "launcher": "tsx src/server.ts",
     "dev:all": "tsx src/server.ts",

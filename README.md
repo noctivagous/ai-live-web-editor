@@ -32,7 +32,7 @@ OPENAI_MODEL=grok-4.7
 
 **On 4112**
 
-- **Project** dropdown + **New project** — switch or seed a child under `projects/`
+- **Project** dropdown + **New project** — switch or seed a child under `projects/`. Drop an existing Vite app in as `projects/<name>/` (needs `package.json`). The list updates from the folder watcher, or pick **Refresh list** at the bottom of the dropdown.
 - **Files** — tree of the active app
 - **Monaco** — editor, autosave to disk
 - **Preview** — static `/projects/` or Vite HMR `http://localhost:5173`
@@ -90,7 +90,7 @@ aiLiveEditor({
 | Command | What it is |
 |---|---|
 | `npm run dev` | Launcher on 4112 + Vite for the active project on 5173 |
-| `npm run dev:pool` | Same, with the Playwright pool enabled for that session (`PLAYWRIGHT_POOL=1`) |
+| `npm run dev:pool` | Playwright live target (`LIVE_TARGET=pool`): no Vite page bridge. Chrome opens the app at `:5173/` plus `/pool` |
 | `npm run ui:build` | Rebuild the 4112 UI into `src/ui-dist` |
 | `npm run ui:dev` | UI hot-reload on :3000 (proxies `/api` to 4112) |
 | `npm run projects:dev` | Vite for `projects/lumen` only (launcher already does this) |

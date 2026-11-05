@@ -2,7 +2,7 @@
  * Live-page RPC for the Vite app. The agent inspects / patches / evals this
  * document over SSE + POST, same origin as the overlay.
  */
-if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/')) {
+if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/') || location.pathname === '/pool') {
   // chat iframe is not the app
 } else {
   startPageBridge()

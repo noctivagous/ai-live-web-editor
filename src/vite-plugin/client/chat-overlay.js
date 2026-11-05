@@ -21,7 +21,7 @@ function savePos(state) {
 }
 
 export function mountChatOverlay() {
-  if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/')) return
+  if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/') || location.pathname === '/pool') return
   if (document.getElementById('ai-live-chat-host')) return
   const saved = loadPos()
   const host = document.createElement('div')

@@ -265,6 +265,7 @@ export default function App() {
             activePath={activePath}
             keyKnown={config === null ? undefined : hasKey}
             onNeedSetup={reopenSetup}
+            onOpenPath={(p) => { void loadFile(p) }}
             onAfterChat={() => { loadFiles(); setTimeout(() => loadFile(activePath), 400) }}
           />
         </div>

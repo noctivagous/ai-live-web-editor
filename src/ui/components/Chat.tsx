@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type WorkflowSnapshot } from '../lib/api'
+import { groupTurns, looksLikeKeyError, slideTurns, workingSet } from '../lib/deck'
+import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import {
   DEFAULT_CHAT_LOG,
   historyForAgent,
@@ -11,10 +13,6 @@ import {
   type LogItem,
   type ToolStep,
 } from '../lib/chatSession'
-
-function looksLikeKeyError(text: string): boolean {
-  return /api.?key|401|unauthorized|invalid_api_key|incorrect api key/i.test(text)
-}
 
 function isWriteTool(name: string): boolean {
   return name === 'write-real-file' || name === 'str-replace' || name === 'writeRealFileTool'
@@ -44,16 +42,22 @@ function previewPartialArgs(name: string, raw: string): string {
   return `${n}…`
 }
 
+function stampStep(step: ToolStep, prev?: ToolStep): ToolStep {
+  const startedAt = prev?.startedAt ?? step.startedAt ?? (step.status === 'running' ? Date.now() : undefined)
+  const endedAt = prev?.endedAt ?? step.endedAt ?? (startedAt != null && step.status !== 'running' ? Date.now() : undefined)
+  return { ...prev, ...step, result: step.result ?? prev?.result, startedAt, endedAt }
+}
+
 function upsertToolStep(log: LogItem[], step: ToolStep): LogItem[] {
   const last = log[log.length - 1]
   if (last && last.role === 'tools') {
     const idx = last.steps.findIndex(s => s.id === step.id)
     const steps = idx >= 0
-      ? last.steps.map((s, i) => i === idx ? { ...s, ...step, result: step.result ?? s.result } : s)
-      : [...last.steps, step]
+      ? last.steps.map((s, i) => i === idx ? stampStep(step, s) : s)
+      : [...last.steps, stampStep(step)]
     return [...log.slice(0, -1), { role: 'tools', steps }]
   }
-  return [...log, { role: 'tools', steps: [step] }]
+  return [...log, { role: 'tools', steps: [stampStep(step)] }]
 }
 
 function appendRole(log: LogItem[], role: 'ai' | 'think', text: string): LogItem[] {
@@ -62,19 +66,21 @@ function appendRole(log: LogItem[], role: 'ai' | 'think', text: string): LogItem
   return [...log, { role, text }]
 }
 
-export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, projectId = '' }: {
+export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, projectId = '', onOpenPath }: {
   activePath: string
   keyKnown: boolean | undefined
   onNeedSetup: () => void
   onAfterChat: () => void
   embed?: boolean
   projectId?: string
+  onOpenPath?: (path: string) => void
 }) {
   const [log, setLog] = useState<LogItem[]>(() => loadChat(projectId).log)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(() => loadChat(projectId).sending)
   const [workingLabel, setWorkingLabel] = useState(() => loadChat(projectId).workingLabel)
   const [workflow, setWorkflow] = useState<ChatWorkflow>('files')
+  const [deckOpen, setDeckOpen] = useState(false)
   const [sketch, setSketch] = useState<WorkflowSnapshot | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const fingerprint = useRef('')
@@ -169,7 +175,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           return [...l.slice(0, -1), {
             role: 'tools',
             steps: last.steps.map(s => s.id === ev.id
-              ? { ...s, status: ev.ok ? 'done' : 'error', result: ev.detail }
+              ? stampStep({ ...s, status: ev.ok ? 'done' : 'error', result: ev.detail }, s)
               : s),
           }]
         })
@@ -267,6 +273,11 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     setWorkingLabel('')
   }
 
+  const turns = groupTurns(log, { sending })
+  const slides = slideTurns(turns)
+  const touchedFiles = workingSet(log)
+  const turnAnchor = (index: number) => `deck-turn-${projectId || 'default'}-${index}`
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div style={{ padding: '9px 12px', borderBottom: '1px solid #1e1e23', fontSize: 12, fontWeight: 600, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -276,6 +287,9 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           <button type="button" className={workflow === 'sketch' ? 'on' : ''} disabled={sending} onClick={() => void setWorkflowMode('sketch')}>Live sketch</button>
         </div>
         <button type="button" className="deck-btn" disabled={sending} onClick={clearChat} title="Clear this chat" style={{ marginLeft: 'auto', padding: '4px 8px' }}>Clear</button>
+        {!embed && (
+          <button type="button" className="deck-btn" onClick={() => setDeckOpen(true)} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}>Deck ⤢</button>
+        )}
         {sending && (
           <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             <span className="dot" />{workingLabel || 'working'}
@@ -295,42 +309,18 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           </div>
         </div>
       )}
+      <TurnStrip turns={turns} onJump={(turn) => {
+        document.getElementById(turnAnchor(turn.index))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      }} />
       <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 12.5, minHeight: 0 }}>
-        {log.map((m, i) => (
-          m.role === 'tools' ? (
-            <div key={i} className="chat-tools">
-              {m.steps.map(s => (
-                <div key={s.id} className={`chat-tool ${s.status}`}>
-                  <div>
-                    {s.status === 'running' ? '…' : s.status === 'error' ? '✕' : '✓'} {s.detail || s.name}
-                  </div>
-                  {s.result && s.result !== s.detail && (
-                    <div className="chat-tool-result">{s.result}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : m.role === 'think' ? (
-            <div key={i} className="chat-think">
-              <b>thinking</b>
-              <pre>{m.text.slice(0, 8000)}</pre>
-            </div>
-          ) : (
-            <div key={i} className={`check-row ${m.role === 'error' ? 'bad' : m.role === 'user' ? 'wait' : 'ok'}`} style={{ display: 'block' }}>
-              <b style={{ color: m.role === 'user' ? '#93c5fd' : m.role === 'error' ? '#fca5a5' : '#86efac', fontSize: 11.5 }}>{m.role}</b>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0', color: '#d4d4d8', fontFamily: 'inherit', fontSize: 12.5 }}>{m.text.slice(0, 8000)}</pre>
-              {m.role === 'error' && looksLikeKeyError(m.text) && (
-                <button className="deck-btn" style={{ marginTop: 8 }} onClick={onNeedSetup}>
-                  {embed ? 'Open launcher Settings' : 'Review setup'}
-                </button>
-              )}
-            </div>
-          )
+        {turns.map(turn => (
+          <TurnView key={turn.index} turn={turn} anchorId={turnAnchor(turn.index)} onNeedSetup={onNeedSetup} embed={embed} />
         ))}
         {sending && !log.some((item, idx) => idx === log.length - 1 && (item.role === 'tools' || item.role === 'ai' || item.role === 'think')) && (
-          <div className="chat-think"><b>working</b><pre>{workingLabel || 'starting…'}</pre></div>
+          <div className="dcard dcard-reason"><div className="dcard-label">Working</div><pre className="dcard-pre plain">{workingLabel || 'starting…'}</pre></div>
         )}
       </div>
+      <WorkingSet files={touchedFiles} onOpen={onOpenPath} />
       <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #1e1e23' }}>
         <input
           value={input}
@@ -357,6 +347,16 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           </button>
         )}
       </div>
+      {deckOpen && (
+        <DeckMode
+          turns={slides}
+          sending={sending}
+          workingLabel={workingLabel}
+          onClose={() => setDeckOpen(false)}
+          onNeedSetup={onNeedSetup}
+          onOpenPath={onOpenPath}
+        />
+      )}
     </div>
   )
 }

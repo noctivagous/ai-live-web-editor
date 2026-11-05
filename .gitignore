@@ -6,3 +6,5 @@ projects/dist/
 projects/.chrome-data/
 .env
 .DS_Store
+
+dist-verify/

@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agentic Deck — Horizontal Code Editor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+:root{
+  --bg:#0e0e10;
+  --panel:#141417;
+  --card:#1a1a1e;
+  --card-hover:#1f1f24;
+  --border:#26262c;
+  --text:#e4e4e7;
+  --muted:#a1a1aa;
+  --blue:#3b82f6;
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+.app{display:grid; grid-template-columns:260px 1fr; height:100vh}
+.rail{
+  background:#0c0c0e; border-right:1px solid var(--border);
+  display:flex; flex-direction:column; padding:16px 14px; gap:14px;
+  position:relative; z-index:20;
+}
+.rail-top{display:flex; align-items:center; justify-content:space-between}
+.progress-ring{position:relative; width:36px; height:36px}
+.progress-ring svg{display:block}
+.progress-text{position:absolute; inset:0; display:grid; place-items:center; font-size:10px; color:var(--muted); font-weight:500}
+
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{
+  display:inline-flex; align-items:center; gap:5px;
+  background:#151519; border:1px solid #222229; color:#b4b4b9;
+  padding:4px 8px; border-radius:999px; font-size:11px; font-weight:500;
+}
+.chip i{width:12px; height:12px; opacity:.8}
+
+.tasks{display:flex; flex-direction:column; gap:6px; overflow:auto; margin-right:-6px; padding-right:6px}
+.task-item{
+  display:flex; gap:10px; padding:9px 10px; border-radius:10px;
+  background:transparent; border:1px solid transparent; cursor:pointer;
+  transition:all .15s;
+}
+.task-item:hover{background:#141418; border-color:#1f1f24}
+.task-item.active{background:#17171b; border-color:#2a2a32}
+.task-dot{
+  width:20px; height:20px; border-radius:50%; display:grid; place-items:center;
+  background:#1c1c21; border:1.5px solid #2a2a30; flex-shrink:0; margin-top:1px;
+}
+.task-dot i{width:12px; height:12px}
+.task-item.done .task-dot{background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.4); color:var(--green)}
+.task-item.running .task-dot{background:rgba(59,130,246,.12); border-color:rgba(59,130,246,.5); color:var(--blue); animation:pulse 2s infinite}
+.task-item.pending .task-dot{border-color:#3f3f46}
+.task-item.blocked .task-dot{background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.4); color:var(--red)}
+.task-title{font-size:13px; font-weight:500; line-height:1.2}
+.task-meta{font-size:11px; color:var(--muted); margin-top:2px}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.4)}50%{box-shadow:0 0 0 4px rgba(59,130,246,0)}}
+
+.rail-footer{margin-top:auto; padding-top:10px; border-top:1px solid #1c1c21}
+.sim-btn{
+  width:100%; background:linear-gradient(180deg,#1e293b,#0f172a);
+  border:1px solid #2a3344; color:#dbeafe; font-size:13px; font-weight:500;
+  padding:9px 12px; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:8px;
+  transition:all .15s;
+}
+.sim-btn:hover{transform:translateY(-1px); border-color:#3b82f6; box-shadow:0 4px 16px rgba(59,130,246,.15)}
+.sim-btn:active{transform:translateY(0)}
+.sim-btn i{width:14px; height:14px}
+
+.deck-wrap{position:relative; height:100vh; overflow:hidden; background: radial-gradient(1200px 600px at 80% -10%, rgba(59,130,246,.08), transparent 60%), var(--bg);}
+.deck{
+  height:100%; display:flex; gap:24px; padding:28px 28px 84px 28px;
+  overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory;
+  scroll-behavior:smooth; -webkit-overflow-scrolling:touch;
+}
+.deck::-webkit-scrollbar{height:8px}
+.deck::-webkit-scrollbar-thumb{background:#23232a; border-radius:4px}
+
+.slide{
+  width:720px; min-width:720px; max-width:720px; height:calc(100% - 8px);
+  background:var(--panel); border:1px solid var(--border); border-radius:20px;
+  display:flex; flex-direction:column; overflow:hidden;
+  scroll-snap-align:start; scroll-snap-stop:always;
+  box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.02);
+  transition:filter .3s, opacity .3s, transform .2s;
+}
+.slide:hover{transform:translateY(-2px)}
+.slide.sealed{filter:saturate(.65); opacity:.9}
+.slide-head{
+  display:flex; align-items:center; gap:10px; padding:14px 16px;
+  border-bottom:1px solid #1e1e23; background:linear-gradient(180deg, #17171c, #141418);
+}
+.slide-num{
+  font-family:"JetBrains Mono",monospace; font-size:11px; color:#71717a;
+  background:#0f0f12; border:1px solid #23232a; padding:3px 6px; border-radius:6px;
+}
+.slide-title{font-size:13px; font-weight:600; color:#d4d4d8; flex:1}
+.slide-status{width:18px; height:18px; display:grid; place-items:center; color:#52525b}
+.slide-status.done{color:var(--green)}
+.slide-status.running{color:var(--blue); animation:spin 2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.slide-cards{
+  flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px;
+}
+.slide-cards::-webkit-scrollbar{width:6px}
+.slide-cards::-webkit-scrollbar-thumb{background:#1f1f25; border-radius:3px}
+
+.card{
+  background:var(--card); border:1px solid #232329; border-radius:12px; padding:11px 12px;
+  transition:all .15s; position:relative;
+}
+.card:hover{background:var(--card-hover); border-color:#2a2a33}
+.card.enter{animation:in .18s ease-out}
+@keyframes in{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
+.card.highlight{outline:1px solid rgba(59,130,246,.6); box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+
+.card-intent{display:flex; gap:10px; align-items:flex-start; padding:14px}
+.card-intent .card-icon{width:28px; height:28px; border-radius:8px; background:rgba(59,130,246,.12); color:#93c5fd; display:grid; place-items:center; flex-shrink:0}
+.card-intent .card-label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#71717a; font-weight:600}
+.card-intent .card-text{font-size:18px; font-weight:600; line-height:1.25; color:#fafafa; margin-top:2px}
+
+.card-tool .tool-head{display:flex; align-items:center; justify-content:space-between; cursor:pointer}
+.tool-pill{display:inline-flex; align-items:center; gap:6px; font-family:"JetBrains Mono",monospace; font-size:11px; padding:4px 8px; border-radius:8px; background:#0f172a; border:1px solid #1e293b; color:#93c5fd}
+.tool-pill i{width:13px; height:13px}
+.tool-time{font-size:11px; color:#71717a; font-family:"JetBrains Mono",monospace}
+.tool-details{max-height:0; overflow:hidden; transition:max-height .2s ease; margin-top:0}
+.card-tool.open .tool-details{max-height:200px; margin-top:8px}
+.tool-meta{font-size:12px; color:#a1a1aa; line-height:1.4}
+
+.card-plan .card-label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#71717a; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:6px}
+.plan-list{display:flex; flex-direction:column; gap:6px}
+.plan-list li{display:flex; align-items:center; gap:8px; font-size:13px; color:#d4d4d8}
+.plan-list li i{width:14px; height:14px; color:#52525b}
+.plan-list li.done{color:#a1a1aa}
+.plan-list li.done i{color:var(--green)}
+.plan-list li.active i{color:var(--blue); animation:pulse 2s infinite}
+
+.card-search{padding:10px}
+.search-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+.search-item{
+  background:#141418; border:1px solid #232329; border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:4px;
+  text-decoration:none; color:inherit; transition:all .15s;
+}
+.search-item:hover{background:#19191f; border-color:#2e2e38; transform:translateY(-1px)}
+.search-fav{display:flex; align-items:center; gap:6px}
+.search-fav img{width:14px; height:14px; border-radius:3px; background:#000}
+.search-title{font-size:12px; font-weight:500; line-height:1.25; color:#e4e4e7; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.search-snip{font-size:11px; color:#71717a; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+
+.card-diff{font-family:"JetBrains Mono",monospace}
+.diff-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px}
+.diff-file{display:flex; align-items:center; gap:6px; font-size:12px; color:#d4d4d8}
+.diff-file i{width:14px; height:14px; color:#71717a}
+.diff-stats{font-size:11px}
+.diff-stats .add{color:var(--green)} .diff-stats .del{color:var(--red)}
+.diff-lines{background:#0f0f12; border:1px solid #1c1c21; border-radius:8px; padding:8px; font-size:11px; line-height:1.5; color:#a1a1aa; overflow:hidden}
+.diff-line{display:flex; gap:8px}
+.diff-line.add{color:#86efac; background:rgba(34,197,94,.06)}
+.diff-line.del{color:#fca5a5; background:rgba(239,68,68,.05)}
+.diff-gutter{width:24px; text-align:right; opacity:.5; user-select:none}
+
+.card-test .test-head{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500}
+.test-head .spinner{width:14px; height:14px; border:2px solid #2a2a32; border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite}
+.test-head.done{color:var(--green)}
+.test-head.done .spinner{display:none}
+.test-head.done i{width:14px; height:14px}
+.test-list{margin-top:8px; display:grid; grid-template-columns:repeat(2,1fr); gap:4px; font-family:"JetBrains Mono",monospace; font-size:11px}
+.test-item{display:flex; align-items:center; gap:6px; color:#a1a1aa}
+.test-item.pass{color:#86efac}
+.test-item i{width:12px; height:12px}
+
+.card-reflect{display:flex; gap:9px; background:linear-gradient(180deg,#1a1a1e,#17171b); border-color:#2a2a32}
+.card-reflect i{width:16px; height:16px; color:var(--amber); flex-shrink:0; margin-top:1px}
+.card-reflect p{font-size:13px; line-height:1.45; color:#d4d4d8}
+
+.timeline-wrap{position:absolute; left:0; right:0; bottom:0; height:56px; display:flex; align-items:center; justify-content:center; pointer-events:none}
+.timeline{
+  pointer-events:auto; display:flex; align-items:center; gap:8px;
+  background:rgba(12,12,14,.8); backdrop-filter:blur(10px);
+  border:1px solid #1f1f25; padding:6px 10px; border-radius:999px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.timeline-item{
+  width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+  font-family:"JetBrains Mono",monospace; font-size:11px; color:#71717a;
+  background:#15151a; border:1px solid #23232a; transition:all .15s;
+}
+.timeline-item:hover{border-color:#3b82f6; color:#d4d4d8}
+.timeline-item.active{background:#1d283a; border-color:#3b82f6; color:#bfdbfe; box-shadow:0 0 0 2px rgba(59,130,246,.15) inset}
+
+.live-pill{
+  position:absolute; right:24px; bottom:72px; z-index:30;
+  background:#1d4ed8; color:white; font-size:12px; font-weight:600;
+  padding:8px 12px; border-radius:999px; display:flex; align-items:center; gap:6px;
+  box-shadow:0 6px 20px rgba(29,78,216,.35); border:1px solid #3b82f6;
+  transition:all .2s;
+}
+.live-pill:hover{transform:translateY(-1px); box-shadow:0 8px 24px rgba(29,78,216,.45)}
+.live-pill.hidden{opacity:0; transform:translateY(8px); pointer-events:none}
+
+.overview{position:fixed; inset:0; background:rgba(5,5,7,.92); backdrop-filter:blur(16px); z-index:50; overflow:auto; padding:40px; display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px}
+.overview.hidden{display:none}
+.overview .slide{width:auto; min-width:0; max-width:none; height:360px; cursor:pointer; transform:scale(.98); opacity:.85}
+.overview .slide:hover{transform:scale(1); opacity:1}
+.overview-hint{position:fixed; top:16px; left:50%; transform:translateX(-50%); background:#0f0f12; border:1px solid #23232a; padding:6px 12px; border-radius:999px; font-size:12px; color:#a1a1aa}
+
+/* mobile */
+@media (max-width:900px){
+  .app{grid-template-columns:1fr; grid-template-rows:auto 1fr}
+  .rail{border-right:0; border-bottom:1px solid var(--border); padding:12px; gap:10px; height:auto}
+  .rail-top{align-items:center}
+  .chips{order:-1}
+  .tasks{flex-direction:row; overflow-x:auto; padding-bottom:4px; margin-right:0}
+  .task-item{min-width:180px; padding:8px 10px; background:#141418; border-color:#1f1f24}
+  .rail-footer{display:none}
+  .deck-wrap{height:calc(100vh - 156px)}
+  .deck{padding:16px 16px 80px 16px; gap:16px}
+  .slide{width:88vw; min-width:88vw; max-width:88vw; height:auto; min-height:65vh}
+  .search-grid{grid-template-columns:1fr}
+  .test-list{grid-template-columns:1fr}
+  .live-pill{right:16px; bottom:70px}
+  .timeline-wrap{height:52px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="flex items-center gap-3">
+        <div class="progress-ring">
+          <svg width="36" height="36" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="15" stroke="#26262c" stroke-width="3" fill="none"/>
+            <circle id="prog" cx="18" cy="18" r="15" stroke="#22c55e" stroke-width="3" fill="none" stroke-dasharray="94.2" stroke-dashoffset="37.7" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+          </svg>
+          <div class="progress-text" id="progText">60%</div>
+        </div>
+        <div>
+          <h1 class="text-[15px] font-semibold tracking-wide">Tasks</h1>
+          <p class="text-[11px] text-zinc-500 -mt-0.5">rate-limit session</p>
+        </div>
+      <div class="flex items-center gap-2 md:hidden">
+        <button class="sim-btn !w-auto px-3 py-1.5 text-[12px]" id="simulateMobile"><i data-lucide="play"></i></button>
+      </div>
+    </div>
+
+    <div class="chips">
+      <span class="chip"><i data-lucide="git-branch"></i>main</span>
+      <span class="chip"><i data-lucide="cpu"></i>coder-3</span>
+      <span class="chip"><i data-lucide="hash"></i>4.2k</span>
+    </div>
+
+    <div class="tasks" id="tasks">
+      <div class="task-item done active" data-task="t1" data-slide="0">
+        <div class="task-dot"><i data-lucide="check"></i></div>
+        <div class="task-body"><div class="task-title">Analyze auth flow</div><div class="task-meta">2m ago • done</div></div>
+      </div>
+      <div class="task-item done" data-task="t2" data-slide="1">
+        <div class="task-dot"><i data-lucide="check"></i></div>
+        <div class="task-body"><div class="task-title">Research rate limiting</div><div class="task-meta">1m ago • done</div></div>
+      </div>
+      <div class="task-item running" data-task="t3" data-slide="2">
+        <div class="task-dot"><i data-lucide="loader-2"></i></div>
+        <div class="task-body"><div class="task-title">Implement middleware</div><div class="task-meta">running • slide 3</div></div>
+      </div>
+      <div class="task-item pending" data-task="t4" data-slide="3">
+        <div class="task-dot"></div>
+        <div class="task-body"><div class="task-title">Add tests</div><div class="task-meta">queued</div></div>
+      </div>
+      <div class="task-item blocked" data-task="t5" data-slide="4">
+        <div class="task-dot"><i data-lucide="x"></i></div>
+        <div class="task-body"><div class="task-title">Deploy & verify</div><div class="task-meta">blocked • needs approval</div></div>
+      </div>
+    </div>
+
+    <div class="rail-footer">
+      <button id="simulateBtn" class="sim-btn"><i data-lucide="sparkles"></i> Simulate Agent Activity</button>
+      <p class="text-[10px] text-zinc-600 mt-2 text-center">Press O for overview • ← → to navigate</p>
+    </div>
+  </aside>
+
+  <main class="deck-wrap">
+    <div class="deck" id="deck">
+      <!-- Slide 1 -->
+      <div class="slide sealed" data-task="t1">
+        <div class="slide-head">
+          <div class="slide-num">01</div>
+          <div class="slide-title">Intent & Analysis</div>
+          <div class="slide-status done"><i data-lucide="check-circle-2"></i></div>
+        </div>
+        <div class="slide-cards">
+          <div class="card card-intent" data-task="t1">
+            <div class="card-icon"><i data-lucide="target"></i></div>
+            <div class="card-main">
+              <div class="card-label">Intent</div>
+              <div class="card-text">Add rate limiting to /api/login</div>
+            </div>
+          </div>
+          <div class="card card-plan" data-task="t1">
+            <div class="card-label"><i data-lucide="list-checks" class="w-3.5 h-3.5"></i>Plan</div>
+            <ul class="plan-list">
+              <li class="done"><i data-lucide="check-circle-2"></i>Inspect current login handler</li>
+              <li class="done"><i data-lucide="check-circle-2"></i>Identify attack surface</li>
+              <li class="done"><i data-lucide="check-circle-2"></i>Choose strategy (IP + Redis)</li>
+            </ul>
+          </div>
+          <div class="card card-tool open" data-task="t1">
+            <div class="tool-head">
+              <span class="tool-pill"><i data-lucide="file-scan"></i>mcp:read</span>
+              <span class="tool-time">14:02:03</span>
+            </div>
+            <div class="tool-details">
+              <div class="tool-meta">Read src/routes/auth/login.ts (142 LOC). No existing throttling. Uses bcrypt compare, returns JWT.</div>
+            </div>
+          <div class="card card-reflect" data-task="t1">
+            <i data-lucide="lightbulb"></i>
+            <p>Current endpoint vulnerable to credential stuffing. Needs per-IP sliding window, 5/min, with 429 + Retry-After.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 2 -->
+      <div class="slide sealed" data-task="t2">
+        <div class="slide-head">
+          <div class="slide-num">02</div>
+          <div class="slide-title">Research</div>
+          <div class="slide-status done"><i data-lucide="check-circle-2"></i></div>
+        </div>
+        <div class="slide-cards">
+          <div class="card card-tool open" data-task="t2">
+            <div class="tool-head">
+              <span class="tool-pill"><i data-lucide="search"></i>websearch</span>
+              <span class="tool-time">14:02:18</span>
+            </div>
+            <div class="tool-details">
+              <div class="tool-meta">query: "express rate limit redis sliding window 2024" • 3 results in 842ms</div>
+            </div>
+          </div>
+          <div class="card card-search" data-task="t2">
+            <div class="search-grid">
+              <a class="search-item" href="#">
+                <div class="search-fav"><img src="https://github.githubassets.com/favicons/favicon.svg"/><span class="text-[10px] text-zinc-500">github.com</span></div>
+                <div class="search-title">express-rate-limit + rate-limit-redis</div>
+                <div class="search-snip">Production-ready store with sliding window support and TypeScript types.</div>
+              </a>
+              <a class="search-item" href="#">
+                <div class="search-fav"><img src="https://www.google.com/s2/favicons?domain=redis.io"/><span class="text-[10px] text-zinc-500">redis.io</span></div>
+                <div class="search-title">Fixed vs Sliding Window Counters</div>
+                <div class="search-snip">Sliding window prevents bursts at boundary, better for login protection.</div>
+              </a>
+              <a class="search-item" href="#">
+                <div class="search-fav"><img src="https://www.google.com/s2/favicons?domain=owasp.org"/><span class="text-[10px] text-zinc-500">owasp.org</span></div>
+                <div class="search-title">OWASP: Brute Force Protection</div>
+                <div class="search-snip">Recommend 5 attempts per 5 min, exponential backoff, CAPTCHA after 3 fails.</div>
+              </a>
+            </div>
+          <div class="card card-tool" data-task="t2">
+            <div class="tool-head">
+              <span class="tool-pill"><i data-lucide="library"></i>mcp:read</span>
+              <span class="tool-time">14:02:31</span>
+            </div>
+            <div class="tool-details">
+              <div class="tool-meta">Checked package.json: express-rate-limit not installed. Redis client ioredis@5.3 present.</div>
+            </div>
+          </div>
+          <div class="card card-reflect" data-task="t2">
+            <i data-lucide="lightbulb"></i>
+            <p>Will implement custom middleware to avoid extra dep. Use Redis sorted set for sliding window timestamps.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 3 -->
+      <div class="slide sealed" data-task="t3">
+        <div class="slide-head">
+          <div class="slide-num">03</div>
+          <div class="slide-title">Implementation</div>
+          <div class="slide-status done"><i data-lucide="check-circle-2"></i></div>
+        </div>
+        <div class="slide-cards">
+          <div class="card card-tool open" data-task="t3">
+            <div class="tool-head">
+              <span class="tool-pill"><i data-lucide="code-2"></i>code:write</span>
+              <span class="tool-time">14:03:02</span>
+            </div>
+            <div class="tool-details">
+              <div class="tool-meta">Created middleware/rateLimit.ts with sliding window logic, 5 req/min/IP, Redis key: rl:login:{ip}</div>
+            </div>
+          </div>
+          <div class="card card-diff" data-task="t3">
+            <div class="diff-head">
+              <div class="diff-file"><i data-lucide="git-compare"></i>middleware/rateLimit.ts</div>
+              <div class="diff-stats"><span class="add">+18</span> <span class="del">-0</span></div>
+            </div>
+            <div class="diff-lines">
+              <div class="diff-line add"><span class="diff-gutter">+</span><span>export const loginLimiter = rateLimit({ windowMs: 60_000, max: 5, store: new RedisStore(...) })</span></div>
+              <div class="diff-line add"><span class="diff-gutter">+</span><span>  standardHeaders: true, legacyHeaders: false</span></div>
+              <div class="diff-line"><span class="diff-gutter"> </span><span>})</span></div>
+            </div>
+          <div class="card card-diff" data-task="t3">
+            <div class="diff-head">
+              <div class="diff-file"><i data-lucide="git-compare"></i>routes/auth/login.ts</div>
+              <div class="diff-stats"><span class="add">+2</span> <span class="del">-1</span></div>
+            </div>
+            <div class="diff-lines">
+              <div class="diff-line del"><span class="diff-gutter">-</span><span>router.post('/login', handleLogin)</span></div>
+              <div class="diff-line add"><span class="diff-gutter">+</span><span>router.post('/login', loginLimiter, handleLogin)</span></div>
+            </div>
+          </div>
+          <div class="card card-tool" data-task="t3">
+            <div class="tool-head">
+              <span class="tool-pill"><i data-lucide="git-commit"></i>git:commit</span>
+              <span class="tool-time">14:03:41</span>
+            </div>
+            <div class="tool-details">
+              <div class="tool-meta">feat(auth): add sliding window rate limit to login (5/min per IP)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 4 - current -->
+      <div class="slide" data-task="t4" id="currentSlide">
+        <div class="slide-head">
+          <div class="slide-num">04</div>
+          <div class="slide-title">Testing</div>
+          <div class="slide-status running"><i data-lucide="loader-2"></i></div>
+        </div>
+        <div class="slide-cards" id="liveCards">
+          <div class="card card-tool open" data-task="t4">
+            <div class="tool-head">
+              <span class="tool-pill"><i data-lucide="flask-conical"></i>test:run</span>
+              <span class="tool-time">14:04:12</span>
+            </div>
+            <div class="tool-details">
+              <div class="tool-meta">Running vitest src/tests/rate-limit.test.ts</div>
+            </div>
+          </div>
+          <div class="card card-test" data-task="t4" id="testCard">
+            <div class="test-head"><div class="spinner"></div>Running 8 tests…</div>
+            <div class="test-list">
+              <div class="test-item"><i data-lucide="circle-dot"></i>should allow 5 requests</div>
+              <div class="test-item"><i data-lucide="circle-dot"></i>should block 6th</div>
+              <div class="test-item"><i data-lucide="circle-dot"></i>sets Retry-After</div>
+              <div class="test-item"><i data-lucide="circle-dot"></i>resets after window</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-wrap">
+      <div class="timeline" id="timeline"></div>
+    </div>
+    <button id="livePill" class="live-pill hidden"><i data-lucide="radio" class="w-3.5 h-3.5"></i>Live</button>
+  </main>
+</div>
+
+<div id="overview" class="overview hidden">
+  <div class="overview-hint">Overview • Press O or click a slide</div>
+</div>
+
+<script>
+lucide.createIcons();
+
+const deck = document.getElementById('deck');
+const timeline = document.getElementById('timeline');
+const livePill = document.getElementById('livePill');
+const tasks = document.querySelectorAll('.task-item');
+const simulateBtn = document.getElementById('simulateBtn');
+const simulateMobile = document.getElementById('simulateMobile');
+let isFollowing = true;
+let slides = Array.from(document.querySelectorAll('.slide'));
+let currentIndex = 3;
+
+function updateTimeline(){
+  timeline.innerHTML='';
+  slides = Array.from(document.querySelectorAll('.slide'));
+  slides.forEach((s,i)=>{
+    const btn = document.createElement('button');
+    btn.className = 'timeline-item' + (i===currentIndex ? ' active':'');
+    btn.innerHTML = String(i+1).padStart(2,'0');
+    btn.onclick = ()=> scrollToSlide(i);
+    timeline.appendChild(btn);
+  });
+}
+function scrollToSlide(i){
+  const s = slides[i]; if(!s) return;
+  deck.scrollTo({left:s.offsetLeft - 28, behavior:'smooth'});
+  currentIndex = i;
+  updateTimeline();
+  tasks.forEach(t=>t.classList.toggle('active', parseInt(t.dataset.slide)===i));
+}
+function updateProgress(){
+  const done = document.querySelectorAll('.task-item.done').length;
+  const total = tasks.length;
+  const pct = Math.round(done/total*100);
+  document.getElementById('prog').style.strokeDashoffset = 94.2 - (94.2*pct/100);
+  document.getElementById('progText').textContent = pct+'%';
+}
+updateTimeline(); updateProgress();
+
+deck.addEventListener('scroll', ()=>{
+  const max = deck.scrollWidth - deck.clientWidth - 20;
+  isFollowing = deck.scrollLeft >= max;
+  livePill.classList.toggle('hidden', isFollowing);
+  const idx = Math.round(deck.scrollLeft / 744);
+  if(idx !== currentIndex && idx>=0 && idx<slides.length){ currentIndex = idx; updateTimeline(); }
+}, {passive:true});
+
+livePill.onclick = ()=>{ deck.scrollTo({left:deck.scrollWidth, behavior:'smooth'}); isFollowing=true; };
+
+tasks.forEach(t=>{
+  t.addEventListener('click', ()=> scrollToSlide(parseInt(t.dataset.slide)));
+  t.addEventListener('mouseenter', ()=>{
+    const id = t.dataset.task;
+    document.querySelectorAll(`.card[data-task="${id}"]`).forEach(c=>c.classList.add('highlight'));
+  });
+  t.addEventListener('mouseleave', ()=> document.querySelectorAll('.card.highlight').forEach(c=>c.classList.remove('highlight')));
+});
+
+document.querySelectorAll('.card-tool .tool-head').forEach(h=>{
+  h.onclick = ()=> h.parentElement.classList.toggle('open');
+});
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowRight') scrollToSlide(Math.min(currentIndex+1, slides.length-1));
+  if(e.key==='ArrowLeft') scrollToSlide(Math.max(currentIndex-1,0));
+  if(e.key.toLowerCase()==='o') toggleOverview();
+});
+
+function toggleOverview(){
+  const ov = document.getElementById('overview');
+  const isHidden = ov.classList.contains('hidden');
+  if(isHidden){
+    ov.innerHTML = '<div class="overview-hint">Overview • Press O or click a slide</div>';
+    slides.forEach((s,i)=>{
+      const clone = s.cloneNode(true);
+      clone.onclick = ()=>{ toggleOverview(); setTimeout(()=>scrollToSlide(i),50); };
+      ov.appendChild(clone);
+    });
+    ov.classList.remove('hidden');
+    lucide.createIcons();
+  } else {
+    ov.classList.add('hidden');
+  }
+}
+
+// Simulate
+function addCard(slide, html){
+  const wrap = slide.querySelector('.slide-cards');
+  const temp = document.createElement('div');
+  temp.innerHTML = html.trim();
+  const card = temp.firstElementChild;
+  card.classList.add('enter');
+  wrap.appendChild(card);
+  lucide.createIcons();
+  if(isFollowing){ deck.scrollTo({left:deck.scrollWidth, behavior:'smooth'}); }
+  if(wrap.children.length >=5 && !slide.classList.contains('sealed')){
+    slide.classList.add('sealed');
+    slide.querySelector('.slide-status').innerHTML = '<i data-lucide="check-circle-2"></i>';
+    slide.querySelector('.slide-status').className = 'slide-status done';
+    lucide.createIcons();
+  }
+}
+
+function simulate(){
+  simulateBtn.disabled = true; simulateBtn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Simulating…'; lucide.createIcons();
+  const current = document.getElementById('currentSlide');
+  
+  setTimeout(()=>{
+    const testHead = current.querySelector('.test-head');
+    testHead.classList.add('done'); testHead.innerHTML = '<i data-lucide="check-circle-2"></i> 8 passed • 124ms';
+    current.querySelectorAll('.test-item').forEach((el,i)=>{
+      setTimeout(()=>{ el.classList.add('pass'); el.innerHTML='<i data-lucide="check"></i>'+el.textContent; }, i*80);
+    });
+    lucide.createIcons();
+  }, 900);
+
+  setTimeout(()=>{
+    addCard(current, `<div class="card card-reflect" data-task="t4"><i data-lucide="lightbulb"></i><p>All tests green. Rate limiter correctly returns 429 with Retry-After: 52. Headers verified.</p></div>`);
+  }, 1800);
+
+  setTimeout(()=>{
+    addCard(current, `<div class="card card-tool open" data-task="t4"><div class="tool-head"><span class="tool-pill"><i data-lucide="shield-check"></i>security:scan</span><span class="tool-time">14:04:31</span></div><div class="tool-details"><div class="tool-meta">No bypass vectors found. IP extraction respects X-Forwarded-For with trust proxy.</div></div></div>`);
+  }, 2600);
+
+  setTimeout(()=>{
+    // seal current, mark task done
+    current.classList.add('sealed');
+    tasks[3].classList.remove('pending'); tasks[3].classList.add('done');
+    tasks[3].querySelector('.task-dot').innerHTML = '<i data-lucide="check"></i>';
+    tasks[3].querySelector('.task-meta').textContent = 'just now • done';
+    updateProgress();
+    lucide.createIcons();
+  }, 3400);
+
+  setTimeout(()=>{
+    // create new slide 5
+    const slide5 = document.createElement('div');
+    slide5.className='slide';
+    slide5.dataset.task='t5';
+    slide5.innerHTML=`
+      <div class="slide-head">
+        <div class="slide-num">05</div>
+        <div class="slide-title">Deploy & Verify</div>
+        <div class="slide-status running"><i data-lucide="loader-2"></i></div>
+      </div>
+      <div class="slide-cards"></div>`;
+    deck.appendChild(slide5);
+    slides = Array.from(document.querySelectorAll('.slide'));
+    updateTimeline();
+    scrollToSlide(4);
+    tasks[4].classList.remove('blocked'); tasks[4].classList.add('running');
+    tasks[4].querySelector('.task-dot').innerHTML='<i data-lucide="loader-2"></i>';
+    tasks[4].dataset.slide='4';
+    lucide.createIcons();
+    isFollowing=true;
+  }, 4200);
+
+  setTimeout(()=>{
+    const s5 = slides[4];
+    addCard(s5, `<div class="card card-intent" data-task="t5"><div class="card-icon"><i data-lucide="rocket"></i></div><div class="card-main"><div class="card-label">Deploy</div><div class="card-text">Ship to staging, run load test</div></div></div>`);
+  }, 5000);
+
+  setTimeout(()=>{
+    const s5 = slides[4];
+    addCard(s5, `<div class="card card-tool open" data-task="t5"><div class="tool-head"><span class="tool-pill"><i data-lucide="container"></i>deploy:staging</span><span class="tool-time">14:05:02</span></div><div class="tool-details"><div class="tool-meta">Build #482 succeeded. Rolling out to 3 pods. Redis connected.</div></div></div>`);
+  }, 6200);
+
+  setTimeout(()=>{
+    const s5 = slides[4];
+    addCard(s5, `<div class="card card-tool" data-task="t5"><div class="tool-head"><span class="tool-pill"><i data-lucide="activity"></i>load:test</span><span class="tool-time">14:05:18</span></div><div class="tool-details"><div class="tool-meta">k6: 100 VUs, 6th request blocked as expected. p95 latency +3ms.</div></div></div>`);
+    document.querySelectorAll('.card-tool .tool-head').forEach(h=>{ h.onclick = ()=> h.parentElement.classList.toggle('open'); });
+  }, 7400);
+
+  setTimeout(()=>{
+    const s5 = slides[4];
+    addCard(s5, `<div class="card card-reflect" data-task="t5"><i data-lucide="party-popper"></i><p>Deployment verified. Ready for production approval. This horizontal deck kept context stable while agent worked — no chat fatigue.</p></div>`);
+    s5.querySelector('.slide-status').innerHTML='<i data-lucide="check-circle-2"></i>'; s5.querySelector('.slide-status').className='slide-status done';
+    tasks[4].classList.remove('running'); tasks[4].classList.add('done');
+    tasks[4].querySelector('.task-dot').innerHTML='<i data-lucide="check"></i>';
+    updateProgress(); lucide.createIcons();
+    simulateBtn.innerHTML='<i data-lucide="check"></i> Simulation Complete'; simulateBtn.disabled=false;
+  }, 8800);
+}
+
+simulateBtn.onclick = simulate;
+simulateMobile.onclick = simulate;
+
+// initial scroll to current
+setTimeout(()=>scrollToSlide(3), 100);
+</script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+</body>
+</html>

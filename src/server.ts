@@ -4,11 +4,12 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { currentModelId, hasAiKey, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, saveAiConfig } from './env.js'
+import { currentModelId, hasAiKey, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, saveAiConfig, setPlaywrightPool } from './env.js'
 import { mapMastraChunk } from './chatStream.js'
 import { listProviderModels } from './providers.js'
-import { ensureFsRoot, FS_ROOT } from './launcher.js'
-import { getBrowser, getPage, getPoolInfo, patchDOM, inspectDOM, evalJS, captureLayoutSnapshot, renderLayoutSvg } from './browserPool.js'
+import { createProject, ensureWorkspace, getFsRoot, listProjects, readActiveId, selectProject, WORKSPACE_ROOT } from './launcher.js'
+import { livePageCount, pageCommand } from './pageBridge.js'
+import { markLauncherOwner } from './liveTarget.js'
 import chokidar from 'chokidar'
 
 loadDotEnv()
@@ -27,27 +28,61 @@ function publicConfig() {
     modelName: openaiModelName(),
     baseUrl: openaiBaseUrl(),
     launcherUrl: `http://localhost:${PORT}`,
-    poolUrl: `http://localhost:${PORT}/pool`,
     previewStaticUrl: '/projects/',
     previewHmrUrl: 'http://localhost:5173',
+    workspace: WORKSPACE_ROOT,
+    activeProject: readActiveId(),
+    fsRoot: getFsRoot(),
+    playwrightPool: playwrightPoolEnabled(),
   }
 }
 app.use(cors({ origin: '*' }))
 app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"); next()})
 app.use(express.json({ limit: '20mb' }))
 
-ensureFsRoot()
-getBrowser(`http://localhost:${PORT}/pool`)
+ensureWorkspace()
+markLauncherOwner()
 
 function safePath(p: string) {
-  const resolved = path.resolve(FS_ROOT, '.' + p)
-  if (!resolved.startsWith(FS_ROOT)) throw new Error('Path traversal')
+  const root = getFsRoot()
+  const resolved = path.resolve(root, '.' + p)
+  if (!resolved.startsWith(root)) throw new Error('Path traversal')
   return resolved
 }
 
 // --- FS API ---
 app.get('/api/fs/health', (req, res) => {
-  res.json({ ok: true, root: FS_ROOT, files: fs.existsSync(FS_ROOT) ? fs.readdirSync(FS_ROOT).slice(0, 20) : [] })
+  const root = getFsRoot()
+  res.json({ ok: true, root, files: fs.existsSync(root) ? fs.readdirSync(root).slice(0, 20) : [] })
+})
+
+app.get('/api/projects', (_req, res) => {
+  res.json({
+    ok: true,
+    workspace: WORKSPACE_ROOT,
+    active: readActiveId(),
+    projects: listProjects(),
+  })
+})
+
+app.post('/api/projects/select', (req, res) => {
+  try {
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    const project = selectProject(id)
+    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects() })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
+})
+
+app.post('/api/projects/create', (req, res) => {
+  try {
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    const project = createProject(id)
+    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects() })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
 })
 
 // --- Launcher config (presence flags only: never expose secrets) ---
@@ -63,6 +98,20 @@ app.post('/api/config/key', (req, res) => {
       baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl : undefined,
       model: typeof body.model === 'string' ? body.model : undefined,
     })
+    res.json({ ...publicConfig(), saved: true })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
+})
+
+app.post('/api/config/pool', async (req, res) => {
+  try {
+    const enabled = Boolean(req.body?.enabled)
+    setPlaywrightPool(enabled)
+    if (!enabled) {
+      const { closePool } = await import('./browserPool.js')
+      await closePool()
+    }
     res.json({ ...publicConfig(), saved: true })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
@@ -94,8 +143,9 @@ app.get('/api/fs/list', (req, res) => {
       }
     } catch {}
   }
-  walk(FS_ROOT)
-  res.json({ files, root: FS_ROOT })
+  const root = getFsRoot()
+  walk(root)
+  res.json({ files, root })
 })
 
 app.get('/api/fs/read', (req, res) => {
@@ -120,64 +170,60 @@ app.post('/api/fs/write', async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
-// --- Browser pool API (replaces MCP screenshot tax) ---
+app.get('/api/page/status', async (_req, res) => {
+  if (livePageCount() > 0) return res.json({ ok: true, clients: livePageCount(), via: 'local' })
+  try {
+    const r = await fetch('http://localhost:5173/api/page/status')
+    res.status(r.status).json(await r.json())
+  } catch (e: any) {
+    res.status(503).json({ ok: false, error: 'Vite :5173 not reachable', detail: e.message })
+  }
+})
+app.post('/api/page/inspect', async (req, res) => {
+  res.json(await pageCommand('inspect', req.body || {}))
+})
+app.post('/api/page/patch', async (req, res) => {
+  res.json(await pageCommand('patch', req.body || {}))
+})
+app.post('/api/page/eval', async (req, res) => {
+  res.json(await pageCommand('eval', req.body || {}))
+})
+
 app.post('/api/browser/open', async (req, res) => {
-  try {
-    const { url } = req.body
-    const page = await getPage(url)
-    res.json({ ok: true, url: page.url() })
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
+  const { runPoolOp } = await import('./liveTarget.js')
+  res.json(await runPoolOp('open', { url: String(req.body?.url || '') }))
 })
-
-app.post('/api/browser/patch', async (req, res) => {
-  try {
-    const { selector, html, url } = req.body
-    const result = await patchDOM(selector || 'body', html, url)
-    res.json(result) // includes rect + elapsedMs, no screenshot
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
-})
-
 app.post('/api/browser/inspect', async (req, res) => {
-  try {
-    const { selector, url } = req.body
-    const result = await inspectDOM(selector || 'body', url)
-    res.json(result)
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
+  const { runPoolOp } = await import('./liveTarget.js')
+  res.json(await runPoolOp('inspect', req.body || {}))
 })
-
+app.post('/api/browser/patch', async (req, res) => {
+  const { runPoolOp } = await import('./liveTarget.js')
+  res.json(await runPoolOp('patch', req.body || {}))
+})
 app.post('/api/browser/eval', async (req, res) => {
-  try {
-    const { code, url } = req.body
-    const result = await evalJS(code, url)
-    res.json(result)
-  } catch (e: any) { res.status(500).json({ error: e.message }) }
+  const { runPoolOp } = await import('./liveTarget.js')
+  res.json(await runPoolOp('eval', req.body || {}))
 })
-
-// --- Layout analysis (rectangle-based, no screenshots) ---
 app.post('/api/layout/snapshot', async (req, res) => {
   try {
+    const { liveLayoutSnapshot } = await import('./liveTarget.js')
     const { url, ...params } = req.body || {}
-    const result = await captureLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout', ...params }, url)
-    res.json(result)
+    res.json(await liveLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout', ...params }, url))
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
-
 app.post('/api/layout/svg', async (req, res) => {
   try {
+    const { liveLayoutSvg } = await import('./liveTarget.js')
     const { url, scale, showLabels, showDimensions, showOverlaps, showGaps, showClipping, ...params } = req.body || {}
-    if (showOverlaps) (params as any).includeOverlapAnalysis = true
-    if (showGaps) (params as any).includeGapAnalysis = true
-    if (showClipping) (params as any).includeClippingAnalysis = true
-    const snapshot = await captureLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout', ...params }, url)
-    const svg = renderLayoutSvg(snapshot as any, {
-      scale: scale ?? 1,
-      showLabels: showLabels ?? true,
-      showDimensions: showDimensions ?? false,
-      showOverlaps: showOverlaps ?? false,
-      showGaps: showGaps ?? false,
-      showClipping: showClipping ?? false,
-    } as any)
-    res.json({ ...snapshot, svg, svgLength: svg.length })
+    if (showOverlaps) params.includeOverlapAnalysis = true
+    if (showGaps) params.includeGapAnalysis = true
+    if (showClipping) params.includeClippingAnalysis = true
+    res.json(await liveLayoutSvg(
+      { maxTotal: 300, computedStylePreset: 'layout', ...params },
+      url,
+      { scale, showLabels, showDimensions, showOverlaps, showGaps, showClipping },
+    ))
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
@@ -230,28 +276,18 @@ app.post('/api/live-edit/submit', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'No annotations or page notes submitted' })
     }
     const { summarizeAnnotations, buildLiveEditPrompt } = await import('./live-edit/annotationAnalysis.js')
-    const { getPage, captureLayoutSnapshot, summarizeLayoutSnapshot } = await import('./browserPool.js')
-    const { installAnnotationOverlay, importAnnotationsToPage } = await import('./live-edit/annotationOverlay.js')
-    // The agent works in the pool page: import the user's notes there.
-    const page = await getPage(typeof url === 'string' && url ? url : undefined)
-    const pageUrl = page.url()
-    await installAnnotationOverlay(page).catch(() => {})
-    if (notes.length) await importAnnotationsToPage(page, notes).catch(() => {})
-    const before = await captureLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout' }).catch(() => null)
     const summary = summarizeAnnotations(notes)
+    const pageUrl = typeof url === 'string' ? url : ''
     const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl })
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
     const result = await agent.generate([{ role: 'user', content: prompt }], { maxSteps: 12 })
-    const after = await captureLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout' }).catch(() => null)
     res.json({
       ok: true,
       text: result.text,
       toolCalls: result.toolCalls,
       annotationCount: notes.length,
       prioritizedIds: summary.prioritizedIds,
-      before: before ? summarizeLayoutSnapshot(before as any) : null,
-      after: after ? summarizeLayoutSnapshot(after as any) : null,
     })
   } catch (e: any) {
     console.error(e)
@@ -275,63 +311,27 @@ app.get('/chat-embed', (req, res) => {
 if (fs.existsSync(uiDist)) {
   app.use(express.static(uiDist))
 }
-app.use('/projects', express.static(FS_ROOT))
-
-// --- Editor presence: web UI heartbeats here so /pool knows if anyone is watching ---
-const uiPresence: Record<string, number> = {}
-app.post('/api/ui/heartbeat', (req, res) => {
-  const client = typeof req.body?.client === 'string' ? req.body.client.slice(0, 32) : 'web'
-  uiPresence[client] = Date.now()
-  res.json({ ok: true })
-})
-
-// --- Pool landing page: what this browser window is for ---
-app.get('/pool', (req, res) => {
-  const info = getPoolInfo()
-  let fileCount = 0
-  try { fileCount = fs.readdirSync(FS_ROOT).length } catch {}
-  const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  const webSeen = uiPresence['web']
-  const webAgoSec = webSeen ? Math.round((Date.now() - webSeen) / 1000) : null
-  const editorOpen = webAgoSec !== null && webAgoSec < 30
-  const presence = editorOpen
-    ? `<div style="background:#1a4d1a;border:1px solid #2a5a2a;border-radius:8px;padding:12px 16px;margin:16px 0">✅ Editor open in your browser (seen ${webAgoSec}s ago). This window stays the agent's.</div>`
-    : `<div style="background:#4d3a1a;border:1px solid #5a4a2a;border-radius:8px;padding:12px 16px;margin:16px 0">⚠️ No editor open in your browser yet.<br/>To use the editor, open <a style="color:#8ab4f8;font-size:18px" href="/">http://localhost:${PORT}</a> in your own Chrome — this window is the agent's, not yours.</div>`
-  const activity = info.activity.length
-    ? info.activity.map(a => `<li><b>${esc(a.kind)}</b> ${esc(a.summary)} <span style="color:#888">${esc(a.at)}</span></li>`).join('')
-    : '<li style="color:#888">No agent activity yet</li>'
-  res.send(`<html><head><meta charset="utf-8"/><meta http-equiv="refresh" content="5"/><title>AI Live Editor — Browser Pool</title></head><body style="font-family:system-ui;background:#0f0f0f;color:#eee;padding:32px;max-width:640px;margin:0 auto">
-<h1>🤖 AI Live Editor — Browser Pool</h1>
-${presence}
-<p>This window is <b>not for manual browsing</b>. It is the browser the AI agent drives: it loads your project, keeps your logins (profile in <code>${esc(info.userDataDir)}</code>), and the agent patches + inspects its DOM in milliseconds instead of screenshots.</p>
-<ul>
-<li>Executable: <code>${esc(info.executable)}</code></li>
-<li>FS root: <code>${esc(FS_ROOT)}</code> (${fileCount} top-level entries)</li>
-<li>Open pages: ${info.pages}</li>
-</ul>
-<h2>Recent agent activity (refreshes every 5s)</h2>
-<ul>${activity}</ul>
-<p style="color:#888;font-size:13px">Editor UI: <a style="color:#8ab4f8" href="/">localhost:${PORT}</a> · Project preview: <a style="color:#8ab4f8" href="/projects/">/projects/</a> · Health: <a style="color:#8ab4f8" href="/api/fs/health">/api/fs/health</a></p>
-<p style="color:#888;font-size:13px">API calls may navigate this tab elsewhere — this page is for orientation at launch.</p>
-</body></html>`)
+app.use('/projects', (req, res, next) => {
+  express.static(getFsRoot())(req, res, next)
 })
 
 // Fallback to UI index
 app.get('*', (req, res) => {
   const index = path.join(uiDist, 'index.html')
   if (fs.existsSync(index)) res.sendFile(index)
-  else res.send(`<html><body style="font-family:system-ui;padding:24px"><h1>AI Live Editor Launcher running</h1><p>API at /api/fs/health</p><p>FS root: ${FS_ROOT}</p><p>Run <code>npm run projects:dev</code> to start Vite at localhost:5173</p><p>UI not built yet - create src/ui-dist/index.html or run frontend separately</p></body></html>`)
+  else res.send(`<html><body style="font-family:system-ui;padding:24px"><h1>AI Live Editor Launcher running</h1><p>API at /api/fs/health</p><p>FS root: ${getFsRoot()}</p><p>Vite for the active project starts with this process on localhost:5173</p><p>UI not built yet - run npm run ui:build</p></body></html>`)
 })
 
 // watcher for HMR-like logs
-const watcher = chokidar.watch(FS_ROOT, { ignored: /(^|[\/\\])\../, persistent: true, ignoreInitial: true })
-watcher.on('change', p => console.log('[fs] changed', path.relative(FS_ROOT, p)))
+const watcher = chokidar.watch(WORKSPACE_ROOT, { ignored: /(^|[\/\\])\../, persistent: true, ignoreInitial: true })
+watcher.on('change', p => console.log('[fs] changed', path.relative(WORKSPACE_ROOT, p)))
 
 const server = app.listen(PORT, () => {
   console.log(`[launcher] running at http://localhost:${PORT}`)
-  console.log(`[launcher] FS root: ${FS_ROOT}`)
+  console.log(`[launcher] FS root: ${getFsRoot()}`)
   console.log(`[launcher] Health: http://localhost:${PORT}/api/fs/health`)
   console.log(`[launcher] Projects: http://localhost:${PORT}/projects/`)
+  console.log(`[launcher] Playwright pool: ${playwrightPoolEnabled() ? 'on (lazy)' : 'off — npm run dev:pool to enable'}`)
 })
 
 server.on('error', (err: any) => {

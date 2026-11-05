@@ -1,10 +1,6 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import {
-  captureLayoutSnapshot,
-  renderLayoutSvg,
-  summarizeLayoutSnapshot,
-} from '../../browserPool.js'
+import { liveLayoutSnapshot, liveLayoutSvg } from '../../liveTarget.js'
 
 const presetEnum = z.enum(['minimal', 'layout', 'standard', 'debug', 'typography', 'paint'])
 const coordinateEnum = z.enum(['viewport', 'document'])
@@ -21,23 +17,18 @@ const snapshotFields = {
   includeGapAnalysis: z.boolean().optional().describe('Detect gaps between siblings (default false)'),
   includeClippingAnalysis: z.boolean().optional().describe('Detect overflow clipping (default true)'),
   analysisMaxFindings: z.number().int().positive().max(100).optional().describe('Max findings per analysis type'),
-  url: z.string().optional().describe('Navigate pool page to this URL first'),
+  url: z.string().optional().describe('Another origin: use the Playwright pool. Omit for the Vite app page bridge.'),
 }
 
 export const layoutSnapshotTool = createTool({
   id: 'layout-snapshot',
   description:
-    'Capture a layout-rectangle snapshot of the live page: element rects, layout styles, overlap/gap/clipping analysis. Use this to analyze layout instead of screenshots.',
+    'Capture a layout-rectangle snapshot of the live Vite app (page bridge): element rects, layout styles, overlap analysis. Pass url (another origin) to use the Playwright pool.',
   inputSchema: z.object(snapshotFields),
   execute: async (input: Record<string, any>) => {
     try {
       const { url, ...params } = input
-      const snapshot = await captureLayoutSnapshot(
-        { maxTotal: 300, computedStylePreset: 'layout', ...params },
-        url,
-      )
-      const summary = summarizeLayoutSnapshot(snapshot)
-      return { ...summary, elements: (snapshot as any).elements, analysis: (snapshot as any).analysis, elapsedMs: (snapshot as any).elapsedMs, fallback: (snapshot as any).fallback }
+      return await liveLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout', ...params }, url)
     } catch (e: any) {
       return { error: e.message }
     }
@@ -47,7 +38,7 @@ export const layoutSnapshotTool = createTool({
 export const layoutSvgTool = createTool({
   id: 'layout-svg',
   description:
-    'Render an SVG wireframe of the live page layout rectangles (labels, overlap/gap/clipping overlays). Captures a fresh snapshot, then renders SVG. Prefer over screenshots for layout questions.',
+    'Render an SVG wireframe of the live Vite app layout (page bridge). Pass url (another origin) to use the Playwright pool.',
   inputSchema: z.object({
     ...snapshotFields,
     scale: z.number().min(0.1).max(4).optional().describe('SVG scale (default 1)'),
@@ -63,20 +54,11 @@ export const layoutSvgTool = createTool({
       if (showOverlaps) (params as any).includeOverlapAnalysis = true
       if (showGaps) (params as any).includeGapAnalysis = true
       if (showClipping) (params as any).includeClippingAnalysis = true
-      const snapshot = await captureLayoutSnapshot(
+      return await liveLayoutSvg(
         { maxTotal: 300, computedStylePreset: 'layout', ...params },
         url,
+        { scale, showLabels, showDimensions, showOverlaps, showGaps, showClipping },
       )
-      const svg = renderLayoutSvg(snapshot as any, {
-        scale: scale ?? 1,
-        showLabels: showLabels ?? true,
-        showDimensions: showDimensions ?? false,
-        showOverlaps: showOverlaps ?? false,
-        showGaps: showGaps ?? false,
-        showClipping: showClipping ?? false,
-      } as any)
-      const summary = summarizeLayoutSnapshot(snapshot as any)
-      return { ...summary, svg, svgLength: svg.length, elapsedMs: (snapshot as any).elapsedMs, fallback: (snapshot as any).fallback }
     } catch (e: any) {
       return { error: e.message }
     }

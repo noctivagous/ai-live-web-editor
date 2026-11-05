@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { getConfig, listFiles, probeModels, saveAiConfig, type LauncherConfig } from '../lib/api'
 
-const STEPS = ['Welcome', 'AI key', 'Project files', 'Browser & preview', 'Done']
+const STEPS = ['Welcome', 'AI key', 'Project files', 'Preview', 'Done']
 
 type Check<T> = { state: 'wait' | 'ok' | 'bad', detail: string, data?: T }
 
@@ -193,10 +193,10 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
         {step === 0 && (
           <div style={{ fontSize: 13.5, lineHeight: 1.65, color: '#d4d4d8' }}>
             <p style={{ margin: '0 0 10px' }}>
-              This editor writes to a real project folder, patches a live browser tab,
-              and lets an AI agent drive both. Three things need to be true:
+              This editor writes to a real project folder and lets an AI agent
+              edit those files. Vite HMR shows the change in the preview. Three things need to be true:
             </p>
-            <div className="check-row ok"><span className="mark">1</span><div>Launcher running<small>Serves the UI, the file API, and the browser pool on <code>:4112</code>.</small></div></div>
+            <div className="check-row ok"><span className="mark">1</span><div>Launcher running<small>Serves the UI, the file API, and starts Vite for the active project.</small></div></div>
             <div className="check-row ok"><span className="mark">2</span><div>OpenAI-compatible API key<small>Any provider that speaks the OpenAI API (OpenAI, xAI, Groq, OpenRouter, a local server). Saved as <code>OPENAI_API_KEY</code>.</small></div></div>
             <div className="check-row ok"><span className="mark">3</span><div>Project + preview reachable<small>Files on disk, static preview always; Vite HMR on <code>:5173</code> when you want it.</small></div></div>
             <p style={{ margin: '10px 0 0', color: '#a1a1aa', fontSize: 12.5 }}>
@@ -274,9 +274,8 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           <div>
             <CheckRow check={hmrCheck} title="Preview servers">
               <small>
-                Static preview is served by the launcher itself (<code>/projects/</code>) and needs nothing extra.
-                The HMR button in the preview pane targets <code>localhost:5173</code>, which only runs
-                while <code>npm run projects:dev</code> is up.
+                Static preview is served by the launcher itself (<code>/projects/</code>).
+                Vite HMR on <code>localhost:5173</code> is started by <code>npm run dev</code> for the active project.
               </small>
             </CheckRow>
             <button className="deck-btn" onClick={() => void runHmrCheck()}>Recheck</button>

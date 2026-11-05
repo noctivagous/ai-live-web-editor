@@ -2,13 +2,17 @@ import React, { useEffect, useRef, useState } from 'react'
 import { FileTree } from './components/FileTree'
 import { MonacoEditor } from './components/MonacoEditor'
 import { Preview } from './components/Preview'
+import { Chat } from './components/Chat'
 import { NoticeDialog, SettingsModal } from './components/Modal'
 import { SetupWizard } from './components/SetupWizard'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
-import { usePresence } from './hooks/usePresence'
-import { btnPrimary, SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
-import { listFiles, readFile, writeFile, patchDOM, inspectDOM, openBrowser, getConfig, type LauncherConfig } from './lib/api'
+import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
+import {
+  listFiles, readFile, writeFile, getConfig,
+  listProjects, selectProject, createProject,
+  type LauncherConfig, type ProjectInfo,
+} from './lib/api'
 
 function connTone(status: string): string {
   if (status.startsWith('real FS:')) return 'good'
@@ -29,7 +33,9 @@ export default function App() {
   // skip autosave for placeholder content and right after a file loads
   const skipSave = useRef(true)
 
-  const { leftW, setLeftW, previewH, colDrag, rowDrag } = useSplitPanes()
+  const [projects, setProjects] = useState<ProjectInfo[]>([])
+  const [activeProject, setActiveProject] = useState('')
+  const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
 
   async function loadFiles() {
     try {
@@ -67,16 +73,55 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content])
 
-  useEffect(() => { loadFiles(); refreshConfig() }, [])
+  async function loadProjects() {
+    try {
+      const data = await listProjects()
+      setProjects(data.projects || [])
+      setActiveProject(data.active || '')
+    } catch { /* launcher down */ }
+  }
 
-  // presence heartbeat so the pool page knows an editor is open
-  usePresence()
+  async function handleSelectProject(id: string) {
+    if (!id || id === activeProject) return
+    setStatus(`switching to ${id}…`)
+    try {
+      await selectProject(id)
+      setActiveProject(id)
+      skipSave.current = true
+      setActivePath('/index.html')
+      await loadProjects()
+      await loadFiles()
+      setStatus(`project ${id}`)
+    } catch (e: unknown) {
+      setStatus('switch failed: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
+  async function handleNewProject() {
+    const name = prompt('New project name (letters, numbers, dash, underscore)')
+    if (!name) return
+    setStatus(`creating ${name}…`)
+    try {
+      const data = await createProject(name.trim())
+      skipSave.current = true
+      setActivePath('/index.html')
+      await loadProjects()
+      if (data.active) setActiveProject(data.active)
+      await loadFiles()
+      setStatus(`project ${data.active}`)
+    } catch (e: unknown) {
+      setStatus('create failed: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
+  useEffect(() => { loadFiles(); refreshConfig(); loadProjects() }, [])
 
   function finishSetup() {
     localStorage.setItem(SETUP_DONE_KEY, SETUP_DONE_VALUE)
     setSetupDone(true)
     loadFiles()
     refreshConfig()
+    loadProjects()
   }
 
   function reopenSetup() {
@@ -88,26 +133,6 @@ export default function App() {
   function changeTheme(t: string) {
     setEditorTheme(t)
     localStorage.setItem(EDITOR_THEME_KEY, t)
-  }
-
-  async function handlePatch() {
-    if (activePath.endsWith('.html')) {
-      const res = await patchDOM('body', content)
-      setStatus(`patched ${activePath} in ${res.elapsedMs}ms, rect ${JSON.stringify(res.rect)}`)
-    } else {
-      await save()
-      setStatus(`saved to real FS, Vite HMR will update if running on :5173`)
-    }
-  }
-
-  async function handleInspect() {
-    const res = await inspectDOM('body')
-    setNotice(JSON.stringify(res, null, 2).slice(0, 3000))
-  }
-
-  async function handleOpenPool() {
-    const res = await openBrowser('http://localhost:4112/projects/')
-    setStatus(`browser pool opened: ${JSON.stringify(res)}`)
   }
 
   const hasKey = Boolean(config?.hasApiKey ?? config?.hasOpenAiKey)
@@ -129,13 +154,23 @@ export default function App() {
           <span className={`pill mono ${keyTone}`} title={config ? `Model ${config.model}` : 'Launcher config unknown'}>
             <span className="dot" />{config ? (hasKey ? config.model : 'no API key') : 'config…'}
           </span>
+          <select
+            className="deck-btn"
+            value={activeProject}
+            onChange={e => { void handleSelectProject(e.target.value) }}
+            title="Active project"
+            style={{ maxWidth: 160 }}
+          >
+            {projects.length === 0 && <option value="">no projects</option>}
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.id}</option>
+            ))}
+          </select>
+          <button className="deck-btn" onClick={() => { void handleNewProject() }} title="Create a new app under projects/">New project</button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="deck-btn" onClick={() => setShowSettings(true)} title="Settings">Settings</button>
-          <button className="deck-btn" onClick={handleOpenPool}>Browser Pool</button>
-          <button className="deck-btn" onClick={handleInspect}>Inspect Body</button>
           <button className="deck-btn" onClick={() => save()}>Save</button>
-          <button className="deck-btn" onClick={handlePatch} style={btnPrimary} title="Patch the live browser tab">Patch Live</button>
         </div>
       </header>
 
@@ -152,15 +187,24 @@ export default function App() {
         <div className="panel" style={{ flex: 1 }}>
           <div className="panel-head">
             <span className="mono" style={{ fontWeight: 500 }}>{activePath}</span>
-            <span className="sub" style={{ marginLeft: 'auto' }}>Monaco • Real FS • Browser Pool</span>
+            <span className="sub" style={{ marginLeft: 'auto' }}>Monaco • Real FS • Vite HMR</span>
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} />
           </div>
           <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
           <div style={{ height: `${previewH}%`, borderTop: '1px solid #1e1e23', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <Preview onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }} onResult={setNotice} />
+            <Preview key={activeProject} onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }} onResult={setNotice} />
           </div>
+        </div>
+        <VDivider onMouseDown={colDrag(setRightW, -1)} title="Drag to resize chat" />
+        <div className="panel" style={{ width: rightW, flexShrink: 0, minWidth: 0 }}>
+          <Chat
+            activePath={activePath}
+            keyKnown={config === null ? undefined : hasKey}
+            onNeedSetup={reopenSetup}
+            onAfterChat={() => { loadFiles(); setTimeout(() => loadFile(activePath), 400) }}
+          />
         </div>
       </div>
 

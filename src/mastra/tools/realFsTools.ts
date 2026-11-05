@@ -2,12 +2,13 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
-import { FS_ROOT } from '../../launcher.js'
-import { patchDOM, inspectDOM, evalJS } from '../../browserPool.js'
+import { getFsRoot } from '../../launcher.js'
+import { livePageOp, poolOpen } from '../../liveTarget.js'
 
 function safe(p: string) {
-  const full = path.resolve(FS_ROOT, '.' + p)
-  if (!full.startsWith(FS_ROOT)) throw new Error('traversal')
+  const root = getFsRoot()
+  const full = path.resolve(root, '.' + p)
+  if (!full.startsWith(root)) throw new Error('traversal')
   return full
 }
 
@@ -26,8 +27,9 @@ export const listRealFilesTool = createTool({
         else files.push('/' + rel.replace(/\\/g, '/'))
       }
     }
-    if (fs.existsSync(FS_ROOT)) walk(FS_ROOT)
-    return { files, root: FS_ROOT }
+    const root = getFsRoot()
+    if (fs.existsSync(root)) walk(root)
+    return { files, root }
   }
 })
 
@@ -54,32 +56,30 @@ export const writeRealFileTool = createTool({
   }
 })
 
-export const patchDOMTool = createTool({
-  id: 'patch-dom',
-  description: 'Patch live DOM in browser pool - returns rect instantly, no screenshot',
-  inputSchema: z.object({ selector: z.string(), html: z.string(), url: z.string().optional() }),
-  execute: async ({ selector, html, url }) => {
-    try {
-      const res = await patchDOM(selector, html, url)
-      return res
-    } catch (e: any) { return { error: e.message } }
-  }
-})
-
 export const inspectDOMTool = createTool({
   id: 'inspect-dom',
-  description: 'Inspect live DOM from browser pool',
-  inputSchema: z.object({ selector: z.string(), url: z.string().optional() }),
-  execute: async ({ selector, url }) => {
-    try { return await inspectDOM(selector, url) } catch (e: any) { return { error: e.message } }
-  }
+  description: 'Inspect a live element. Default: the Vite app page. Pass url (another origin) to use the optional Playwright pool.',
+  inputSchema: z.object({ selector: z.string().optional(), url: z.string().optional() }),
+  execute: async ({ selector, url }) => livePageOp('inspect', { selector, url }),
+})
+
+export const patchDOMTool = createTool({
+  id: 'patch-dom',
+  description: 'Patch innerHTML of a live element. Default: Vite app. Pass url (another origin) for the Playwright pool. Prefer write-real-file + HMR for lasting source edits.',
+  inputSchema: z.object({ selector: z.string(), html: z.string(), url: z.string().optional() }),
+  execute: async ({ selector, html, url }) => livePageOp('patch', { selector, html, url }),
 })
 
 export const evalTool = createTool({
   id: 'eval-js',
-  description: 'Run JS in live browser pool',
+  description: 'Run JavaScript in the live Vite app, or in the Playwright pool when url is another origin.',
   inputSchema: z.object({ code: z.string(), url: z.string().optional() }),
-  execute: async ({ code, url }) => {
-    try { return await evalJS(code, url) } catch (e: any) { return { error: e.message } }
-  }
+  execute: async ({ code, url }) => livePageOp('eval', { code, url }),
+})
+
+export const poolOpenTool = createTool({
+  id: 'pool-open',
+  description: 'Open a URL in the optional Playwright Chrome pool (headed, persistent profile). Requires Playwright pool enabled in Settings.',
+  inputSchema: z.object({ url: z.string() }),
+  execute: async ({ url }) => poolOpen(url),
 })

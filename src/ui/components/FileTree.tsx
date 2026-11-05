@@ -26,9 +26,8 @@ export function FileTree({ files, active, onSelect, onNew }: {
       <button onClick={onNew} className="deck-btn" style={{ marginTop: 10, width: '100%', justifyContent: 'center' }}>+ New File</button>
       <div style={{ marginTop: 14, fontSize: 11.5, color: '#71717a', lineHeight: '17px' }}>
         <b style={{ color: '#a1a1aa' }}>Fast loop:</b><br />
-        write = fs.writeFileSync 1ms<br />
-        patch = page.$eval 5ms<br />
-        no screenshot tax
+        write = fs.writeFileSync<br />
+        Vite HMR updates the preview
       </div>
     </div>
   )

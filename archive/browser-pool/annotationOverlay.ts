@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /** Raw overlay script source (plain JS, dependency-free). */
 export function loadOverlaySource(): string {
-  return fs.readFileSync(path.join(__dirname, 'overlay.js'), 'utf-8')
+  return fs.readFileSync(path.join(__dirname, '../../src/live-edit/overlay.js'), 'utf-8')
 }
 
 /** Install the overlay into a Playwright pool page. Idempotent. */

@@ -1,3 +1,8 @@
+# Archived — Chrome AI Code Editor
+
+This extension is **not** part of `npm run dev`. See [`../README.md`](../README.md). It expects the leftover Express launcher on `:4112` (`npm run launcher` from the repo root).
+
+---
 
 # Chrome AI Code Editor - Patched with Launcher + Real FS Sync
 

@@ -2,8 +2,12 @@ node_modules/
 dist/
 src/ui-dist/
 projects/node_modules/
+projects/*/node_modules/
 projects/dist/
+projects/*/dist/
 projects/.chrome-data/
+projects/*/.chrome-data/
+projects/.active
 .env
 .DS_Store
 

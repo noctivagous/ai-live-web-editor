@@ -80,7 +80,7 @@ export function buildLiveEditPrompt(input: {
   const hints = summary.styleHints.map(h => `- ${h.selector}: ${JSON.stringify(h.properties)}`)
   const out = [
     'Live-edit request: the user annotated the page at ' + pageUrl + '.',
-    'Apply each annotation to the real files under ./projects, then patch the live DOM.',
+    'Apply each annotation to the real files under the active project. Vite HMR will show the change.',
     'Annotations (priority: bug, move, layout, style, copy, note):',
     ...lines,
   ]
@@ -88,8 +88,7 @@ export function buildLiveEditPrompt(input: {
   for (const m of summary.moveLinks) out.push(`Move: relocate ${m.sourceSelector} before ${m.targetSelector} (${m.text})`)
   if (hints.length) out.push('Style hints parsed from the notes (verify before applying):', ...hints)
   out.push(
-    'Workflow: read-real-file the file that renders each selector, write-real-file the fix,',
-    'patch-dom to update the live page, then call layout-snapshot to verify no overlap/clipping regressions.',
+    'Workflow: read-real-file the file that renders each selector, then write-real-file the fix.',
   )
   return out.join('\n')
 }

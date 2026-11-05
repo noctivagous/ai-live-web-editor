@@ -1,13 +1,13 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getPage } from '../../browserPool.js'
+import { getPage } from './browserPool.js'
 import {
   installAnnotationOverlay,
   collectAnnotationsFromPage,
   exportAnnotationsFromPage,
   importAnnotationsToPage,
   setBaselineOnPage,
-} from '../../live-edit/annotationOverlay.js'
+} from './annotationOverlay.js'
 
 export const getPageAnnotationsTool = createTool({
   id: 'get-page-annotations',

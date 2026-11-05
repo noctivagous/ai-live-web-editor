@@ -3,14 +3,18 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+let envPath = path.join(ROOT, '.env')
+export function getEnvPath() { return envPath }
+export function setEnvPath(file: string) { envPath = path.resolve(file) }
 export const ENV_PATH = path.join(ROOT, '.env')
 
 export const DEFAULT_MODEL = 'gpt-4o-mini'
 
 /** Load gitignored `.env` into process.env without overriding real env vars. */
 export function loadDotEnv() {
-  if (!fs.existsSync(ENV_PATH)) return
-  const text = fs.readFileSync(ENV_PATH, 'utf-8')
+  const file = getEnvPath()
+  if (!fs.existsSync(file)) return
+  const text = fs.readFileSync(file, 'utf-8')
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim()
     if (!line || line.startsWith('#')) continue
@@ -59,6 +63,28 @@ export function resolveAgentModel() {
     : { id: `openai/${modelId}` as const, apiKey }
 }
 
+function truthyEnv(v: string | undefined) {
+  const n = v?.trim().toLowerCase()
+  return n === '1' || n === 'true' || n === 'yes' || n === 'on'
+}
+
+export function playwrightPoolEnabled(): boolean {
+  if (process.env.PLAYWRIGHT_POOL !== undefined && process.env.PLAYWRIGHT_POOL !== '') {
+    return truthyEnv(process.env.PLAYWRIGHT_POOL)
+  }
+  try {
+    const text = fs.readFileSync(getEnvPath(), 'utf-8')
+    const m = text.match(/^PLAYWRIGHT_POOL=(.*)$/m)
+    if (m) return truthyEnv(m[1].replace(/^["']|["']$/g, ''))
+  } catch { /* no .env */ }
+  return false
+}
+
+export function setPlaywrightPool(enabled: boolean) {
+  process.env.PLAYWRIGHT_POOL = enabled ? '1' : '0'
+  upsertEnvVar('PLAYWRIGHT_POOL', enabled ? '1' : '0')
+}
+
 export function saveAiConfig(input: { key?: string, baseUrl?: string, model?: string }) {
   const key = input.key?.trim()
   if (key) {
@@ -93,11 +119,12 @@ export function saveAiConfig(input: { key?: string, baseUrl?: string, model?: st
 }
 
 function readEnvFile(): string {
-  return fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf-8') : ''
+  const file = getEnvPath()
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : ''
 }
 
 function writeEnvFile(text: string) {
-  fs.writeFileSync(ENV_PATH, text, { encoding: 'utf-8', mode: 0o600 })
+  fs.writeFileSync(getEnvPath(), text, { encoding: 'utf-8', mode: 0o600 })
 }
 
 function upsertEnvVar(name: string, value: string) {
@@ -114,7 +141,7 @@ function upsertEnvVar(name: string, value: string) {
 }
 
 function removeEnvVar(name: string) {
-  if (!fs.existsSync(ENV_PATH)) return
+  if (!fs.existsSync(getEnvPath())) return
   const next = readEnvFile().split(/\r?\n/).filter(line => {
     const t = line.trim()
     return t !== name && !t.startsWith(`${name}=`)

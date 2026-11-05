@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || 'http://localhost:4112'
+const API = import.meta.env.VITE_API_URL ?? ''
 
 export function staticPreviewUrl(): string {
   return API.replace(/\/*$/, '') + '/projects/'
@@ -20,43 +20,6 @@ export async function writeFile(path: string, content: string) {
   })
   return r.json()
 }
-export async function patchDOM(selector: string, html: string, url?: string) {
-  const r = await fetch(`${API}/api/browser/patch`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({selector, html, url})
-  })
-  return r.json()
-}
-export async function inspectDOM(selector: string, url?: string) {
-  const r = await fetch(`${API}/api/browser/inspect`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({selector, url})
-  })
-  return r.json()
-}
-export async function heartbeat(client = 'web') {
-  try {
-    await fetch(`${API}/api/ui/heartbeat`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({client})
-    })
-  } catch {}
-}
-export async function evalJS(code: string, url?: string) {
-  const r = await fetch(`${API}/api/browser/eval`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({code, url})
-  })
-  return r.json()
-}
-export async function openBrowser(url: string) {
-  const r = await fetch(`${API}/api/browser/open`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({url})
-  })
-  return r.json()
-}
 export interface LauncherConfig {
   ok: boolean
   hasApiKey: boolean
@@ -65,9 +28,41 @@ export interface LauncherConfig {
   modelName: string
   baseUrl: string
   launcherUrl: string
-  poolUrl: string
   previewStaticUrl: string
   previewHmrUrl: string
+  workspace?: string
+  activeProject?: string
+  fsRoot?: string
+  playwrightPool?: boolean
+}
+
+export interface ProjectInfo { id: string, root: string }
+
+export async function listProjects() {
+  const r = await fetch(`${API}/api/projects`)
+  return r.json() as Promise<{ ok: boolean, workspace: string, active: string, projects: ProjectInfo[] }>
+}
+
+export async function selectProject(id: string) {
+  const r = await fetch(`${API}/api/projects/select`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  const data = await r.json() as { ok: boolean, active?: string, root?: string, projects?: ProjectInfo[], error?: string }
+  if (!r.ok || data.ok === false) throw new Error(data.error || `Select failed (${r.status})`)
+  return data
+}
+
+export async function createProject(id: string) {
+  const r = await fetch(`${API}/api/projects/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  const data = await r.json() as { ok: boolean, active?: string, root?: string, projects?: ProjectInfo[], error?: string }
+  if (!r.ok || data.ok === false) throw new Error(data.error || `Create failed (${r.status})`)
+  return data
 }
 
 export async function getConfig() {
@@ -93,6 +88,17 @@ export async function probeModels(input: { key?: string, baseUrl?: string } = {}
   })
   const data = await r.json() as ProviderModels
   if (!r.ok || data.ok === false) throw new Error(data.error || `Could not list models (${r.status})`)
+  return data
+}
+
+export async function setPlaywrightPool(enabled: boolean) {
+  const r = await fetch(`${API}/api/config/pool`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+  const data = await r.json() as LauncherConfig & { saved?: boolean, error?: string }
+  if (!r.ok) throw new Error(data.error || `Save failed (${r.status})`)
   return data
 }
 

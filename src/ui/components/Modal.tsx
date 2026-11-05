@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { btn } from '../lib/styles'
-import { probeModels, saveAiConfig, type LauncherConfig } from '../lib/api'
+import { probeModels, saveAiConfig, setPlaywrightPool, type LauncherConfig } from '../lib/api'
 
 function Overlay({ onClose, children }: {
   onClose: () => void
@@ -57,6 +57,8 @@ export function SettingsModal({ open, onClose, config, editorTheme, onTheme, onR
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [poolOn, setPoolOn] = useState(false)
+  const [poolSaving, setPoolSaving] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -67,7 +69,8 @@ export function SettingsModal({ open, onClose, config, editorTheme, onTheme, onR
     setProviderName(null)
     setModelsError(null)
     setSaveError(null)
-  }, [open])
+    setPoolOn(Boolean(config?.playwrightPool))
+  }, [open, config?.playwrightPool])
 
   useEffect(() => {
     if (!open) return
@@ -198,8 +201,29 @@ export function SettingsModal({ open, onClose, config, editorTheme, onTheme, onR
         {THEMES.map(t => <option key={t} value={t}>{t}</option>)}
       </select>
 
-      <label className="field-label">Browser pool</label>
-      <input disabled value={config?.poolUrl || '…'} className="deck-input" style={{ marginBottom: 12 }} />
+      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <input
+          type="checkbox"
+          checked={poolOn}
+          disabled={poolSaving}
+          onChange={e => {
+            const enabled = e.target.checked
+            setPoolOn(enabled)
+            setPoolSaving(true)
+            void setPlaywrightPool(enabled)
+              .then(() => onConfigSaved())
+              .catch(err => {
+                setPoolOn(!enabled)
+                setSaveError(err instanceof Error ? err.message : String(err))
+              })
+              .finally(() => setPoolSaving(false))
+          }}
+        />
+        Playwright pool (optional)
+      </label>
+      <div className="field-hint" style={{ marginBottom: 12 }}>
+        Off by default. When on, the agent can open a headed Chrome for other URLs and CDP layout. The Vite page bridge still handles inspect/patch/eval on :5173. Chrome starts on first pool use.
+      </div>
 
       <button onClick={onReplayWizard} className="deck-btn" style={{ ...btn, width: '100%', justifyContent: 'center' }}>
         Replay setup wizard

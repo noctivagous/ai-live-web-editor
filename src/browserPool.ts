@@ -1,6 +1,7 @@
 import path from 'path'
 import fs from 'fs'
-import { FS_ROOT } from './launcher.js'
+import { getFsRoot } from './launcher.js'
+import { playwrightPoolEnabled } from './env.js'
 import {
   captureWireframeSnapshot,
   renderSvgWireframe,
@@ -26,7 +27,7 @@ function recordActivity(kind: string, summary: string) {
 
 export function getPoolInfo() {
   return {
-    userDataDir: path.join(FS_ROOT, '.chrome-data'),
+    userDataDir: path.join(getFsRoot(), '.chrome-data'),
     executable: activeExecutable || 'playwright bundled chromium',
     pages: context ? context.pages().length : 0,
     activity: poolActivity,
@@ -81,11 +82,23 @@ export function resolveBrowserExecutable(): string | undefined {
   return undefined
 }
 
+export async function closePool() {
+  const ctx = context
+  browser = null
+  context = null
+  if (!ctx) return
+  try { await ctx.close() } catch { /* already closed */ }
+  console.log('[browser] pool closed')
+}
+
 export async function getBrowser(initialUrl?: string) {
+  if (!playwrightPoolEnabled()) {
+    throw new Error('Playwright pool is off. Enable it in Settings (or set PLAYWRIGHT_POOL=1).')
+  }
   if (context) return context
   try {
     const { chromium } = await import('playwright')
-    const userDataDir = path.join(FS_ROOT, '.chrome-data')
+    const userDataDir = path.join(getFsRoot(), '.chrome-data')
     fs.mkdirSync(userDataDir, { recursive: true })
     const executablePath = resolveBrowserExecutable()
     context = await chromium.launchPersistentContext(userDataDir, {
@@ -98,9 +111,10 @@ export async function getBrowser(initialUrl?: string) {
     console.log('[browser] pool ready at', userDataDir, 'using', executablePath || 'playwright bundled chromium')
     if (initialUrl) void openPoolPage(context, initialUrl)
     return context
-  } catch (e) {
+  } catch (e: any) {
+    context = null
     console.log('[browser] playwright not installed or failed', e)
-    return null
+    throw new Error(e?.message ? `Playwright failed: ${e.message}` : 'Playwright failed')
   }
 }
 

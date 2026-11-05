@@ -16,7 +16,7 @@ function ChatEmbed() {
       activePath="/"
       embed
       keyKnown={keyKnown}
-      onNeedSetup={() => { window.top?.open('http://localhost:4112/', '_blank') }}
+      onNeedSetup={() => {}}
       onAfterChat={() => {}}
     />
   )

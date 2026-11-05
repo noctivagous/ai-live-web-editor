@@ -1,210 +1,82 @@
-Here's `ARCHITECTURE.md`:
-
----
-
-# ARCHITECTURE.md — AI Live Editor (Launcher Only)
+# ARCHITECTURE.md — AI Live Editor
 
 ## Goal
 
-Edit real files on disk and see them live in a real browser in **<20ms**, with AI that works with what actually appears, not a screenshot guess.
+Host multiple Vite apps under this repo, edit them in a launcher UI, and drive a Mastra agent against the **active** app’s real files.
 
-No WebContainers. No cloud browser bill. No MCP screenshot tax.
+Primary origin is **http://localhost:4112**. The active app’s Vite server is **http://localhost:5173**.
 
-## Core Components
+## Two entry points
+
+```
+Path 1: this repo
+  npm run dev  →  src/server.ts :4112
+                  └── spawns Vite in projects/<active>/  :5173
+  Workspace: children of projects/ (lumen, …)
+  Keys: repo-root .env
+
+Path 2: foreign Vite app
+  plugins: [aiLiveEditor()]
+  fsRoot = that app's config.root
+  Keys: that app's .env
+```
+
+## Path 1 runtime
 
 ```
 http://localhost:4112
-├── src/server.ts        Express server, single entry point
-├── src/launcher.ts      Ensures ./projects exists, FS root
-├── src/browserPool.ts   Playwright persistent context
-├── src/mastra/          Mastra agent + tools
-└── src/ui/index.html    Monaco + FileTree + Chat + Preview
+├── src/ui-dist          Files + Monaco + Preview + Chat + Setup + project <select>
+├── /api/projects        list / select / create
+├── /api/fs/*            disk under getFsRoot() = projects/<active>
+├── /api/config*         .env
+├── /api/chat/stream     Mastra editorAgent
+└── Vite child           npm run dev in the active folder (port 5173)
+        └── aiLiveEditor plugin (overlays + same APIs on 5173)
 ```
 
-### 1. Real FS — `./projects/`
+`projects/.active` stores the selected id (gitignored). Default `lumen`.
 
-Canonical source of truth. Not IndexedDB, not OPFS, not in-memory.
+Select kills whatever is on 5173 and starts Vite in the new folder. Create seeds `SEED_FILES`, runs `npm install`, then selects.
 
-```ts
-// safe write, prevents traversal
-function safePath(p) { return path.resolve(FS_ROOT, '.'+p) }
-fs.writeFileSync(full, content) // 1ms
-```
+## Overlay vs launcher chat
 
-All APIs hit disk:
-- `GET /api/fs/list` — recursive walk, ignores `.chrome-data`, `node_modules`
-- `GET /api/fs/read?path=/App.jsx`
-- `POST /api/fs/write` — `{path, content}`
+| Surface | Where |
+|---|---|
+| Chat sidebar | 4112 `App.tsx` (restored) |
+| Chat overlay | 5173 plugin iframe `/chat-embed` |
+| Annotate | page DOM via `overlay.js` |
+| File tree / Monaco | 4112 only |
 
-### 2. Browser Pool — Persistent Chrome
+Both chats POST `/api/chat/stream` on their origin. File tools use that process’s `getFsRoot()`, which is the same active app directory.
 
-```ts
-chromium.launchPersistentContext('./projects/.chrome-data', {
-  headless: false,
-  executablePath: process.env.CHROME_FOR_TESTING_PATH // or /Applications/Google Chrome for Testing
-})
-```
+Live-page inspect / patch / eval: the plugin injects `page-bridge.js` into the Vite app. The page holds an SSE to `/api/page/stream`. Default tools hit that bridge.
 
-No browser is downloaded: the pool drives the existing Chrome for Testing binary
-(`resolveBrowserExecutable()` in `src/browserPool.ts`, Playwright default as fallback).
-`npm run install:browser` remains as an opt-in for machines without it.
+Optional Playwright pool (`PLAYWRIGHT_POOL=1` or Settings): headed Chrome, lazy on first `pool-open` / `url=` inspect. Other origins only. Vite origin still uses the bridge, including `layout-snapshot` / `layout-svg`. Chrome is not started at boot.
 
-- Keeps cookies, localStorage, logins, SSO between restarts
-- Single `context.pages()[0]` reused, not new browser per AI call
-- Tools:
-  - `patchDOM(selector, html)` → `page.$eval` → returns `{rect, elapsedMs}` in **5-15ms**
-  - `inspectDOM(selector)` → returns `outerHTML + text + rect`
-  - `evalJS(code)` → runs arbitrary JS in live page
-  - `captureLayoutSnapshot(params)` → Playwright CDP `DOMSnapshot.captureSnapshot` (vendored `src/layout/layoutSnapshot.ts`) → element rects + layout styles + overlap/gap/clipping analysis, with `page.evaluate` rect-walk fallback
-  - `renderLayoutSvg(snapshot, options)` → pure SVG wireframe of the rectangles
-
-This replaces MCP's `take_snapshot` (80ms) + `screenshot` (1118ms + base64 encode).
-
-### 3. Monaco UI (React + Vite, built to `src/ui-dist`)
-
-Source in `src/ui/` (`App.tsx`, `components/`, `lib/api.ts`), built with `npm run ui:build`.
-The launcher serves the build from `src/ui-dist` (see `server.ts`); `npm run ui:dev` runs it on `:3000` with proxy to `:4112`.
-
-- Autosave debounce 800ms → `POST /api/fs/write`
-- Manual Save + **⚡ Patch to Live DOM** button
-- Preview iframe `src="/projects/"` (static) or `localhost:5173` (Vite HMR)
-
-### 4. Mastra Agent — `editorAgent`
-
-```ts
-tools: {
-  list-real-files, read-real-file, write-real-file,
-  patch-dom, inspect-dom, eval-js,
-  layout-snapshot, layout-svg,
-  get-page-annotations, peek-page-annotations,
-  import-page-annotations, set-annotate-baseline
-}
-```
-
-Prompt enforces:
-> Try real FS first. Patch live DOM for instant verification. Never do screenshot loops.
-
-## Data Flows
-
-### User edits in Monaco
+## File layout
 
 ```
-Monaco onChange -> debounce 800ms -> POST /api/fs/write
--> fs.writeFileSync -> chokidar logs change
--> Preview iframe reloads (or Vite HMR pushes)
-```
-
-**Elapsed: ~1ms disk + network**
-
-### AI edits
-
-```
-User: "Add counter button"
--> POST /api/chat {messages}
--> Mastra agent:
-   1. list-real-files
-   2. read-real-file /App.jsx
-   3. write-real-file /App.jsx (1ms)
-   4. patch-dom body (5ms) -> {rect}
--> Returns text + toolCalls
--> UI reloads editor content + preview
-```
-
-**Elapsed: ~50ms total tool time, no build**
-
-### User annotates on the page (no chat)
-
-```
-User clicks Annotate in Preview toolbar (Static preview, same-origin iframe)
--> parent injects GET /live-edit/overlay.js into iframe, select mode on
--> user clicks elements -> menu: Add note / Move this here (+ drag red port to target)
--> user tags + optional page Notes panel
--> Submit notes -> POST /api/live-edit/submit {annotations, pageNotes}
--> server imports notes into the pool page, captures baseline layout snapshot
--> editorAgent: get-page-annotations -> read/write real files -> patch-dom -> layout-snapshot
--> UI shows result, reloads files + preview (annotations cleared on submit)
-```
-
-**Elapsed: one agent run, no MCP round-trip, no screenshots.** Annotate mode in the
-extension works the same way: the content script injects the overlay into the active
-tab, the sidepanel Submit posts to the same endpoint. Annotate is Static-preview-only
-in the web UI — Vite HMR (`:5173`) is cross-origin and cannot be injected.
-
-### Fast Path vs Slow Path
-
-**OLD MCP Loop (what we killed):**
-```
-write file -> npm run build (2-5s) -> reload -> take_snapshot (80ms) 
--> screenshot (1118ms + base64) -> LLM parses image -> repeat
-= 3-5s per iteration, loses auth, $ for cloud browser
-```
-
-**NEW Launcher Loop:**
-```
-write-real-file (1ms) -> patch-dom $eval (5ms) -> rect returned
-= <20ms, keeps auth, $0
-```
-
-## Why Persistent Context Matters
-
-Standard Playwright MCP: `browser.newContext()` per run = fresh profile, no login.
-
-Launcher: `launchPersistentContext('./projects/.chrome-data')` = real user data dir, like your daily Chrome. If you're logged into your app, the AI sees the logged-in DOM.
-
-If you want your *main* Chrome profile, change:
-
-```ts
-path.join(os.homedir(), '...Chrome/User Data') // risky, copy instead
-```
-
-We default to isolated `.chrome-data` to avoid corrupting main profile.
-
-## File Layout
-
-```
-ai-live-editor-launcher/
+ai-live-editor/
 ├── src/
-│   ├── server.ts         // :4112, serves UI + APIs
-│   ├── browserPool.ts    // patch/inspect/eval
-│   ├── launcher.ts       // FS_ROOT = ../projects
-│   ├── mastra/index.ts
-│   ├── mastra/agents/editorAgent.ts
-│   ├── mastra/tools/realFsTools.ts
-│   ├── ui/               // React UI source (Monaco + FileTree + Chat + Preview)
-│   └── ui-dist/          // built UI, served by server.ts (gitignored, via npm run ui:build)
-├── extension/            // OPTION B: Chrome side-panel UI (same :4112 backend)
-│   ├── manifest.json     // sidePanel + content script, host perms for :4112
-│   ├── src/background.ts // relays chat to POST /api/chat, DOM ops to active tab
-│   ├── src/content.ts    // GET_DOM / PATCH_DOM / READ_SELECTION in page
-│   └── src/sidepanel/    // Monaco + FileTree + Chat; REAL FS badge or IDB offline
-├── projects/             // USER APP - real files
-│   ├── index.html
-│   ├── App.jsx
-│   ├── main.jsx
-│   ├── vite.config.js
-│   ├── package.json      // run npm run dev here for HMR
-│   └── .chrome-data/     // persistent browser
-└── package.json          // launcher deps
+│   ├── server.ts               // :4112
+│   ├── launcher.ts             // workspace, getFsRoot, Vite child
+│   ├── apiApp.ts               // /api used by the Vite plugin
+│   ├── vite-plugin/
+│   ├── mastra/
+│   ├── ui/                     // React source for 4112
+│   └── ui-dist/                // npm run ui:build
+├── projects/
+│   ├── .active                 // selected id
+│   └── lumen/                  // default Vite app
+├── archive/
+│   ├── extension/              // Chrome side panel
+│   └── browser-pool/           // Playwright second Chrome
+└── package.json                // "dev": "tsx src/server.ts"
 ```
 
-## Tradeoffs
+## Constraints
 
-**Pros:**
-- Real FS, real Node, real Chrome, zero cost
-- Instant feedback (rect, not screenshot)
-- Keeps auth
-
-**Cons:**
-- Not distributable via Chrome Web Store (it's a local app, `npx`)
-- User needs Node + Playwright install (one-time)
-- No sandbox — AI can write anywhere under `./projects` (mitigated by `safePath` check)
-
-## Future Extensions
-
-- **Thin extension adapter (optional):** 200-line side panel that calls `http://localhost:4112/api/*` so you get main Chrome cookies
-- **Vite HMR integration:** Inject HMR client into preview iframe for JSX hot reload without full reload
-- **Tauri wrapper:** Package launcher as desktop app with one click
-
----
-
-Want me to add this file into the zip too?
+- One Vite on 5173 at a time (the active project).
+- Keys are repo-wide for Path 1.
+- `safePath` keeps writes under `getFsRoot()`.
+- Plugin `apply: 'serve'` only.

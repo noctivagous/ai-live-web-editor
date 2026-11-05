@@ -21,6 +21,7 @@ function savePos(state) {
 }
 
 export function mountChatOverlay() {
+  if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/')) return
   if (document.getElementById('ai-live-chat-host')) return
   const saved = loadPos()
   const host = document.createElement('div')
@@ -69,7 +70,7 @@ export function mountChatOverlay() {
       <b>AI Chat</b><span>overlay</span>
       <button type="button" data-collapse>▾</button>
     </div>
-    <iframe title="AI Chat" src="${LAUNCHER_URL}/chat-embed"></iframe>
+    <iframe title="AI Chat" src="${(LAUNCHER_URL || '') + '/chat-embed'}"></iframe>
   `
 
   const bar = wrap.querySelector('.bar')
@@ -111,16 +112,16 @@ export function mountChatOverlay() {
 
   shadow.appendChild(wrap)
   document.documentElement.appendChild(host)
-  window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL
+  window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   window.__AI_LIVE_CHAT__ = { mounted: true, width: WIDTH }
   void installAnnotateToolbar()
 }
 
 async function installAnnotateToolbar() {
-  window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL
+  window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   if (!(window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed)) {
     try {
-      const src = await fetch(LAUNCHER_URL + '/live-edit/overlay.js').then((r) => {
+      const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js').then((r) => {
         if (!r.ok) throw new Error('overlay ' + r.status)
         return r.text()
       })

@@ -18,7 +18,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
   embed?: boolean
 }) {
   const [log, setLog] = useState<LogItem[]>([
-    { role: 'system', text: 'AI has real FS tools (read/write) + live browser tools (patch/inspect). Ask: "make this a todo app with counter"' }
+    { role: 'system', text: 'AI has real FS tools (read/write) and live-page inspect/patch/eval on the Vite app. Ask: "inspect the page" or "make this a todo app"' }
   ])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)

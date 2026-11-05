@@ -1,40 +1,37 @@
 import { Agent } from '@mastra/core/agent'
 import { resolveAgentModel } from '../../env.js'
-import { listRealFilesTool, readRealFileTool, writeRealFileTool, patchDOMTool, inspectDOMTool, evalTool } from '../tools/realFsTools.js'
+import { listRealFilesTool, readRealFileTool, writeRealFileTool, inspectDOMTool, patchDOMTool, evalTool, poolOpenTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
-import { getPageAnnotationsTool, peekPageAnnotationsTool, importPageAnnotationsTool, setAnnotateBaselineTool } from '../tools/liveEditTools.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
   name: 'editorAgent',
   instructions: `
-You are a live code editor. You have REAL filesystem at ./projects and a live browser pool.
+You are a live code editor. You write real files on disk under the active Vite project.
+The running app is the Vite page (typically :5173). A page bridge lets you inspect, patch, and eval that live DOM.
 
 Tools:
-- list-real-files, read-real-file, write-real-file (real disk, instant)
-- patch-dom, inspect-dom, eval-js (live browser, returns rect in <15ms, no screenshot tax)
-- layout-snapshot, layout-svg (live page layout rectangles + overlap/gap/clipping analysis, no screenshots)
+- list-real-files, read-real-file, write-real-file (real disk; Vite HMR shows lasting edits)
+- inspect-dom, patch-dom, eval-js (Vite app by default)
+- layout-snapshot, layout-svg (Vite app page bridge by default; pass url= for the Playwright pool)
+- pool-open (optional Playwright pool)
 
 Efficient workflow:
-1. list-real-files
-2. read-real-file needed
-3. write-real-file with fix
-4. patch-dom to see it instantly if it's HTML, or let Vite HMR handle it
-5. inspect-dom to verify a single element, or layout-snapshot to analyze page layout by rectangles
+1. list-real-files / read-real-file as needed
+2. inspect-dom to see what is actually rendered on the Vite app
+3. write-real-file for lasting source changes (HMR updates the page)
+4. patch-dom to try a DOM change instantly without writing a file
+5. eval-js to run JS in the Vite page
 
-Never do screenshot loops. Use patch-dom which returns getBoundingClientRect instantly.
-For layout questions (alignment, overlap, clipping, spacing), call layout-snapshot first;
-call layout-svg when you need a visual wireframe of the rectangles.
+When the user points at another URL (not the Vite app), pass url= to inspect/patch/eval/layout-snapshot/layout-svg, or call pool-open. That uses the Playwright pool, which the user must enable in Settings. If the pool is off, tell them to enable it.
 
-Live-edit mode: the user may annotate elements directly on the page instead of chatting.
-When you receive a live-edit request (or when get-page-annotations returns notes):
-1. get-page-annotations to collect the user's notes (this clears them),
-2. read-real-file the file that renders each annotated selector,
-3. write-real-file the fix, patch-dom to update the live page,
-4. layout-snapshot to verify no overlap/clipping regressions.
+Live-edit mode: the user may annotate elements on the page. When you receive a live-edit request:
+1. inspect-dom on each annotated selector
+2. read-real-file the file that renders it
+3. write-real-file the fix
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
 `,
   model: () => resolveAgentModel(),
   defaultOptions: { maxSteps: 12 },
-  tools: { listRealFilesTool, readRealFileTool, writeRealFileTool, patchDOMTool, inspectDOMTool, evalTool, layoutSnapshotTool, layoutSvgTool, getPageAnnotationsTool, peekPageAnnotationsTool, importPageAnnotationsTool, setAnnotateBaselineTool }
+  tools: { listRealFilesTool, readRealFileTool, writeRealFileTool, inspectDOMTool, patchDOMTool, evalTool, poolOpenTool, layoutSnapshotTool, layoutSvgTool }
 })

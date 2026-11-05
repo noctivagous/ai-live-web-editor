@@ -20,6 +20,15 @@ write code and edit code in a way that includes markers
 about the code and code base relations?  search tools? that way
 it will know the code base more quickly."
 "what about subagent processes?  mcp server?"
+- What we plan to do for our app since it specializes in web apps 
+is have premade, generic, theme-able components that we ship with it,
+that the code editor agents know exist, so that apps
+are constructed rapidly rather than the AI building these things from
+scratch each time.  This includes layout components, such as how
+there is StackPanel in XAML.  We can include script guidelines for various software development tasks
+like making layouts, what they call "skills" in the agentic editors.  It will use our techniques
+and foundations so that when it makes layouts they are mobile and tablet ready
+unless the user.
 - ensure that the AI agent is making use of svg layout and wireframe utils
 when making layouts.
 --- annotation: representative boxes dragged over regions, with notes,

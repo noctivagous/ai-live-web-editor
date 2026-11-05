@@ -1,0 +1,8 @@
+node_modules/
+dist/
+src/ui-dist/
+projects/node_modules/
+projects/dist/
+projects/.chrome-data/
+.env
+.DS_Store

@@ -1,0 +1,24 @@
+{
+  "name": "chrome-ai-editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "dexie": "^4.0.11",
+    "jszip": "^3.10.1",
+    "monaco-editor": "^0.52.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.23",
+    "@types/chrome": "^0.0.268",
+    "@types/react": "^18.3.12",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

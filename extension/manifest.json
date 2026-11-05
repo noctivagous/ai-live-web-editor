@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "AI Code Editor - Mastra Powered",
+  "version": "0.1.0",
+  "description": "AI-driven code editor that lives in the side panel, edits DOM live, saves to IndexedDB",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost:4112/*"
+  ],
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content.ts"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Open AI Editor"
+  }
+}

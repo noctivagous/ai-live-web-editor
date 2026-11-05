@@ -1,0 +1,3 @@
+export async function chatWithMastra(messages:{role:string,content:string}[], threadId='default'){ return new Promise<any>((resolve)=>{ chrome.runtime.sendMessage({ type:'MASTRA_CHAT', messages, threadId }, (res)=>resolve(res)) }) }
+export async function domAction(payload:any){ return new Promise<any>((resolve)=>{ chrome.runtime.sendMessage({ type:'DOM_ACTION', payload }, (res)=>resolve(res)) }) }
+export async function submitLiveEdit(payload:{annotations:any[],pageNotes:string,url?:string}){ return new Promise<any>((resolve)=>{ chrome.runtime.sendMessage({ type:'LIVE_EDIT_SUBMIT', payload }, (res)=>resolve(res)) }) }

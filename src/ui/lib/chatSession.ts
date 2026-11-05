@@ -1,6 +1,6 @@
 /** Persist and sync Chat across the 4112 sidebar and /chat-embed (same origin). */
 
-export type ToolStep = { id: string, name: string, detail: string, result?: string, status: 'running' | 'done' | 'error' }
+export type ToolStep = { id: string, name: string, detail: string, result?: string, status: 'running' | 'done' | 'error', startedAt?: number, endedAt?: number }
 export type LogItem =
   | { role: 'system' | 'user' | 'ai' | 'error' | 'think', text: string }
   | { role: 'tools', steps: ToolStep[] }

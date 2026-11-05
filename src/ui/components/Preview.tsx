@@ -157,7 +157,7 @@ export function Preview({ onChanged, onResult }: { onChanged: () => void, onResu
           <button
             onClick={() => void toggleAnnotate()}
             style={{ padding: '2px 8px', fontSize: 11, background: annotating ? '#16a34a' : undefined, color: annotating ? '#fff' : undefined, border: annotating ? 'none' : undefined, borderRadius: 4 }}
-            title={onHmr ? 'Annotate works in Static preview only (HMR is cross-origin)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
+            title={onHmr ? 'On Vite HMR, use the Annotate control on the previewed page (DevTools action, next to the chat overlay)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
             disabled={onHmr}
           >
             {annotating ? 'Annotating…' : 'Annotate'}

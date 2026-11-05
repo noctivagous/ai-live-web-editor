@@ -573,6 +573,33 @@
     }
   }
 
+  function submitNotesToLauncher() {
+    var base = window.__AI_LIVE_LAUNCHER__;
+    if (!base) return;
+    var payload = {
+      annotations: state.annotations,
+      pageNotes: state.pageNotes || '',
+      url: location.href,
+    };
+    fetch(String(base).replace(/\/$/, '') + '/api/live-edit/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.ok) {
+        state.annotations = [];
+        state.pageNotes = '';
+        save();
+        saveNotes();
+        scheduleRender();
+      } else {
+        window.alert((data && data.error) || 'Submit failed');
+      }
+    }).catch(function (err) {
+      window.alert(err && err.message ? err.message : String(err));
+    });
+  }
+
   function createToolbar() {
     var root = createRoot();
     var toolbar = root.querySelector('.ai-le-toolbar');
@@ -603,6 +630,17 @@
     toolbar.appendChild(label);
     toolbar.appendChild(btn);
     toolbar.appendChild(notesBtn);
+    if (window.__AI_LIVE_LAUNCHER__) {
+      var submitBtn = document.createElement('button');
+      submitBtn.id = 'ai-le-submit-btn';
+      submitBtn.textContent = 'Submit notes';
+      submitBtn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        submitNotesToLauncher();
+      });
+      toolbar.appendChild(submitBtn);
+    }
     root.appendChild(toolbar);
   }
 
@@ -627,6 +665,10 @@
     baselineWireframeJson: null,
     enableSelectMode: function () { if (!state.selectMode) toggleSelectMode(); },
     disableSelectMode: function () { toggleSelectMode(false); },
+    setToolbarOffset: function (rightPx) {
+      var toolbar = document.querySelector('#ai-live-edit-root .ai-le-toolbar');
+      if (toolbar) toolbar.style.right = Number(rightPx) + 'px';
+    },
     addAnnotation: function (annotation) {
       if (!annotation || !annotation.selector || !annotation.text) return false;
       state.annotations.push({

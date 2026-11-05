@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent'
+import { resolveAgentModel } from '../../env.js'
 import { listRealFilesTool, readRealFileTool, writeRealFileTool, patchDOMTool, inspectDOMTool, evalTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
 import { getPageAnnotationsTool, peekPageAnnotationsTool, importPageAnnotationsTool, setAnnotateBaselineTool } from '../tools/liveEditTools.js'
@@ -33,6 +34,7 @@ When you receive a live-edit request (or when get-page-annotations returns notes
 4. layout-snapshot to verify no overlap/clipping regressions.
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
 `,
-  model: 'openai/gpt-4o-mini',
+  model: () => resolveAgentModel(),
+  defaultOptions: { maxSteps: 12 },
   tools: { listRealFilesTool, readRealFileTool, writeRealFileTool, patchDOMTool, inspectDOMTool, evalTool, layoutSnapshotTool, layoutSvgTool, getPageAnnotationsTool, peekPageAnnotationsTool, importPageAnnotationsTool, setAnnotateBaselineTool }
 })

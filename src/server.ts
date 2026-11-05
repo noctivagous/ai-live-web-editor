@@ -4,13 +4,34 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
+import { currentModelId, hasAiKey, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, saveAiConfig } from './env.js'
+import { mapMastraChunk } from './chatStream.js'
+import { listProviderModels } from './providers.js'
 import { ensureFsRoot, FS_ROOT } from './launcher.js'
 import { getBrowser, getPage, getPoolInfo, patchDOM, inspectDOM, evalJS, captureLayoutSnapshot, renderLayoutSvg } from './browserPool.js'
 import chokidar from 'chokidar'
 
+loadDotEnv()
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = Number(process.env.LAUNCHER_PORT) || 4112
+
+function publicConfig() {
+  const hasKey = hasAiKey()
+  return {
+    ok: true,
+    hasApiKey: hasKey,
+    hasOpenAiKey: hasKey,
+    model: currentModelId(),
+    modelName: openaiModelName(),
+    baseUrl: openaiBaseUrl(),
+    launcherUrl: `http://localhost:${PORT}`,
+    poolUrl: `http://localhost:${PORT}/pool`,
+    previewStaticUrl: '/projects/',
+    previewHmrUrl: 'http://localhost:5173',
+  }
+}
 app.use(cors({ origin: '*' }))
 app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"); next()})
 app.use(express.json({ limit: '20mb' }))
@@ -31,15 +52,33 @@ app.get('/api/fs/health', (req, res) => {
 
 // --- Launcher config (presence flags only: never expose secrets) ---
 app.get('/api/config', (req, res) => {
-  res.json({
-    ok: true,
-    hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
-    model: 'openai/gpt-4o-mini',
-    launcherUrl: `http://localhost:${PORT}`,
-    poolUrl: `http://localhost:${PORT}/pool`,
-    previewStaticUrl: '/projects/',
-    previewHmrUrl: 'http://localhost:5173',
-  })
+  res.json(publicConfig())
+})
+
+app.post('/api/config/key', (req, res) => {
+  try {
+    const body = req.body || {}
+    saveAiConfig({
+      key: typeof body.key === 'string' ? body.key : undefined,
+      baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl : undefined,
+      model: typeof body.model === 'string' ? body.model : undefined,
+    })
+    res.json({ ...publicConfig(), saved: true })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
+})
+
+app.post('/api/config/models', async (req, res) => {
+  try {
+    const body = req.body || {}
+    const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : openaiApiKey()
+    const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : openaiBaseUrl()
+    const listed = await listProviderModels(key, baseUrl)
+    res.json(listed)
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message, models: [] as string[] })
+  }
 })
 
 app.get('/api/fs/list', (req, res) => {
@@ -148,11 +187,37 @@ app.post('/api/chat', async (req, res) => {
     const { messages } = req.body
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.generate(messages)
+    const result = await agent.generate(messages, { maxSteps: 12 })
     res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
   } catch (e: any) {
     console.error(e)
     res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+app.post('/api/chat/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders?.()
+  const send = (obj: unknown) => { res.write(`data: ${JSON.stringify(obj)}\n\n`) }
+  try {
+    const { messages } = req.body
+    const { mastra } = await import('./mastra/index.js')
+    const agent = mastra.getAgent('editorAgent')
+    const result = await agent.stream(messages, { maxSteps: 12 })
+    for await (const chunk of result.fullStream) {
+      if (req.aborted) break
+      const mapped = mapMastraChunk(chunk)
+      if (mapped) send(mapped)
+    }
+    send({ type: 'done' })
+    res.end()
+  } catch (e: any) {
+    console.error(e)
+    try { send({ type: 'error', error: e.message }) } catch { /* closed */ }
+    res.end()
   }
 })
 
@@ -177,7 +242,7 @@ app.post('/api/live-edit/submit', async (req, res) => {
     const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl })
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.generate([{ role: 'user', content: prompt }])
+    const result = await agent.generate([{ role: 'user', content: prompt }], { maxSteps: 12 })
     const after = await captureLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout' }).catch(() => null)
     res.json({
       ok: true,
@@ -202,6 +267,11 @@ app.get('/live-edit/overlay.js', (req, res) => {
 
 // --- Serve UI ---
 const uiDist = path.join(__dirname, 'ui-dist')
+app.get('/chat-embed', (req, res) => {
+  const embed = path.join(uiDist, 'chat-embed.html')
+  if (fs.existsSync(embed)) res.sendFile(embed)
+  else res.status(404).send('chat-embed not built — run npm run ui:build')
+})
 if (fs.existsSync(uiDist)) {
   app.use(express.static(uiDist))
 }

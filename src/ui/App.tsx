@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { FileTree } from './components/FileTree'
 import { MonacoEditor } from './components/MonacoEditor'
-import { Chat } from './components/Chat'
 import { Preview } from './components/Preview'
 import { NoticeDialog, SettingsModal } from './components/Modal'
 import { SetupWizard } from './components/SetupWizard'
@@ -30,7 +29,7 @@ export default function App() {
   // skip autosave for placeholder content and right after a file loads
   const skipSave = useRef(true)
 
-  const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
+  const { leftW, setLeftW, previewH, colDrag, rowDrag } = useSplitPanes()
 
   async function loadFiles() {
     try {
@@ -111,7 +110,8 @@ export default function App() {
     setStatus(`browser pool opened: ${JSON.stringify(res)}`)
   }
 
-  const keyTone = config === null ? '' : config.hasOpenAiKey ? 'good' : 'warn'
+  const hasKey = Boolean(config?.hasApiKey ?? config?.hasOpenAiKey)
+  const keyTone = config === null ? '' : hasKey ? 'good' : 'warn'
 
   return (
     <div className="deck-app">
@@ -127,7 +127,7 @@ export default function App() {
             <span className="dot" />{status.startsWith('real FS:') ? status.replace('real FS: ', '') : status.slice(0, 42)}
           </span>
           <span className={`pill mono ${keyTone}`} title={config ? `Model ${config.model}` : 'Launcher config unknown'}>
-            <span className="dot" />{config ? (config.hasOpenAiKey ? config.model : 'no API key') : 'config…'}
+            <span className="dot" />{config ? (hasKey ? config.model : 'no API key') : 'config…'}
           </span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -162,11 +162,6 @@ export default function App() {
             <Preview onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }} onResult={setNotice} />
           </div>
         </div>
-        <VDivider onMouseDown={colDrag(setRightW, -1)} title="Drag to resize chat panel" />
-
-        <div className="panel" style={{ width: rightW, flexShrink: 0 }}>
-          <Chat activePath={activePath} keyKnown={config?.hasOpenAiKey} onNeedSetup={reopenSetup} onAfterChat={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }} />
-        </div>
       </div>
 
       <NoticeDialog notice={notice} onClose={() => setNotice(null)} />
@@ -177,6 +172,7 @@ export default function App() {
         editorTheme={editorTheme}
         onTheme={changeTheme}
         onReplayWizard={reopenSetup}
+        onConfigSaved={() => { void refreshConfig() }}
       />
     </div>
   )

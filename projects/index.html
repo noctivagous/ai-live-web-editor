@@ -1,2 +1,112 @@
 <!doctype html>
-<html><head><meta charset="utf-8"/><style>body{font-family:system-ui;padding:24px}</style></head><body><div id="root"><h1>Real FS works ⚡</h1><p>Edit <code>projects/App.jsx</code> and it patches instantly without reload.</p></div><script type="module" src="/main.jsx"></script></body></html>
+<html lang="en" data-theme="aurora">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Lumen</title>
+  <style>
+    :root,
+    [data-theme="lumen"] {
+      color-scheme: light;
+      --bg: #f3f1ec;
+      --ink: #1c1915;
+      --muted: #6f675e;
+      --line: #e4dfd6;
+      --sidebar: #171512;
+      --sidebar-ink: #f6f1ea;
+      --sidebar-muted: #a89f94;
+      --sidebar-active: #2a2622;
+      --sidebar-active-ink: #fff8f1;
+      --sidebar-idle: #cfc6bb;
+      --accent: #c45c26;
+      --on-accent: #ffffff;
+      --card: #fffcf8;
+      --topbar: #faf8f4;
+      --input-bg: #ffffff;
+      --pill-bg: #f3ebe3;
+      --pill-ink: #7a4a2a;
+      --avatar-bg: #efe4d4;
+      --avatar-ink: #1c1915;
+      --placeholder: #efeae3;
+      --btn-bg: #1c1915;
+      --btn-ink: #ffffff;
+      --switcher-bg: #fffcf8;
+      --shadow: 0 1px 2px rgba(28, 25, 21, 0.06), 0 8px 24px rgba(28, 25, 21, 0.04);
+    }
+
+    [data-theme="aurora"] {
+      color-scheme: dark;
+      --bg: #0b1418;
+      --ink: #e7f4f2;
+      --muted: #8eaaa8;
+      --line: #1e3336;
+      --sidebar: #071014;
+      --sidebar-ink: #e9fbf7;
+      --sidebar-muted: #7f9c99;
+      --sidebar-active: #12383c;
+      --sidebar-active-ink: #f4fffc;
+      --sidebar-idle: #c5ddd9;
+      --accent: #3ee0c6;
+      --on-accent: #04221d;
+      --card: #122026;
+      --topbar: #0e1a1f;
+      --input-bg: #0a161b;
+      --pill-bg: #16383c;
+      --pill-ink: #8cf3e4;
+      --avatar-bg: #1a4548;
+      --avatar-ink: #e7f4f2;
+      --placeholder: #1a2e34;
+      --btn-bg: #3ee0c6;
+      --btn-ink: #04221d;
+      --switcher-bg: #0c181d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 32px rgba(0, 0, 0, 0.32);
+    }
+
+    [data-theme="field"] {
+      color-scheme: light;
+      --bg: #eef3ea;
+      --ink: #1a2418;
+      --muted: #5d6b58;
+      --line: #d5e0cc;
+      --sidebar: #1c2a1e;
+      --sidebar-ink: #f3f7ef;
+      --sidebar-muted: #a3b5a0;
+      --sidebar-active: #2c4230;
+      --sidebar-active-ink: #f7fff4;
+      --sidebar-idle: #d5e3d0;
+      --accent: #3f7d4e;
+      --on-accent: #ffffff;
+      --card: #f8fbf5;
+      --topbar: #f4f8f0;
+      --input-bg: #ffffff;
+      --pill-bg: #e3eedd;
+      --pill-ink: #2f5a38;
+      --avatar-bg: #dce8d4;
+      --avatar-ink: #1a2418;
+      --placeholder: #e4eddc;
+      --btn-bg: #1a2418;
+      --btn-ink: #ffffff;
+      --switcher-bg: #f8fbf5;
+      --shadow: 0 1px 2px rgba(26, 36, 24, 0.06), 0 8px 24px rgba(26, 36, 24, 0.05);
+    }
+
+    * { box-sizing: border-box; }
+    html, body, #root { height: 100%; margin: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    button, input { font: inherit; color: inherit; }
+    input::placeholder { color: var(--muted); }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/main.jsx"></script>
+</body>
+</html>

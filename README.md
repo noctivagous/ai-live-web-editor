@@ -167,11 +167,13 @@ One limit: in the web UI, Annotate works in Static preview only — Vite HMR (`:
 
 ### Environment
 
-Create `.env` in root (optional):
+Create `.env` in root (optional), or paste values in the first-run setup wizard:
 
 ```
 OPENAI_API_KEY=sk-...
-# or any Mastra-compatible model
+# Optional: any OpenAI-compatible provider
+# OPENAI_BASE_URL=https://api.openai.com/v1
+# OPENAI_MODEL=gpt-4o-mini
 ```
 
 ### Browser extension (optional)

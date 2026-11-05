@@ -59,8 +59,11 @@ export async function openBrowser(url: string) {
 }
 export interface LauncherConfig {
   ok: boolean
+  hasApiKey: boolean
   hasOpenAiKey: boolean
   model: string
+  modelName: string
+  baseUrl: string
   launcherUrl: string
   poolUrl: string
   previewStaticUrl: string
@@ -72,12 +75,87 @@ export async function getConfig() {
   return r.json() as Promise<LauncherConfig>
 }
 
+export interface ProviderModels {
+  ok: boolean
+  provider?: string
+  providerName?: string
+  baseUrl?: string
+  models: string[]
+  suggested?: string
+  error?: string
+}
+
+export async function probeModels(input: { key?: string, baseUrl?: string } = {}) {
+  const r = await fetch(`${API}/api/config/models`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const data = await r.json() as ProviderModels
+  if (!r.ok || data.ok === false) throw new Error(data.error || `Could not list models (${r.status})`)
+  return data
+}
+
+export async function saveAiConfig(input: { key?: string, baseUrl?: string, model?: string }) {
+  const r = await fetch(`${API}/api/config/key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const data = await r.json() as LauncherConfig & { saved?: boolean, error?: string }
+  if (!r.ok) throw new Error(data.error || `Save failed (${r.status})`)
+  return data
+}
+
 export async function chat(messages: {role:string, content:string}[]) {
   const r = await fetch(`${API}/api/chat`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({messages})
   })
   return r.json()
+}
+
+export type ChatStreamEvent =
+  | { type: 'tool-call'; id: string; name: string; detail: string }
+  | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
+  | { type: 'text-delta'; text: string }
+  | { type: 'error'; error: string }
+  | { type: 'done' }
+
+export async function chatStream(
+  messages: { role: string, content: string }[],
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+) {
+  const r = await fetch(`${API}/api/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ messages }),
+    signal,
+  })
+  if (!r.ok || !r.body) {
+    let error = `Chat stream failed (${r.status})`
+    try {
+      const data = await r.json() as { error?: string }
+      if (data.error) error = data.error
+    } catch { /* ignore */ }
+    throw new Error(error)
+  }
+  const reader = r.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const parts = buf.split('\n\n')
+    buf = parts.pop() || ''
+    for (const part of parts) {
+      const line = part.split('\n').find(l => l.startsWith('data: '))
+      if (!line) continue
+      try { onEvent(JSON.parse(line.slice(6)) as ChatStreamEvent) } catch { /* ignore malformed */ }
+    }
+  }
 }
 
 export interface PageNote { selector: string, text: string, type?: string, targetSelector?: string }

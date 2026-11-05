@@ -45,15 +45,20 @@ function startPageBridge() {
 
   async function run(op, payload) {
     if (op === 'inspect') return inspect(payload.selector)
-    if (op === 'patch') return patch(payload.selector, payload.html)
+    if (op === 'patch') return patch(payload)
     if (op === 'eval') return evalJs(payload.code)
     if (op === 'layout-snapshot') return captureLayout(payload)
+    if (op === 'snapshot') return snapshot(payload)
     return { ok: false, error: 'unknown op ' + op }
+  }
+
+  function frameKind() {
+    return window === window.top ? 'top' : 'iframe'
   }
 
   function inspect(selector) {
     const el = selector ? document.querySelector(selector) : document.documentElement
-    if (!el) return { ok: false, error: 'Selector not found: ' + selector }
+    if (!el) return { ok: false, error: 'Selector not found: ' + selector, frame: frameKind() }
     const r = el.getBoundingClientRect()
     return {
       ok: true,
@@ -63,22 +68,24 @@ function startPageBridge() {
       rect: { x: r.x, y: r.y, width: r.width, height: r.height },
       url: location.href,
       title: document.title,
+      frame: frameKind(),
     }
   }
 
-  function patch(selector, html) {
-    const t0 = Date.now()
-    const el = document.querySelector(selector || 'body')
-    if (!el) return { ok: false, error: 'Selector not found: ' + selector }
-    if (html !== undefined) el.innerHTML = html
-    el.setAttribute('data-ai-patched', 'true')
-    const r = el.getBoundingClientRect()
-    return {
-      ok: true,
-      rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-      htmlLen: el.innerHTML.length,
-      elapsedMs: Date.now() - t0,
+  function patch(payload) {
+    if (typeof runLivePatch !== 'function') {
+      return { ok: false, error: 'patch engine missing', frame: frameKind() }
     }
+    const result = runLivePatch(payload || {}, document)
+    return { ...result, frame: frameKind() }
+  }
+
+  function snapshot(payload) {
+    if (typeof capturePageSnapshot !== 'function') {
+      return { ok: false, error: 'snapshot engine missing', frame: frameKind() }
+    }
+    const result = capturePageSnapshot(payload || {}, document)
+    return { ...result, frame: frameKind() }
   }
 
   function evalJs(code) {

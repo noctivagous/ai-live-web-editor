@@ -1,22 +1,19 @@
-import { useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { PANE_KEY } from '../lib/styles'
-
-interface Panes { leftW: number, rightW: number, previewH: number }
-
-const DEFAULTS: Panes = { leftW: 220, rightW: 360, previewH: 42 }
+import { clampPanes, PANE_DEFAULTS, type Panes } from '../lib/panes'
 
 function load(): Panes {
   try {
     const raw = localStorage.getItem(PANE_KEY)
-    if (!raw) return DEFAULTS
+    if (!raw) return clampPanes(PANE_DEFAULTS, window.innerWidth)
     const p = JSON.parse(raw) as Partial<Panes>
-    return {
-      leftW: typeof p.leftW === 'number' ? Math.min(600, Math.max(140, p.leftW)) : DEFAULTS.leftW,
-      rightW: typeof p.rightW === 'number' ? Math.min(600, Math.max(140, p.rightW)) : DEFAULTS.rightW,
-      previewH: typeof p.previewH === 'number' ? Math.min(85, Math.max(10, p.previewH)) : DEFAULTS.previewH,
-    }
+    return clampPanes({
+      leftW: typeof p.leftW === 'number' ? p.leftW : PANE_DEFAULTS.leftW,
+      rightW: typeof p.rightW === 'number' ? p.rightW : PANE_DEFAULTS.rightW,
+      previewH: typeof p.previewH === 'number' ? p.previewH : PANE_DEFAULTS.previewH,
+    }, window.innerWidth)
   } catch {
-    return DEFAULTS
+    return clampPanes(PANE_DEFAULTS, typeof window !== 'undefined' ? window.innerWidth : 1400)
   }
 }
 
@@ -27,14 +24,28 @@ export function useSplitPanes() {
     try { localStorage.setItem(PANE_KEY, JSON.stringify(next)) } catch { /* private mode etc. */ }
   }
 
+  useEffect(() => {
+    const onResize = () => {
+      setPanes((p) => {
+        const next = clampPanes(p, window.innerWidth)
+        if (next.leftW === p.leftW && next.rightW === p.rightW) return p
+        persist(next)
+        return next
+      })
+    }
+    window.addEventListener('resize', onResize)
+    onResize()
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   function setLeftW(f: (v: number) => number) {
-    setPanes(p => { const next = { ...p, leftW: Math.min(600, Math.max(140, f(p.leftW))) }; persist(next); return next })
+    setPanes(p => { const next = clampPanes({ ...p, leftW: f(p.leftW) }, window.innerWidth); persist(next); return next })
   }
   function setRightW(f: (v: number) => number) {
-    setPanes(p => { const next = { ...p, rightW: Math.min(600, Math.max(140, f(p.rightW))) }; persist(next); return next })
+    setPanes(p => { const next = clampPanes({ ...p, rightW: f(p.rightW) }, window.innerWidth); persist(next); return next })
   }
   function setPreviewH(f: (v: number) => number) {
-    setPanes(p => { const next = { ...p, previewH: Math.min(85, Math.max(10, f(p.previewH))) }; persist(next); return next })
+    setPanes(p => { const next = clampPanes({ ...p, previewH: f(p.previewH) }, window.innerWidth); persist(next); return next })
   }
 
   function colDrag(set: (f: (v: number) => number) => void, dir: 1 | -1) {

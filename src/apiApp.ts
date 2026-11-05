@@ -8,6 +8,9 @@ import { listProviderModels } from './providers.js'
 import { getFsRoot } from './launcher.js'
 import { mountPageBridge } from './pageBridge.js'
 import { mountPoolPage } from './poolPage.js'
+import { mountWorkflowApi } from './workflowApi.js'
+import { activeToolsForMode } from './agentTools.js'
+import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard } from './sketchSession.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -51,6 +54,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   const url = () => opts.publicUrl?.() || ''
   mountPageBridge(app)
   mountPoolPage(app)
+  mountWorkflowApi(app)
 
   app.get('/api/fs/health', (_req, res) => {
     const root = getFsRoot()
@@ -151,6 +155,8 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 
   app.post('/api/fs/write', (req, res) => {
     try {
+      const blocked = sketchWriteGuard()
+      if (blocked) return res.status(409).json({ ok: false, ...blocked })
       const { path: p, content } = req.body
       if (!p) return res.status(400).json({ error: 'path required' })
       const full = safePath(p)
@@ -162,10 +168,15 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 
   app.post('/api/chat', async (req, res) => {
     try {
-      const { messages } = req.body
+      const { messages, workflow } = req.body
+      const parsed = parseSketchMode(workflow)
+      if (parsed) setSketchMode(parsed)
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
-      const result = await agent.generate(messages, { maxSteps: 12 })
+      const result = await agent.generate(messages, {
+        maxSteps: 12,
+        activeTools: activeToolsForMode(getSketchMode()),
+      })
       res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
     } catch (e: any) {
       console.error(e)
@@ -174,7 +185,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   })
 
   app.post('/api/chat/stream', async (req, res) => {
-    await pipeAgentChatStream(req.body?.messages, res, req)
+    await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow)
   })
 
   app.post('/api/live-edit/submit', async (req, res) => {
@@ -190,7 +201,10 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl })
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
-      const result = await agent.generate([{ role: 'user', content: prompt }], { maxSteps: 12 })
+      const result = await agent.generate([{ role: 'user', content: prompt }], {
+        maxSteps: 12,
+        activeTools: activeToolsForMode(getSketchMode()),
+      })
       res.json({
         ok: true,
         text: result.text,
@@ -206,6 +220,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 
   app.get('/live-edit/overlay.js', (_req, res) => {
     res.type('application/javascript')
+    res.setHeader('Cache-Control', 'no-store')
     res.sendFile(path.join(__dirname, 'live-edit', 'overlay.js'))
   })
 

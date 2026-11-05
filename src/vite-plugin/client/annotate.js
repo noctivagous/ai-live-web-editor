@@ -7,7 +7,7 @@ const LAUNCHER_URL = __LAUNCHER_URL__
 async function ensureOverlay() {
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   if (window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed) return window.__AI_LIVE_EDIT__
-  const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js').then((r) => {
+  const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js', { cache: 'no-store' }).then((r) => {
     if (!r.ok) throw new Error('overlay fetch failed: ' + r.status)
     return r.text()
   })

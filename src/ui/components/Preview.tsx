@@ -205,7 +205,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult }: {
           </div>
         </div>
       ) : (
-        <iframe ref={frameRef} key={`${url}-${key}`} src={url} style={{ flex: 1, border: 'none', background: 'white', minHeight: 0 }} title="preview" />
+        <iframe ref={frameRef} key={`${url}-${key}`} src={url} style={{ flex: 1, width: '100%', height: '100%', border: 'none', background: 'white', minHeight: 0 }} title="preview" />
       )}
     </div>
   )

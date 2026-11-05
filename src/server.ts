@@ -11,6 +11,8 @@ import { createProject, ensureWorkspace, getFsRoot, listProjects, readActiveId, 
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
+import { mountWorkflowApi } from './workflowApi.js'
+import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
 import chokidar from 'chokidar'
 
 loadDotEnv()
@@ -43,9 +45,10 @@ function publicConfig() {
   }
 }
 app.use(cors({ origin: '*' }))
-app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src *"); next()})
+app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src *; frame-ancestors 'self' http://localhost:5173 http://127.0.0.1:5173"); next()})
 app.use(express.json({ limit: '20mb' }))
 mountPoolPage(app)
+mountWorkflowApi(app)
 
 ensureWorkspace()
 markLauncherOwner()
@@ -75,6 +78,7 @@ app.get('/api/projects', (_req, res) => {
 app.post('/api/projects/select', (req, res) => {
   try {
     const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    resetSketchForProjectSwitch()
     const project = selectProject(id)
     res.json({ ok: true, active: project.id, root: project.root, projects: listProjects() })
   } catch (e: any) {
@@ -193,6 +197,8 @@ app.get('/api/fs/read', (req, res) => {
 
 app.post('/api/fs/write', async (req, res) => {
   try {
+    const blocked = sketchWriteGuard()
+    if (blocked) return res.status(409).json({ ok: false, ...blocked })
     const { path: p, content } = req.body
     if (!p) return res.status(400).json({ error: 'path required' })
     const full = safePath(p)
@@ -212,13 +218,20 @@ app.get('/api/page/status', async (_req, res) => {
   }
 })
 app.post('/api/page/inspect', async (req, res) => {
-  res.json(await pageCommand('inspect', req.body || {}))
+  const { livePageOp } = await import('./liveTarget.js')
+  res.json(await livePageOp('inspect', req.body || {}))
 })
 app.post('/api/page/patch', async (req, res) => {
-  res.json(await pageCommand('patch', req.body || {}))
+  const { livePageOp } = await import('./liveTarget.js')
+  res.json(await livePageOp('patch', req.body || {}))
 })
 app.post('/api/page/eval', async (req, res) => {
-  res.json(await pageCommand('eval', req.body || {}))
+  const { livePageOp } = await import('./liveTarget.js')
+  res.json(await livePageOp('eval', req.body || {}))
+})
+app.post('/api/page/snapshot', async (req, res) => {
+  const { livePageOp } = await import('./liveTarget.js')
+  res.json(await livePageOp('snapshot', req.body || {}))
 })
 
 app.post('/api/browser/open', async (req, res) => {
@@ -262,10 +275,17 @@ app.post('/api/layout/svg', async (req, res) => {
 // --- Mastra chat proxy (so UI doesn't need separate Mastra server) ---
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages } = req.body
+    const { messages, workflow } = req.body
+    const { parseSketchMode, setSketchMode, getSketchMode } = await import('./sketchSession.js')
+    const parsed = parseSketchMode(workflow)
+    if (parsed) setSketchMode(parsed)
+    const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.generate(messages, { maxSteps: 12 })
+    const result = await agent.generate(messages, {
+      maxSteps: 12,
+      activeTools: activeToolsForMode(getSketchMode()),
+    })
     res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
   } catch (e: any) {
     console.error(e)
@@ -274,7 +294,7 @@ app.post('/api/chat', async (req, res) => {
 })
 
 app.post('/api/chat/stream', async (req, res) => {
-  await pipeAgentChatStream(req.body?.messages, res, req)
+  await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow)
 })
 
 // --- Live-edit submit: page annotations -> agent applies -> files + live DOM ---
@@ -289,9 +309,14 @@ app.post('/api/live-edit/submit', async (req, res) => {
     const summary = summarizeAnnotations(notes)
     const pageUrl = typeof url === 'string' ? url : ''
     const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl })
+    const { getSketchMode } = await import('./sketchSession.js')
+    const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.generate([{ role: 'user', content: prompt }], { maxSteps: 12 })
+    const result = await agent.generate([{ role: 'user', content: prompt }], {
+      maxSteps: 12,
+      activeTools: activeToolsForMode(getSketchMode()),
+    })
     res.json({
       ok: true,
       text: result.text,
@@ -308,6 +333,7 @@ app.post('/api/live-edit/submit', async (req, res) => {
 // --- Annotation overlay script (injected into preview iframe / extension pages) ---
 app.get('/live-edit/overlay.js', (req, res) => {
   res.type('application/javascript')
+  res.setHeader('Cache-Control', 'no-store')
   res.sendFile(path.join(__dirname, 'live-edit', 'overlay.js'))
 })
 

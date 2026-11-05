@@ -6,6 +6,19 @@ const LAUNCHER_URL = __LAUNCHER_URL__
 const STORAGE = 'ai_live_chat_window'
 const WIDTH = 380
 
+function supportsPopover() {
+  return typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.showPopover === 'function'
+}
+
+function showManualPopover(el) {
+  if (!el || !supportsPopover()) return
+  try {
+    if (!el.matches(':popover-open')) el.showPopover()
+  } catch {
+    /* not in document yet */
+  }
+}
+
 function loadPos() {
   try {
     const raw = sessionStorage.getItem(STORAGE)
@@ -20,27 +33,63 @@ function savePos(state) {
   try { sessionStorage.setItem(STORAGE, JSON.stringify(state)) } catch { /* ignore */ }
 }
 
+function applyHostPos(host, saved) {
+  host.style.right = saved.x == null ? '16px' : 'auto'
+  host.style.bottom = saved.y == null ? '16px' : 'auto'
+  if (saved.x != null) host.style.left = saved.x + 'px'
+  else host.style.left = 'auto'
+  if (saved.y != null) host.style.top = saved.y + 'px'
+  else host.style.top = 'auto'
+}
+
+function ensureHostStyle() {
+  if (document.getElementById('ai-live-chat-host-style')) return
+  const style = document.createElement('style')
+  style.id = 'ai-live-chat-host-style'
+  style.textContent = `
+    #ai-live-chat-host[popover] {
+      position: fixed;
+      inset: unset;
+      margin: 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+      overflow: visible;
+      width: fit-content;
+      height: fit-content;
+      color: inherit;
+    }
+  `
+  document.head.appendChild(style)
+}
+
 export function mountChatOverlay() {
+  if (window !== window.top) return
   if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/') || location.pathname === '/pool') return
   if (document.getElementById('ai-live-chat-host')) return
   const saved = loadPos()
+  const chatSrc = `${String(LAUNCHER_URL || '').replace(/\/$/, '')}/chat-embed`
+  const usePopover = supportsPopover()
+  ensureHostStyle()
   const host = document.createElement('div')
   host.id = 'ai-live-chat-host'
+  if (usePopover) host.setAttribute('popover', 'manual')
+  else {
+    host.style.position = 'fixed'
+    host.style.zIndex = '90000'
+  }
+  applyHostPos(host, saved)
   const shadow = host.attachShadow({ mode: 'open' })
 
   const wrap = document.createElement('div')
   wrap.className = 'win'
-  wrap.style.right = saved.x == null ? '16px' : 'auto'
-  wrap.style.bottom = saved.y == null ? '16px' : 'auto'
-  if (saved.x != null) wrap.style.left = saved.x + 'px'
-  if (saved.y != null) wrap.style.top = saved.y + 'px'
   if (saved.collapsed) wrap.classList.add('collapsed')
 
   wrap.innerHTML = `
     <style>
-      :host { all: initial; }
+      :host { display: block; }
       .win {
-        position: fixed; z-index: 90000;
+        position: relative;
         width: ${WIDTH}px; height: 440px;
         display: flex; flex-direction: column;
         background: #141417; color: #e4e4e7;
@@ -70,7 +119,7 @@ export function mountChatOverlay() {
       <b>AI Chat</b><span>overlay</span>
       <button type="button" data-collapse>▾</button>
     </div>
-    <iframe title="AI Chat" src="${(LAUNCHER_URL || '') + '/chat-embed'}"></iframe>
+    <iframe title="AI Chat" src="${chatSrc}"></iframe>
   `
 
   const bar = wrap.querySelector('.bar')
@@ -80,8 +129,8 @@ export function mountChatOverlay() {
     wrap.classList.toggle('collapsed')
     btn.textContent = wrap.classList.contains('collapsed') ? '▸' : '▾'
     savePos({
-      x: wrap.style.left ? parseFloat(wrap.style.left) : null,
-      y: wrap.style.top ? parseFloat(wrap.style.top) : null,
+      x: host.style.left && host.style.left !== 'auto' ? parseFloat(host.style.left) : null,
+      y: host.style.top && host.style.top !== 'auto' ? parseFloat(host.style.top) : null,
       collapsed: wrap.classList.contains('collapsed'),
     })
   })
@@ -89,31 +138,32 @@ export function mountChatOverlay() {
   let drag = null
   bar.addEventListener('mousedown', (ev) => {
     if (ev.target.closest('button')) return
-    drag = { dx: ev.clientX - wrap.getBoundingClientRect().left, dy: ev.clientY - wrap.getBoundingClientRect().top }
-    wrap.style.right = 'auto'
-    wrap.style.bottom = 'auto'
-    wrap.style.left = (ev.clientX - drag.dx) + 'px'
-    wrap.style.top = (ev.clientY - drag.dy) + 'px'
+    drag = { dx: ev.clientX - host.getBoundingClientRect().left, dy: ev.clientY - host.getBoundingClientRect().top }
+    host.style.right = 'auto'
+    host.style.bottom = 'auto'
+    host.style.left = (ev.clientX - drag.dx) + 'px'
+    host.style.top = (ev.clientY - drag.dy) + 'px'
   })
   window.addEventListener('mousemove', (ev) => {
     if (!drag) return
-    wrap.style.left = (ev.clientX - drag.dx) + 'px'
-    wrap.style.top = (ev.clientY - drag.dy) + 'px'
+    host.style.left = (ev.clientX - drag.dx) + 'px'
+    host.style.top = (ev.clientY - drag.dy) + 'px'
   })
   window.addEventListener('mouseup', () => {
     if (!drag) return
     drag = null
     savePos({
-      x: parseFloat(wrap.style.left),
-      y: parseFloat(wrap.style.top),
+      x: parseFloat(host.style.left),
+      y: parseFloat(host.style.top),
       collapsed: wrap.classList.contains('collapsed'),
     })
   })
 
   shadow.appendChild(wrap)
   document.documentElement.appendChild(host)
+  showManualPopover(host)
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
-  window.__AI_LIVE_CHAT__ = { mounted: true, width: WIDTH }
+  window.__AI_LIVE_CHAT__ = { mounted: true, width: WIDTH, popover: usePopover }
   void installAnnotateToolbar()
 }
 
@@ -121,7 +171,7 @@ async function installAnnotateToolbar() {
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   if (!(window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed)) {
     try {
-      const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js').then((r) => {
+      const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js', { cache: 'no-store' }).then((r) => {
         if (!r.ok) throw new Error('overlay ' + r.status)
         return r.text()
       })

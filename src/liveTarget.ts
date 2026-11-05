@@ -1,5 +1,6 @@
 import { liveTarget, playwrightPoolEnabled } from './env.js'
 import { pageCommand, type PageOp } from './pageBridge.js'
+import { isSketchMode, recordLiveSketchPatch } from './sketchSession.js'
 
 const VITE_ORIGIN = process.env.VITE_ORIGIN || 'http://localhost:5173'
 const LAUNCHER_ORIGIN = `http://localhost:${process.env.LAUNCHER_PORT || 4112}`
@@ -28,7 +29,7 @@ function usePlaywrightLive(url?: string) {
   return Boolean(url && !isViteAppUrl(url))
 }
 
-export async function runPoolOp(op: 'inspect' | 'patch' | 'eval' | 'open', payload: Record<string, unknown>) {
+export async function runPoolOp(op: 'inspect' | 'patch' | 'eval' | 'open' | 'snapshot', payload: Record<string, unknown>) {
   const denied = requirePlaywrightPool()
   if (denied) return denied
   if (launcherOwner) return localPool(op, payload)
@@ -46,27 +47,38 @@ export async function runPoolOp(op: 'inspect' | 'patch' | 'eval' | 'open', paylo
 }
 
 async function localPool(op: 'inspect' | 'patch' | 'eval' | 'open', payload: Record<string, unknown>) {
-  const { inspectDOM, patchDOM, evalJS, getPage } = await import('./browserPool.js')
-  const url = typeof payload.url === 'string' ? payload.url : undefined
-  if (op === 'open') {
-    const page = await getPage(url)
-    return { ok: true, url: page.url(), via: 'playwright' }
+  try {
+    const { inspectDOM, patchDOM, evalJS, getPage, snapshotPage } = await import('./browserPool.js')
+    const url = typeof payload.url === 'string' ? payload.url : undefined
+    if (op === 'open') {
+      const page = await getPage(url)
+      return { ok: true, url: page.url(), via: 'playwright' }
+    }
+    if (op === 'inspect') return { via: 'playwright', ...(await inspectDOM(String(payload.selector || 'body'), url)) }
+    if (op === 'patch') return { via: 'playwright', ...(await patchDOM(payload)) }
+    if (op === 'snapshot') return { via: 'playwright', ...(await snapshotPage(payload)) }
+    return { via: 'playwright', ...(await evalJS(String(payload.code || ''), url)) }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: message, via: 'playwright' }
   }
-  if (op === 'inspect') return { via: 'playwright', ...(await inspectDOM(String(payload.selector || 'body'), url)) }
-  if (op === 'patch') return { via: 'playwright', ...(await patchDOM(String(payload.selector || 'body'), String(payload.html ?? ''), url)) }
-  return { via: 'playwright', ...(await evalJS(String(payload.code || ''), url)) }
 }
 
 /** inspect/patch/eval: Vite page bridge unless LIVE_TARGET=pool or `url` is another origin. */
 export async function livePageOp(op: PageOp, payload: Record<string, unknown> = {}) {
   const url = typeof payload.url === 'string' ? payload.url : undefined
-  if (usePlaywrightLive(url)) {
+  const sketchOnVite = isSketchMode() && isViteAppUrl(url)
+  let result: unknown
+  if (usePlaywrightLive(url) && !sketchOnVite) {
     if (op === 'layout-snapshot') return liveLayoutSnapshot(payload, url)
-    return runPoolOp(op, payload)
+    result = await runPoolOp(op, payload)
+  } else if (op === 'layout-snapshot') {
+    result = await liveLayoutSnapshot(payload, url)
+  } else {
+    const raw = await pageCommand(op, payload)
+    result = raw && typeof raw === 'object' ? { via: 'vite-page', ...(raw as object) } : raw
   }
-  if (op === 'layout-snapshot') return liveLayoutSnapshot(payload, url)
-  const result = await pageCommand(op, payload)
-  if (result && typeof result === 'object') return { via: 'vite-page', ...(result as object) }
+  if (op === 'patch') recordLiveSketchPatch(payload, result)
   return result
 }
 

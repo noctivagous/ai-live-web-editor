@@ -115,7 +115,10 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
         }
         if (pathname === '/@ai-live-editor/page-bridge.js') {
           res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
-          res.end(fs.readFileSync(path.join(__dirname, 'client', 'page-bridge.js'), 'utf-8'))
+          const engine = fs.readFileSync(path.join(__dirname, '..', 'live-edit', 'patchEngine.js'), 'utf-8')
+          const snap = fs.readFileSync(path.join(__dirname, '..', 'live-edit', 'pageSnapshot.js'), 'utf-8')
+          const bridge = fs.readFileSync(path.join(__dirname, 'client', 'page-bridge.js'), 'utf-8')
+          res.end(engine + '\n' + snap + '\n' + bridge)
           return
         }
         next()

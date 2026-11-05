@@ -127,6 +127,7 @@ export async function chat(messages: {role:string, content:string}[]) {
 
 export type ChatStreamEvent =
   | { type: 'status'; text: string }
+  | { type: 'workflow'; mode: ChatWorkflow; reason?: string }
   | { type: 'reasoning-delta'; text: string }
   | { type: 'tool-call'; id: string; name: string; detail: string }
   | { type: 'tool-delta'; id: string; name: string; text: string }
@@ -135,15 +136,46 @@ export type ChatStreamEvent =
   | { type: 'error'; error: string }
   | { type: 'done' }
 
+export type ChatWorkflow = 'files' | 'sketch'
+
+export interface WorkflowSnapshot {
+  ok: boolean
+  mode: ChatWorkflow
+  accepted: boolean
+  patches: { id: string, selector: string, op: string, ok: boolean, detail: string }[]
+  error?: string
+}
+
+export async function getWorkflow() {
+  const r = await fetch(`${API}/api/workflow`)
+  return r.json() as Promise<WorkflowSnapshot>
+}
+
+export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept' }) {
+  const r = await fetch(`${API}/api/workflow`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<WorkflowSnapshot>
+}
+
+export function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const name = (err as { name?: string }).name
+  return name === 'AbortError' || name === 'TimeoutError'
+}
+
 export async function chatStream(
   messages: { role: string, content: string }[],
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
+  workflow?: ChatWorkflow,
 ) {
   const r = await fetch(`${API}/api/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, workflow }),
     signal,
   })
   if (!r.ok || !r.body) {
@@ -155,19 +187,26 @@ export async function chatStream(
     throw new Error(error)
   }
   const reader = r.body.getReader()
+  const onAbort = () => { void reader.cancel().catch(() => {}) }
+  signal?.addEventListener('abort', onAbort, { once: true })
   const decoder = new TextDecoder()
   let buf = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += decoder.decode(value, { stream: true })
-    const parts = buf.split('\n\n')
-    buf = parts.pop() || ''
-    for (const part of parts) {
-      const line = part.split('\n').find(l => l.startsWith('data: '))
-      if (!line) continue
-      try { onEvent(JSON.parse(line.slice(6)) as ChatStreamEvent) } catch { /* ignore malformed */ }
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop() || ''
+      for (const part of parts) {
+        const line = part.split('\n').find(l => l.startsWith('data: '))
+        if (!line) continue
+        try { onEvent(JSON.parse(line.slice(6)) as ChatStreamEvent) } catch { /* ignore malformed */ }
+      }
     }
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
   }
 }
 

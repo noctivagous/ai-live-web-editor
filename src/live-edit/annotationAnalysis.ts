@@ -88,7 +88,7 @@ export function buildLiveEditPrompt(input: {
   for (const m of summary.moveLinks) out.push(`Move: relocate ${m.sourceSelector} before ${m.targetSelector} (${m.text})`)
   if (hints.length) out.push('Style hints parsed from the notes (verify before applying):', ...hints)
   out.push(
-    'Workflow: read-real-file the file that renders each selector, then write-real-file the fix.',
+    'Workflow: grep / ranged read-real-file the file that renders each selector, then str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
   )
   return out.join('\n')
 }

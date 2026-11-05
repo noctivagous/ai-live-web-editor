@@ -168,6 +168,7 @@ export default defineConfig({
     react(),
     aiLiveEditor({
       envFile: path.resolve(dir, '../../.env'),
+      apiBase: 'http://localhost:4112',
     }),
   ],
   server: {

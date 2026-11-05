@@ -79,6 +79,29 @@
     } catch (e) { /* ignore */ }
   }
 
+  function supportsPopover() {
+    return typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.showPopover === 'function';
+  }
+
+  function asManualPopover(el) {
+    if (!el || !supportsPopover()) return;
+    if (el.getAttribute('popover') !== 'manual') el.setAttribute('popover', 'manual');
+  }
+
+  function openManualPopover(el) {
+    if (!el || !supportsPopover()) return;
+    try {
+      if (!el.matches(':popover-open')) el.showPopover();
+    } catch (e) { /* ignore */ }
+  }
+
+  function closeManualPopover(el) {
+    if (!el || !supportsPopover()) return;
+    try {
+      if (el.matches(':popover-open')) el.hidePopover();
+    } catch (e) { /* ignore */ }
+  }
+
   function createRoot() {
     var root = document.getElementById('ai-live-edit-root');
     if (!root) {
@@ -98,7 +121,7 @@
     var style = document.createElement('style');
     style.id = 'ai-live-edit-style';
     style.textContent = [
-      '#ai-live-edit-root .ai-le-toolbar { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(17,24,39,0.92); color: #f9fafb; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.25); }',
+      '#ai-live-edit-root .ai-le-toolbar, #ai-live-edit-root .ai-le-toolbar[popover] { position: fixed; inset: unset; right: 16px; bottom: 16px; margin: 0; width: max-content; height: fit-content; overflow: visible; display: flex; gap: 8px; padding: 8px 10px; border: none; border-radius: 10px; background: rgba(17,24,39,0.92); color: #f9fafb; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.25); }',
       '#ai-live-edit-root .ai-le-toolbar button { background: #2563eb; border: none; color: white; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }',
       '#ai-live-edit-root .ai-le-toolbar button[data-active="true"] { background: #16a34a; }',
       '#ai-live-edit-root .ai-le-tag { position: absolute; max-width: 240px; background: rgba(255,255,255,0.95); color: #111827; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px 4px; font-size: 12px; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }',
@@ -111,7 +134,7 @@
       '#ai-live-edit-root .ai-le-menu { position: fixed; background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px; min-width: 160px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); pointer-events: auto; display: none; }',
       '#ai-live-edit-root .ai-le-menu button { display: block; width: 100%; text-align: left; background: transparent; border: none; padding: 6px 8px; cursor: pointer; font-size: 12px; }',
       '#ai-live-edit-root .ai-le-menu button:hover { background: #f3f4f6; }',
-      '#ai-live-edit-root .ai-le-notes { position: fixed; width: 280px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 12px 24px rgba(0,0,0,0.2); pointer-events: auto; display: none; }',
+      '#ai-live-edit-root .ai-le-notes, #ai-live-edit-root .ai-le-notes[popover] { position: fixed; inset: unset; margin: 0; width: 280px; overflow: visible; background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 12px 24px rgba(0,0,0,0.2); pointer-events: auto; }',
       '#ai-live-edit-root .ai-le-notes-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; font-size: 12px; font-weight: 600; cursor: move; background: #111827; color: #f9fafb; border-top-left-radius: 10px; border-top-right-radius: 10px; }',
       '#ai-live-edit-root .ai-le-notes-titlebar button { background: #374151; border: none; color: #f9fafb; font-size: 11px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }',
       '#ai-live-edit-root .ai-le-notes-body { padding: 8px; }',
@@ -175,7 +198,15 @@
 
   function isOverlayTarget(path) {
     for (var i = 0; i < path.length; i++) {
-      if (path[i] && path[i].id === 'ai-live-edit-root') return true;
+      var n = path[i];
+      if (!n) continue;
+      if (n.id === 'ai-live-edit-root' || n.id === 'ai-live-chat-host') return true;
+      if (n.classList && (
+        n.classList.contains('ai-le-toolbar') ||
+        n.classList.contains('ai-le-notes') ||
+        n.classList.contains('ai-le-menu') ||
+        n.classList.contains('ai-le-tag')
+      )) return true;
     }
     return false;
   }
@@ -191,11 +222,19 @@
 
   function elementFromPointIgnoringOverlay(x, y) {
     var root = document.getElementById('ai-live-edit-root');
-    var prev = root ? root.style.pointerEvents : null;
-    if (root) root.style.pointerEvents = 'none';
+    var chat = document.getElementById('ai-live-chat-host');
+    var toolbar = root ? root.querySelector('.ai-le-toolbar') : null;
+    var notes = root ? root.querySelector('.ai-le-notes') : null;
+    var els = [root, chat, toolbar, notes].filter(Boolean);
+    var prev = [];
+    for (var i = 0; i < els.length; i++) {
+      prev[i] = els[i].style.pointerEvents;
+      els[i].style.pointerEvents = 'none';
+    }
     var el = document.elementFromPoint(x, y);
-    if (root && prev != null) root.style.pointerEvents = prev;
-    else if (root) root.style.pointerEvents = 'none';
+    for (var j = 0; j < els.length; j++) {
+      els[j].style.pointerEvents = prev[j];
+    }
     return el;
   }
 
@@ -495,11 +534,17 @@
       });
       panel.appendChild(titlebar);
       panel.appendChild(body);
+      asManualPopover(panel);
       root.appendChild(panel);
     }
     panel.style.left = state.notesPos.x + 'px';
     panel.style.top = state.notesPos.y + 'px';
-    panel.style.display = state.notesVisible ? 'block' : 'none';
+    if (supportsPopover()) {
+      if (state.notesVisible) openManualPopover(panel);
+      else closeManualPopover(panel);
+    } else {
+      panel.style.display = state.notesVisible ? 'block' : 'none';
+    }
     var cb = panel.querySelector('.ai-le-notes-titlebar button');
     if (cb) cb.textContent = state.notesCollapsed ? 'Expand' : 'Collapse';
     var bd = panel.querySelector('.ai-le-notes-body');
@@ -641,7 +686,9 @@
       });
       toolbar.appendChild(submitBtn);
     }
+    asManualPopover(toolbar);
     root.appendChild(toolbar);
+    openManualPopover(toolbar);
   }
 
   ensureStyle();
@@ -661,6 +708,7 @@
   window.__AI_LIVE_EDIT__ = {
     version: 1,
     installed: true,
+    popover: supportsPopover(),
     state: state,
     baselineWireframeJson: null,
     enableSelectMode: function () { if (!state.selectMode) toggleSelectMode(); },

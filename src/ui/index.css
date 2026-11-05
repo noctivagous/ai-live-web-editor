@@ -15,10 +15,15 @@
   --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
+html, body, #root{
+  height:100%;
+  margin:0;
+}
 body{
-  margin:0; background:var(--bg); color:var(--text);
+  background:var(--bg); color:var(--text);
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   -webkit-font-smoothing:antialiased;
+  overflow:hidden;
 }
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-thumb{background:#23232a;border-radius:4px}
@@ -26,7 +31,8 @@ body{
 
 /* App shell */
 .deck-app{
-  display:flex; flex-direction:column; height:100vh;
+  display:flex; flex-direction:column; height:100%;
+  min-height:0; overflow:hidden;
   background:radial-gradient(1200px 600px at 80% -10%, rgba(59,130,246,.07), transparent 60%), var(--bg);
 }
 .topbar{
@@ -143,6 +149,27 @@ select.pill:disabled{cursor:default; opacity:.7}
   white-space:pre-wrap; margin:0; color:#a1a1aa;
   font-family:inherit; font-size:12px; line-height:1.5;
 }
+
+.seg{
+  display:inline-flex; border:1px solid var(--border); border-radius:999px;
+  overflow:hidden; margin-left:auto; flex-shrink:0;
+}
+.seg button{
+  background:transparent; border:0; color:var(--muted);
+  padding:4px 10px; font-size:11.5px; font-weight:600; cursor:pointer;
+}
+.seg button.on{background:#16283f; color:#dbeafe}
+.seg button:disabled{opacity:.45; cursor:default}
+.sketch-panel{
+  padding:8px 12px 10px; border-bottom:1px solid #1e1e23;
+  display:flex; flex-direction:column; gap:6px;
+}
+.sketch-banner{font-size:11.5px; color:#fde68a; line-height:1.4}
+.sketch-patch{
+  font-family:var(--mono); font-size:11px; color:#86efac;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.sketch-actions{display:flex; flex-wrap:wrap; gap:6px}
 
 @media (max-width:900px){
   .topbar{flex-wrap:wrap; padding:8px 10px; gap:8px}

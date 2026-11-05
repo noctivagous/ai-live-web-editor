@@ -1,5 +1,6 @@
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'node:url'
 import { getFsRoot } from './launcher.js'
 import { playwrightPoolEnabled } from './env.js'
 import {
@@ -129,17 +130,43 @@ export async function getPage(url?: string) {
   return page
 }
 
-export async function patchDOM(selector: string, html: string, url?: string) {
-  const page = await getPage(url)
+/** Plain page script — a TS callback would inject tsx `__name` into Playwright evaluate. */
+const PATCH_ENGINE_SOURCE = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'live-edit', 'patchEngine.js'),
+  'utf8',
+)
+const PATCH_PAGE_SCRIPT = `(({ payload }) => {
+${PATCH_ENGINE_SOURCE}
+  return runLivePatch(payload, document)
+})`
+
+const SNAPSHOT_ENGINE_SOURCE = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'live-edit', 'pageSnapshot.js'),
+  'utf8',
+)
+const SNAPSHOT_PAGE_SCRIPT = `(({ payload }) => {
+${SNAPSHOT_ENGINE_SOURCE}
+  return capturePageSnapshot(payload, document)
+})`
+
+export async function patchDOM(payload: Record<string, unknown> | string, html?: string, url?: string) {
+  const body = typeof payload === 'string'
+    ? { selector: payload, html, url }
+    : payload
+  const page = await getPage(typeof body.url === 'string' ? body.url : url)
   const t0 = Date.now()
-  const result = await page.$eval(selector, (el: any, html: string) => {
-    if (html !== undefined) el.innerHTML = html
-    el.setAttribute('data-ai-patched', 'true')
-    const r = el.getBoundingClientRect()
-    return { ok: true, rect: { x: r.x, y: r.y, width: r.width, height: r.height }, htmlLen: el.innerHTML.length }
-  }, html)
+  const result = await page.evaluate(`(arg) => (${PATCH_PAGE_SCRIPT})(arg)`, { payload: body }) as Record<string, unknown>
   const out = { ...result, elapsedMs: Date.now() - t0 }
-  recordActivity('patch', `${selector} ${out.elapsedMs}ms`)
+  recordActivity('patch', `${String(body.selector || 'body')} ${out.elapsedMs}ms`)
+  return out
+}
+
+export async function snapshotPage(payload: Record<string, unknown> = {}, url?: string) {
+  const page = await getPage(typeof payload.url === 'string' ? payload.url : url)
+  const t0 = Date.now()
+  const result = await page.evaluate(`(arg) => (${SNAPSHOT_PAGE_SCRIPT})(arg)`, { payload }) as Record<string, unknown>
+  const out = { ...result, elapsedMs: Date.now() - t0 }
+  recordActivity('snapshot', `${Number(out.count || 0)} nodes ${out.elapsedMs}ms`)
   return out
 }
 

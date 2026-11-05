@@ -87,7 +87,8 @@ export default function App() {
 
   async function save(silent = false) {
     const res = await writeFile(activePath, content)
-    if (!silent) setStatus(res.ok ? `saved ${activePath} ${res.bytes}b @ ${new Date().toLocaleTimeString()}` : res.error)
+    if (!res.ok) setStatus(res.error || 'save failed')
+    else if (!silent) setStatus(`saved ${activePath} ${res.bytes}b @ ${new Date().toLocaleTimeString()}`)
     else setStatus(`autosaved ${activePath}`)
   }
 
@@ -238,16 +239,16 @@ export default function App() {
         </div>
         <VDivider onMouseDown={colDrag(setLeftW, 1)} title="Drag to resize file tree" />
 
-        <div className="panel" style={{ flex: 1 }}>
+        <div className="panel" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <div className="panel-head">
             <span className="mono" style={{ fontWeight: 500 }}>{activePath}</span>
             <span className="sub" style={{ marginLeft: 'auto' }}>Monaco • Real FS • Vite HMR</span>
           </div>
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>
             <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} />
           </div>
           <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
-          <div style={{ height: `${previewH}%`, borderTop: '1px solid #1e1e23', flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid #1e1e23', display: 'flex', flexDirection: 'column' }}>
             <Preview
               key={activeProject}
               hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
@@ -257,8 +258,10 @@ export default function App() {
           </div>
         </div>
         <VDivider onMouseDown={colDrag(setRightW, -1)} title="Drag to resize chat" />
-        <div className="panel" style={{ width: rightW, flexShrink: 0, minWidth: 0 }}>
+        <div className="panel" style={{ width: rightW, flexShrink: 0, minWidth: 0, minHeight: 0 }}>
           <Chat
+            key={activeProject}
+            projectId={activeProject}
             activePath={activePath}
             keyKnown={config === null ? undefined : hasKey}
             onNeedSetup={reopenSetup}

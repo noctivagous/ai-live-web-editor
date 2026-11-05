@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { beginChatSse, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult } from './chatStream.js'
+import { abortSignalFromReq, beginChatSse, isAbortError, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult } from './chatStream.js'
 
 describe('mapMastraChunk', () => {
   it('maps Mastra payload.text text-delta', () => {
@@ -81,6 +81,20 @@ describe('mapMastraChunk', () => {
     )
   })
 
+  it('marks tool-result with error payload as failed', () => {
+    assert.deepEqual(
+      mapMastraChunk({
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'c3',
+          toolName: 'str-replace',
+          result: { error: 'old_string not found — file unchanged', path: '/App.jsx', matches: 0 },
+        },
+      }),
+      { type: 'tool-result', id: 'c3', name: 'str-replace', ok: false, detail: 'old_string not found — file unchanged' },
+    )
+  })
+
   it('maps tool-error', () => {
     assert.deepEqual(
       mapMastraChunk({
@@ -113,12 +127,27 @@ describe('summarize', () => {
       summarizeArgs('write-real-file', { path: '/App.jsx', content: 'xxxx' }),
       'write-real-file /App.jsx 4 chars',
     )
+    assert.equal(
+      summarizeArgs('str-replace', { path: '/App.jsx', old_string: 'ab', new_string: 'abcd' }),
+      'str-replace /App.jsx 2→4',
+    )
+    assert.equal(
+      summarizeArgs('grep', { pattern: 'Inbox' }),
+      'grep Inbox',
+    )
+    assert.equal(
+      summarizeArgs('patch-dom', { selector: 'h1', op: 'text', text: 'Hello' }),
+      'patch-dom h1 text Hello',
+    )
   })
 
   it('summarizes file lists and errors', () => {
     assert.equal(summarizeResult({ files: ['a', 'b'], root: '/x' }), '2 files')
     assert.equal(summarizeResult({ error: 'Not found: /nope' }), 'Not found: /nope')
     assert.equal(summarizeResult({ ok: true, path: '/a', bytes: 12 }), '/a · 12b')
+    assert.equal(summarizeResult({ hits: [{ path: '/a', line: 1, text: 'x' }], count: 1 }), '1 hits')
+    assert.equal(summarizeResult({ path: '/a', matches: 1, snippet: '1| x' }), '/a · 1 match')
+    assert.equal(summarizeResult({ path: '/a', startLine: 10, endLine: 20, content: 'x'.repeat(8) }), '/a · 8 chars · L10–20')
   })
 })
 
@@ -139,5 +168,23 @@ describe('beginChatSse', () => {
     assert.equal(writes[0], ': connected\n\n')
     assert.equal(writes[1], 'data: {"type":"text-delta","text":"x"}\n\n')
     assert.ok(flushes >= 2)
+  })
+})
+
+describe('abortSignalFromReq', () => {
+  it('aborts when the HTTP request reports aborted or close', () => {
+    assert.equal(isAbortError({ name: 'AbortError' }), true)
+    assert.equal(isAbortError(new Error('nope')), false)
+    const listeners: Record<string, () => void> = {}
+    const req = {
+      aborted: false,
+      on(event: string, listener: () => void) { listeners[event] = listener },
+    }
+    const signal = abortSignalFromReq(req)
+    assert.equal(signal.aborted, false)
+    listeners.aborted()
+    assert.equal(signal.aborted, true)
+    const already = abortSignalFromReq({ aborted: true })
+    assert.equal(already.aborted, true)
   })
 })

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Request, Response, Express } from 'express'
 
-export type PageOp = 'inspect' | 'patch' | 'eval' | 'layout-snapshot'
+export type PageOp = 'inspect' | 'patch' | 'eval' | 'layout-snapshot' | 'snapshot'
 
 type Client = {
   id: string
@@ -10,9 +10,12 @@ type Client = {
 }
 
 type Pending = {
-  resolve: (value: unknown) => void
-  reject: (err: Error) => void
+  results: unknown[]
+  expected: number
+  settle: ReturnType<typeof setTimeout> | null
   timer: ReturnType<typeof setTimeout>
+  resolve: (value: unknown) => void
+  finished: boolean
 }
 
 const clients = new Map<string, Client>()
@@ -20,6 +23,7 @@ const pending = new Map<string, Pending>()
 let pageOwner = false
 
 const VITE_ORIGIN = process.env.VITE_ORIGIN || 'http://localhost:5173'
+const SETTLE_MS = 250
 
 export function markPageOwner() {
   pageOwner = true
@@ -29,19 +33,44 @@ export function livePageCount() {
   return clients.size
 }
 
+/** Prefer the Preview iframe (frame=iframe) so sketch undo restores what the user sees. */
+export function pickPageResult(results: unknown[]): unknown {
+  const list = results.filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === 'object')
+  if (!list.length) return { error: 'No live Vite page responded' }
+  const okish = (r: Record<string, unknown>) => r.ok !== false && !r.error
+  const iframe = list.find((r) => okish(r) && r.frame === 'iframe')
+  if (iframe) return iframe
+  const ok = list.find(okish)
+  if (ok) return ok
+  return list[0]
+}
+
+function finishPending(id: string, fallback?: unknown) {
+  const slot = pending.get(id)
+  if (!slot || slot.finished) return
+  slot.finished = true
+  clearTimeout(slot.timer)
+  if (slot.settle) clearTimeout(slot.settle)
+  pending.delete(id)
+  if (slot.results.length) slot.resolve(pickPageResult(slot.results))
+  else slot.resolve(fallback ?? { error: 'No live Vite page responded' })
+}
+
 function dispatch(op: PageOp, payload: Record<string, unknown>, timeoutMs: number) {
   if (!clients.size) {
     return Promise.resolve({ error: 'No live Vite page connected. Open the app on :5173.' })
   }
   const id = randomUUID()
-  const ranked = [...clients.values()].sort((a, b) => Number(b.top) - Number(a.top))
-  return new Promise((resolve, reject) => {
+  const ranked = [...clients.values()].sort((a, b) => Number(a.top) - Number(b.top))
+  return new Promise((resolve) => {
     pending.set(id, {
+      results: [],
+      expected: ranked.length,
+      settle: null,
+      finished: false,
       resolve,
-      reject,
       timer: setTimeout(() => {
-        pending.delete(id)
-        resolve({ error: `Live page ${op} timed out after ${timeoutMs}ms` })
+        finishPending(id, { error: `Live page ${op} timed out after ${timeoutMs}ms` })
       }, timeoutMs),
     })
     const cmd = { id, op, payload }
@@ -52,10 +81,15 @@ function dispatch(op: PageOp, payload: Record<string, unknown>, timeoutMs: numbe
 export function acceptPageResult(body: { id?: string, ok?: boolean, error?: string, [k: string]: unknown }) {
   const id = typeof body?.id === 'string' ? body.id : ''
   const slot = pending.get(id)
-  if (!slot) return false
-  clearTimeout(slot.timer)
-  pending.delete(id)
-  slot.resolve(body)
+  if (!slot || slot.finished) return false
+  slot.results.push(body)
+  if (slot.results.length >= slot.expected) {
+    finishPending(id)
+    return true
+  }
+  if (!slot.settle) {
+    slot.settle = setTimeout(() => finishPending(id), SETTLE_MS)
+  }
   return true
 }
 
@@ -121,5 +155,8 @@ export function mountPageBridge(app: Express) {
   })
   app.post('/api/page/layout-snapshot', async (req, res) => {
     res.json(await pageCommand('layout-snapshot', req.body || {}, 15000))
+  })
+  app.post('/api/page/snapshot', async (req, res) => {
+    res.json(await pageCommand('snapshot', req.body || {}))
   })
 }

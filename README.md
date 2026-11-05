@@ -2,7 +2,7 @@
 
 A local-first AI coding host: real files on disk, a live Vite app, and a Mastra agent. The editor, setup, chat, and project switcher live at **http://localhost:4112**. The running app is on **http://localhost:5173**.
 
-Ask: *"list the files in this project"* or *"add a counter button"* — the agent uses `list-real-files` / `read-real-file` / `write-real-file`. Vite HMR shows the change.
+Ask: *"list the files in this project"* or *"add a counter button"* — the agent uses `grep` / ranged `read-real-file` / `str-replace` (exact unique hunk; fail closed). `write-real-file` is for new files. Vite HMR shows the change.
 
 ## Path 1 — this repo (host)
 

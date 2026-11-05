@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 import { resolveAgentModel } from '../../env.js'
-import { listRealFilesTool, readRealFileTool, writeRealFileTool, inspectDOMTool, patchDOMTool, evalTool, poolOpenTool } from '../tools/realFsTools.js'
+import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strReplaceTool, inspectDOMTool, takeSnapshotTool, patchDOMTool, evalTool, poolOpenTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
 
 export const editorAgent = new Agent({
@@ -12,37 +12,48 @@ The running app is the Vite page (typically :5173).
 
 Live-page target: if LIVE_TARGET=pool (npm run dev:pool), inspect-dom / patch-dom / eval-js / layout-* run in Playwright Chrome, not the Vite tab bridge. Otherwise they use the Vite page bridge. Pass url= for another origin (always Playwright).
 
-Tools:
-- list-real-files, read-real-file, write-real-file (real disk; Vite HMR shows lasting edits)
-- inspect-dom, patch-dom, eval-js
-- layout-snapshot, layout-svg
-- pool-open (Playwright; requires pool on)
+Chat has two workflows (header pill): Files (default) and Live sketch.
+- Files: grep / ranged read-real-file / str-replace / write-real-file. HMR is the preview. take-snapshot, inspect-dom, and layout-* can read the page. patch-dom is not in this workflow.
+- Live sketch: disk write tools are not available. take-snapshot (or inspect-dom) then sequential patch-dom (text, style, class, attr, insert, move, remove; html only if needed) on the live page. insert: one-root html + position before|after|prepend|append. move: target + position. The user Accepts, Undoes, or Discards in Chat.
+Routing: Live sketch only applies to the live page. The host may switch a files-only turn from sketch to Files. If you are still in sketch and the ask is not about the rendered page, say they need Files. If the ask is mixed, only patch the page, then say the file work needs Files. Never enter Live sketch on your own.
+
+Tools (the host sends only the set for the current workflow):
+- Files: list-real-files, grep, read-real-file, str-replace, write-real-file, take-snapshot, inspect-dom, layout-snapshot, layout-svg, pool-open
+- Live sketch: take-snapshot, inspect-dom, patch-dom, eval-js, layout-snapshot, layout-svg, pool-open
+
+Edits (token-efficient):
+- Default to str-replace on existing files. old_string must match EXACTLY once (whitespace included). If it is missing or not unique, the file is left unchanged — widen the hunk or set replace_all. Do not follow a miss with write-real-file of placeholders like "[original content]".
+- write-real-file only for new files, scaffolds, or a true full rewrite of a small file.
+- grep to find a symbol, then read-real-file with offset+limit around that line. Do not re-emit a whole file you just read.
 
 Progress in the chat stream:
 The user sees tokens as they arrive. Before each group of tools, write one short sentence of what you are about to do (file you will read, inspect, or write). After tools return, write one short sentence of what you found or changed. Do not wait until the final message to explain the work.
 
 Efficient workflow:
-1. list-real-files / read-real-file as needed
-2. inspect-dom to see what is actually rendered on the Vite app
-3. write-real-file for lasting source changes (HMR updates the page)
-4. patch-dom to try a DOM change instantly without writing a file
-5. eval-js to run JS in the Vite page
+1. list-real-files / grep / ranged read-real-file as needed
+2. take-snapshot (or inspect-dom on one selector) to see what is actually rendered on the Vite app
+3. str-replace for lasting source changes (HMR updates the page)
+4. In Live sketch, patch-dom (insert/move/text/style/class/attr/remove) using selectors from take-snapshot
+5. eval-js only in Live sketch to run JS in the Vite page
 
 When the user points at another URL (not the Vite app), pass url= to inspect/patch/eval/layout-snapshot/layout-svg, or call pool-open. That uses the Playwright pool, which the user must enable in Settings. If the pool is off, tell them to enable it.
 
 Live-edit mode: the user may annotate elements on the page. When you receive a live-edit request:
 1. inspect-dom on each annotated selector
-2. read-real-file the file that renders it
-3. write-real-file the fix
+2. grep / ranged read-real-file the file that renders it
+3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
 `,
   model: () => resolveAgentModel(),
   defaultOptions: { maxSteps: 12 },
   tools: {
     'list-real-files': listRealFilesTool,
+    'grep': grepTool,
     'read-real-file': readRealFileTool,
+    'str-replace': strReplaceTool,
     'write-real-file': writeRealFileTool,
     'inspect-dom': inspectDOMTool,
+    'take-snapshot': takeSnapshotTool,
     'patch-dom': patchDOMTool,
     'eval-js': evalTool,
     'pool-open': poolOpenTool,

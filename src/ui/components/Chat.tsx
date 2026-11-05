@@ -1,8 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { chatStream, getConfig, type ChatStreamEvent } from '../lib/api'
+import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type WorkflowSnapshot } from '../lib/api'
+import {
+  DEFAULT_CHAT_LOG,
+  historyForAgent,
+  loadChat,
+  publishChat,
+  publishChatAbort,
+  subscribeChat,
+  withStopped,
+  type LogItem,
+  type ToolStep,
+} from '../lib/chatSession'
 
 function looksLikeKeyError(text: string): boolean {
   return /api.?key|401|unauthorized|invalid_api_key|incorrect api key/i.test(text)
+}
+
+function isWriteTool(name: string): boolean {
+  return name === 'write-real-file' || name === 'str-replace' || name === 'writeRealFileTool'
 }
 
 function previewPartialArgs(name: string, raw: string): string {
@@ -13,6 +28,12 @@ function previewPartialArgs(name: string, raw: string): string {
     const bits = [n]
     if (typeof a.path === 'string') bits.push(a.path)
     else if (typeof a.selector === 'string') bits.push(a.selector)
+    if (typeof a.target === 'string') bits.push(a.target)
+    if (typeof a.pattern === 'string') bits.push(a.pattern.slice(0, 40))
+    if (typeof a.op === 'string') bits.push(a.op)
+    if (typeof a.position === 'string') bits.push(a.position)
+    if (typeof a.text === 'string') bits.push(a.text.slice(0, 40))
+    if (typeof a.old_string === 'string') bits.push(`${a.old_string.length}→${typeof a.new_string === 'string' ? a.new_string.length : 0}`)
     if (typeof a.content === 'string') bits.push(`${a.content.length} chars`)
     return bits.join(' ')
   } catch { /* still streaming */ }
@@ -22,11 +43,6 @@ function previewPartialArgs(name: string, raw: string): string {
   if (target) return `${n} ${target}`
   return `${n}…`
 }
-
-type ToolStep = { id: string, name: string, detail: string, result?: string, status: 'running' | 'done' | 'error' }
-type LogItem =
-  | { role: 'system' | 'user' | 'ai' | 'error' | 'think', text: string }
-  | { role: 'tools', steps: ToolStep[] }
 
 function upsertToolStep(log: LogItem[], step: ToolStep): LogItem[] {
   const last = log[log.length - 1]
@@ -46,20 +62,48 @@ function appendRole(log: LogItem[], role: 'ai' | 'think', text: string): LogItem
   return [...log, { role, text }]
 }
 
-export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: {
+export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, projectId = '' }: {
   activePath: string
   keyKnown: boolean | undefined
   onNeedSetup: () => void
   onAfterChat: () => void
   embed?: boolean
+  projectId?: string
 }) {
-  const [log, setLog] = useState<LogItem[]>([
-    { role: 'system', text: 'AI has real FS tools (read/write) and live-page inspect/patch/eval on the Vite app. Ask: "inspect the page" or "make this a todo app"' }
-  ])
+  const [log, setLog] = useState<LogItem[]>(() => loadChat(projectId).log)
   const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
-  const [workingLabel, setWorkingLabel] = useState('')
+  const [sending, setSending] = useState(() => loadChat(projectId).sending)
+  const [workingLabel, setWorkingLabel] = useState(() => loadChat(projectId).workingLabel)
+  const [workflow, setWorkflow] = useState<ChatWorkflow>('files')
+  const [sketch, setSketch] = useState<WorkflowSnapshot | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const fingerprint = useRef('')
+  const abortRef = useRef<AbortController | null>(null)
+
+  async function refreshWorkflow() {
+    try {
+      const data = await getWorkflow()
+      if (data?.mode) setWorkflow(data.mode)
+      setSketch(data)
+    } catch { /* launcher down */ }
+  }
+
+  async function setWorkflowMode(mode: ChatWorkflow) {
+    if (mode === workflow) return
+    try {
+      const data = await postWorkflow({ mode })
+      setWorkflow(data.mode)
+      setSketch(data)
+    } catch { /* ignore */ }
+  }
+
+  async function sketchAction(action: 'undo' | 'discard' | 'accept') {
+    try {
+      const data = await postWorkflow({ action })
+      setWorkflow(data.mode)
+      setSketch(data)
+    } catch { /* ignore */ }
+  }
 
   function guidedKeyError(hasKey: boolean): string {
     if (hasKey) {
@@ -87,6 +131,8 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
     setInput('')
     setSending(true)
     setWorkingLabel('starting…')
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
     let aiText = ''
     let thinkText = ''
     let wroteFiles = false
@@ -94,6 +140,9 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
     const applyEvent = (ev: ChatStreamEvent) => {
       if (ev.type === 'status') {
         setWorkingLabel(ev.text)
+      } else if (ev.type === 'workflow') {
+        setWorkflow(ev.mode)
+        if (ev.reason) setLog(l => [...l, { role: 'system', text: ev.reason }])
       } else if (ev.type === 'reasoning-delta') {
         thinkText += ev.text
         setWorkingLabel('thinking…')
@@ -101,13 +150,13 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
       } else if (ev.type === 'tool-call') {
         setWorkingLabel(ev.detail || ev.name)
         setLog(l => upsertToolStep(l, { id: ev.id, name: ev.name, detail: ev.detail, status: 'running' }))
-        if (ev.name === 'write-real-file' || ev.name === 'writeRealFileTool') wroteFiles = true
+        if (isWriteTool(ev.name)) wroteFiles = true
       } else if (ev.type === 'tool-delta') {
         toolArgs[ev.id] = (toolArgs[ev.id] || '') + ev.text
         const detail = previewPartialArgs(ev.name, toolArgs[ev.id])
         setWorkingLabel(detail)
         setLog(l => upsertToolStep(l, { id: ev.id, name: ev.name, detail, status: 'running' }))
-        if (ev.name === 'write-real-file' || ev.name === 'writeRealFileTool') wroteFiles = true
+        if (isWriteTool(ev.name)) wroteFiles = true
       } else if (ev.type === 'tool-result') {
         setWorkingLabel(ev.ok ? ev.detail : ev.detail)
         setLog(l => {
@@ -134,15 +183,36 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
       }
     }
     try {
-      await chatStream([{ role: 'user', content: userText + ` Current file: ${activePath}` }], applyEvent)
-      if (wroteFiles) onAfterChat()
+      await chatStream(historyForAgent(log, userText, activePath), applyEvent, ctrl.signal, workflow)
+      if (ctrl.signal.aborted) {
+        setLog(withStopped)
+      } else {
+        await refreshWorkflow()
+        if (wroteFiles) onAfterChat()
+      }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setLog(l => [...l, { role: 'error', text: looksLikeKeyError(msg) ? guidedKeyError(keyKnown === true) : `Chat failed: ${msg.slice(0, 2000)}` }])
+      if (isAbortError(e) || ctrl.signal.aborted) {
+        setLog(withStopped)
+      } else {
+        const msg = e instanceof Error ? e.message : String(e)
+        setLog(l => [...l, { role: 'error', text: looksLikeKeyError(msg) ? guidedKeyError(keyKnown === true) : `Chat failed: ${msg.slice(0, 2000)}` }])
+      }
     } finally {
+      if (abortRef.current === ctrl) abortRef.current = null
       setSending(false)
       setWorkingLabel('')
     }
+  }
+
+  function stop() {
+    publishChatAbort(projectId)
+    if (abortRef.current) {
+      abortRef.current.abort()
+      return
+    }
+    setSending(false)
+    setWorkingLabel('')
+    setLog(withStopped)
   }
 
   // Keep the top-bar pill honest when the key state was unknown at send time.
@@ -155,20 +225,76 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
   }
 
   useEffect(() => {
+    void refreshWorkflow()
+  }, [])
+
+  useEffect(() => {
+    const loaded = loadChat(projectId)
+    fingerprint.current = JSON.stringify({ log: loaded.log, sending: loaded.sending, workingLabel: loaded.workingLabel })
+    setLog(loaded.log)
+    setSending(loaded.sending)
+    setWorkingLabel(loaded.workingLabel)
+    return subscribeChat(projectId, (state) => {
+      const next = JSON.stringify({ log: state.log, sending: state.sending, workingLabel: state.workingLabel })
+      if (next === fingerprint.current) return
+      fingerprint.current = next
+      setLog(state.log)
+      setSending(state.sending)
+      setWorkingLabel(state.workingLabel)
+    }, () => {
+      abortRef.current?.abort()
+    })
+  }, [projectId])
+
+  useEffect(() => {
+    const next = JSON.stringify({ log, sending, workingLabel })
+    if (next === fingerprint.current) return
+    fingerprint.current = next
+    const t = setTimeout(() => {
+      publishChat({ v: 1, projectId: projectId || 'default', log, sending, workingLabel, updatedAt: Date.now() })
+    }, sending ? 80 : 0)
+    return () => clearTimeout(t)
+  }, [log, sending, workingLabel, projectId])
+
+  useEffect(() => {
     const el = scroller.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [log, sending, workingLabel])
+  }, [log, sending, workingLabel, sketch])
+
+  function clearChat() {
+    if (sending) return
+    setLog(DEFAULT_CHAT_LOG)
+    setWorkingLabel('')
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div style={{ padding: '9px 12px', borderBottom: '1px solid #1e1e23', fontSize: 12, fontWeight: 600, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ padding: '9px 12px', borderBottom: '1px solid #1e1e23', fontSize: 12, fontWeight: 600, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         AI Chat <span style={{ fontWeight: 400, color: '#71717a' }}>· Mastra</span>
+        <div className="seg" role="group" aria-label="Chat workflow">
+          <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => void setWorkflowMode('files')}>Files</button>
+          <button type="button" className={workflow === 'sketch' ? 'on' : ''} disabled={sending} onClick={() => void setWorkflowMode('sketch')}>Live sketch</button>
+        </div>
+        <button type="button" className="deck-btn" disabled={sending} onClick={clearChat} title="Clear this chat" style={{ marginLeft: 'auto', padding: '4px 8px' }}>Clear</button>
         {sending && (
-          <span className="pill warn" style={{ marginLeft: 'auto', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             <span className="dot" />{workingLabel || 'working'}
           </span>
         )}
       </div>
+      {workflow === 'sketch' && (
+        <div className="sketch-panel">
+          <div className="sketch-banner">Disk writes paused. Patches stay on the page until Discard or HMR.</div>
+          {(sketch?.patches || []).map(p => (
+            <div key={p.id} className="sketch-patch">{p.detail || `${p.op} ${p.selector}`}</div>
+          ))}
+          <div className="sketch-actions">
+            <button type="button" className="deck-btn" disabled={!sketch?.patches?.length || sending} onClick={() => void sketchAction('undo')}>Undo last</button>
+            <button type="button" className="deck-btn" disabled={!sketch?.patches?.length || sending} onClick={() => void sketchAction('discard')}>Discard</button>
+            <button type="button" className="deck-btn primary" disabled={!sketch?.patches?.length || sending} onClick={() => void sketchAction('accept')}>Accept (keep on page)</button>
+          </div>
+        </div>
+      )}
       <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 12.5, minHeight: 0 }}>
         {log.map((m, i) => (
           m.role === 'tools' ? (
@@ -209,14 +335,27 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed }: 
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { void send(); void refreshKeyHint() } }}
-          placeholder="Ask AI to edit files..."
+          onKeyDown={e => {
+            if (e.key === 'Escape' && sending) {
+              e.preventDefault()
+              stop()
+              return
+            }
+            if (e.key === 'Enter' && !sending) { void send(); void refreshKeyHint() }
+          }}
+          placeholder={workflow === 'sketch' ? 'Patch the live page…' : 'Ask AI to edit files...'}
           className="deck-input"
           style={{ flex: 1 }}
         />
-        <button onClick={() => { void send(); void refreshKeyHint() }} className="deck-btn" disabled={sending}>
-          {sending ? 'Sending…' : 'Send'}
-        </button>
+        {sending ? (
+          <button type="button" onClick={stop} className="deck-btn danger" title="Stop this turn (Esc)">
+            Stop
+          </button>
+        ) : (
+          <button type="button" onClick={() => { void send(); void refreshKeyHint() }} className="deck-btn">
+            Send
+          </button>
+        )}
       </div>
     </div>
   )

@@ -2,6 +2,7 @@
 
 export type ChatStreamEvent =
   | { type: 'status'; text: string }
+  | { type: 'workflow'; mode: 'files' | 'sketch'; reason?: string }
   | { type: 'reasoning-delta'; text: string }
   | { type: 'tool-call'; id: string; name: string; detail: string }
   | { type: 'tool-delta'; id: string; name: string; text: string }
@@ -19,6 +20,31 @@ export type ChatSseResponse = {
   flush?: () => void
   end: () => void
   socket?: { setNoDelay?: (v: boolean) => void } | null
+}
+
+export type ChatStreamReq = {
+  aborted?: boolean
+  socket?: ChatSseResponse['socket'] | null
+  on?: (event: string, listener: () => void) => void
+}
+
+export function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const name = (err as { name?: string }).name
+  return name === 'AbortError' || name === 'TimeoutError'
+}
+
+/** Tie a Mastra abortSignal to the HTTP client disconnect. */
+export function abortSignalFromReq(req?: ChatStreamReq): AbortSignal {
+  const ctrl = new AbortController()
+  if (!req) return ctrl.signal
+  const abort = () => {
+    if (!ctrl.signal.aborted) ctrl.abort()
+  }
+  if (req.aborted) abort()
+  req.on?.('aborted', abort)
+  req.on?.('close', abort)
+  return ctrl.signal
 }
 
 function asRecord(value: unknown): LooseRecord {
@@ -82,6 +108,13 @@ export function summarizeArgs(name: string, args: unknown): string {
   if (typeof a.path === 'string') parts.push(a.path)
   else if (typeof a.selector === 'string') parts.push(a.selector)
   if (typeof a.url === 'string' && a.url) parts.push(a.url)
+  if (typeof a.pattern === 'string') parts.push(clip(a.pattern, 40))
+  if (typeof a.op === 'string') parts.push(a.op)
+  if (typeof a.target === 'string' && a.target) parts.push(a.target)
+  if (typeof a.position === 'string' && a.position) parts.push(a.position)
+  if (typeof a.text === 'string') parts.push(clip(a.text, 40))
+  if (typeof a.style === 'string') parts.push(clip(a.style, 40))
+  if (typeof a.old_string === 'string') parts.push(`${a.old_string.length}→${typeof a.new_string === 'string' ? a.new_string.length : 0}`)
   if (typeof a.content === 'string') parts.push(`${a.content.length} chars`)
   else if (typeof a.html === 'string') parts.push(`${a.html.length} chars html`)
   else if (typeof a.code === 'string') parts.push(clip(a.code, 80))
@@ -99,6 +132,9 @@ export function summarizeResult(result: unknown): string {
   if (typeof r.bytes === 'number') bits.push(`${r.bytes}b`)
   if (typeof r.content === 'string') bits.push(`${r.content.length} chars`)
   if (Array.isArray(r.files)) bits.push(`${r.files.length} files`)
+  if (Array.isArray(r.hits)) bits.push(`${r.hits.length} hits`)
+  if (typeof r.matches === 'number') bits.push(`${r.matches} match${r.matches === 1 ? '' : 'es'}`)
+  if (typeof r.startLine === 'number' && typeof r.endLine === 'number') bits.push(`L${r.startLine}–${r.endLine}`)
   if (r.rect && typeof r.rect === 'object') {
     const rect = r.rect as { width?: number; height?: number }
     if (rect.width != null && rect.height != null) bits.push(`${Math.round(rect.width)}×${Math.round(rect.height)}`)
@@ -171,11 +207,12 @@ export function mapMastraChunk(chunk: unknown): ChatStreamEvent | null {
   if (type === 'tool-result' || type === 'tool-output') {
     const name = toolNameOf(p)
     const result = p.result ?? p.output
+    const failed = p.isError === true || (result && typeof result === 'object' && 'error' in (result as object) && (result as { error?: unknown }).error)
     return {
       type: 'tool-result',
       id: toolIdOf(p, name),
       name,
-      ok: p.isError !== true,
+      ok: !failed,
       detail: summarizeResult(result),
     }
   }
@@ -202,7 +239,7 @@ export function mapMastraChunk(chunk: unknown): ChatStreamEvent | null {
 
 export function beginChatSse(
   res: ChatSseResponse,
-  req?: { aborted?: boolean; socket?: ChatSseResponse['socket'] | null },
+  req?: ChatStreamReq,
 ) {
   res.socket?.setNoDelay?.(true)
   req?.socket?.setNoDelay?.(true)
@@ -227,22 +264,51 @@ export function beginChatSse(
 export async function pipeAgentChatStream(
   messages: unknown,
   res: ChatSseResponse,
-  req?: { aborted?: boolean; socket?: ChatSseResponse['socket'] | null },
+  req?: ChatStreamReq,
+  workflow?: unknown,
 ) {
+  const { parseSketchMode, setSketchMode, getSketchMode, SKETCH_TURN_PREAMBLE } = await import('./sketchSession.js')
+  const {
+    FILES_ROUTED_PREAMBLE,
+    SKETCH_MIXED_PREAMBLE,
+    routeChatTurn,
+    withSystemPreamble,
+  } = await import('./workflowRoute.js')
+  const parsed = parseSketchMode(workflow)
+  if (parsed) setSketchMode(parsed)
+  const routed = routeChatTurn(getSketchMode(), messages)
+  if (routed.switched) setSketchMode(routed.mode)
+  const mode = getSketchMode()
+  let payload: unknown = messages
+  if (mode === 'sketch' && routed.intent === 'mixed') payload = withSystemPreamble(SKETCH_MIXED_PREAMBLE, messages)
+  else if (mode === 'sketch') payload = withSystemPreamble(SKETCH_TURN_PREAMBLE, messages)
+  else if (routed.switched) payload = withSystemPreamble(FILES_ROUTED_PREAMBLE, messages)
   const { send } = beginChatSse(res, req)
-  send({ type: 'status', text: 'starting…' })
+  const abortSignal = abortSignalFromReq(req)
+  if (routed.switched) send({ type: 'workflow', mode: routed.mode, reason: routed.reason })
+  send({ type: 'status', text: mode === 'sketch' ? 'live sketch…' : routed.switched ? 'switched to Files…' : 'starting…' })
   try {
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.stream(messages as never, { maxSteps: 12 })
+    const { activeToolsForMode } = await import('./agentTools.js')
+    const result = await agent.stream(payload as never, {
+      maxSteps: 12,
+      abortSignal,
+      activeTools: activeToolsForMode(mode),
+    })
     for await (const chunk of result.fullStream) {
-      if (req?.aborted) break
+      if (req?.aborted || abortSignal.aborted) break
       const mapped = mapMastraChunk(chunk)
       if (mapped) send(mapped)
     }
     send({ type: 'done' })
     res.end()
   } catch (e: unknown) {
+    if (req?.aborted || abortSignal.aborted || isAbortError(e)) {
+      try { send({ type: 'done' }) } catch { /* closed */ }
+      try { res.end() } catch { /* closed */ }
+      return
+    }
     const message = e instanceof Error ? e.message : String(e)
     console.error(e)
     try { send({ type: 'error', error: message }) } catch { /* closed */ }

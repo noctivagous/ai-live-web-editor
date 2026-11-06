@@ -59,7 +59,14 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
     config() {
       return {
         server: { fs: { allow: AGENTATION_OK ? [PKG_ROOT, AGENTATION_DIR] : [PKG_ROOT] } },
-        resolve: { alias: AGENTATION_OK ? { agentation: AGENTATION_DIR } : {} },
+        resolve: {
+          alias: AGENTATION_OK ? { agentation: AGENTATION_DIR } : {},
+          // The agentation entry is served from the editor repo via /@fs,
+          // so its bare `react` imports would resolve to the repo copy
+          // while the app uses the project copy — two Reacts, invalid
+          // hook call, empty toolbar. Dedupe pins a single copy.
+          dedupe: ['react', 'react-dom'],
+        },
       }
     },
     configResolved(config) {

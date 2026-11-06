@@ -1094,23 +1094,47 @@ pretends to switch the workspace."
 
 ### Todos
 
-- [ ] "Open folder…" button by the project dropdown:
+- [x] "Open folder…" button by the project dropdown:
   `showDirectoryPicker()` behind a Chromium feature-check with a
-  plain fallback message elsewhere.
-- [ ] Client-side import walk: enumerate, skip `node_modules`/`.git`/
+  plain fallback message elsewhere. (`src/ui/App.tsx`, `isFolderImportSupported`)
+- [x] Client-side import walk: enumerate, skip `node_modules`/`.git`/
   binaries, enforce caps (file count + total bytes, stated in UI),
-  POST files through existing `/api/fs/write` into a new project,
-  then select it (`src/launcher.ts` create/select flow).
-- [ ] Import report: files copied / skipped / failed, shown in-app
-  (no silent truncation).
-- [ ] Persist the `FileSystemDirectoryHandle` in IndexedDB +
-  "re-import" (refresh copy) action, if the permission flow proves
-  smooth in testing; otherwise one-shot import only — record the
-  outcome here.
-- [ ] Spike note (timeboxed, this file): what a true live bridge
-  would require (edit write-back, external-change detection, Vite
-  root problem) and a keep/drop recommendation. No bridge code
-  until a user need survives the import option.
+  upload in small batches to `POST /api/projects/import`, then select.
+  Deviation from the draft: a dedicated batch endpoint instead of N×
+  `POST /api/fs/write` — per-file writes would merge with the seed
+  template from `/create` (pollution) and run `npm install` before the
+  files land (wrong order). Same `safePath` discipline, no seed files,
+  `npm install` only when a `package.json` arrived. (`src/server.ts`,
+  `src/ui/lib/folderImport.ts`)
+- [x] Over-limit dialog: above 50 MB default / 2000 files the UI shows
+  totals and offers Cancel / import-first-N / import-everything-anyway.
+  Never silently truncates. (`OverLimitDialog`)
+- [x] Import report: files copied / skipped / failed, shown in-app
+  (no silent truncation). (`ImportReportDialog`)
+- [x] Persist the `FileSystemDirectoryHandle` in IndexedDB +
+  "re-import" (refresh copy) action. Shipped: handles are
+  structured-cloneable so persistence works; `queryPermission` /
+  `requestPermission({mode:'read'})` re-grant on restore, "Re-import"
+  button appears only when a stored handle re-validates. Revoked
+  permission falls back to "use Open folder… again". Overwrite path
+  wipes the project dir first (explicit confirm) and re-runs install.
+- [x] Spike note (timeboxed): a true live bridge would require (1) a
+  client-side write-back loop (watch agent edits, write through
+  handles — needs write permission + per-file handles retained);
+  (2) external-change detection (poll `getFile()` lastModified —
+  expensive, no FS events in the API); (3) Vite root problem (Vite
+  must serve the picked folder — only solvable by running the
+  launcher/Vite against it, i.e. Path 2, not the browser). Verdict:
+  **drop** — import-a-copy + Re-import covers the need; revisit only
+  if users reject the copy model.
+
+Landed 2026-11-06: `src/ui/lib/folderImport.ts` (+ tests),
+`src/ui/components/FolderImport.tsx`, `POST /api/projects/import`,
+`writeImportFiles` (+ tests). Verified: 13/13 new tests pass,
+`npm run ui:build` clean, `tsc` shows only the two pre-existing
+§0 errors. Live browser + endpoint smoke test not run (sandbox
+blocks listening sockets); verify by opening the built launcher and
+importing a fixture folder.
 
 ### Risks / alternatives rejected
 

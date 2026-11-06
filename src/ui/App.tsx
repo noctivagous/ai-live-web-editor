@@ -4,6 +4,12 @@ import { MonacoEditor } from './components/MonacoEditor'
 import { Preview } from './components/Preview'
 import { Chat } from './components/Chat'
 import { NoticeDialog, SettingsModal } from './components/Modal'
+import { ImportProgressDialog, ImportReportDialog, OverLimitDialog, ReimportButton } from './components/FolderImport'
+import {
+  applyCaps, defaultCaps, fmtBytes, isFolderImportSupported, pickFolder, sanitizeProjectName,
+  saveFolderHandle, uploadImport,
+  type ImportBatchResult, type ImportProgress, type PickedFolder, type SkippedEntry,
+} from './lib/folderImport'
 import { SetupWizard } from './components/SetupWizard'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
@@ -37,6 +43,18 @@ export default function App() {
 
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [activeProject, setActiveProject] = useState('')
+  // Folder import (Step 10): import-a-copy via showDirectoryPicker.
+  const [overLimit, setOverLimit] = useState<{
+    pick: PickedFolder
+    plan: ReturnType<typeof applyCaps>
+    repick: null | (() => Promise<Omit<PickedFolder, 'dirHandle'>>)
+  } | null>(null)
+  const [importProg, setImportProg] = useState<{ name: string; progress: ImportProgress } | null>(null)
+  const [importReport, setImportReport] = useState<{
+    name: string
+    result: ImportBatchResult
+    skipped: SkippedEntry[]
+  } | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [connPayload, setConnPayload] = useState<ConnectionsPayload | null>(null)
   const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
@@ -186,6 +204,132 @@ export default function App() {
     }
   }
 
+  /* Folder import (Step 10): pick → maybe over-limit dialog → name →
+   * batched upload → report. A copy, never a live sync. */
+  async function runImportFlow(getPick: () => Promise<PickedFolder>) {
+    let pick: PickedFolder
+    try {
+      setStatus('reading folder…')
+      pick = await getPick()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('AbortError') || (e instanceof DOMException && e.name === 'AbortError')) {
+        setStatus('folder pick cancelled')
+        return
+      }
+      setNotice(`Could not read the folder: ${msg}`)
+      setStatus('folder read failed')
+      return
+    }
+    if (pick.files.length === 0) {
+      setNotice(`No importable files in “${pick.dirName}”. Only text source files are copied; dependencies (.git, node_modules), build output, and binaries are skipped.`)
+      setStatus('nothing to import')
+      return
+    }
+    const plan = applyCaps(pick.files.map(f => ({ path: f.path, size: f.file.size })), defaultCaps())
+    // Over the caps (default 50 MB / 2000 files)? Ask — never silently cut.
+    if (plan.over) {
+      setOverLimit({ pick, plan, repick: null })
+      return
+    }
+    await startUpload(pick, pick.files, false)
+  }
+
+  async function handleOpenFolder() {
+    if (!isFolderImportSupported()) {
+      setNotice('Opening a folder needs Chrome, Edge, or Opera on desktop (the File System Access picker is Chromium-only). Alternatives: run this editor inside your own app directory (Vite-plugin path), or copy the folder into projects/ by hand.')
+      return
+    }
+    await runImportFlow(() => pickFolder())
+  }
+
+  async function handleReimport(getFolder: () => Promise<Omit<PickedFolder, 'dirHandle'>>) {
+    const repick = async () => getFolder()
+    let pick: Omit<PickedFolder, 'dirHandle'>
+    try {
+      setStatus('reading folder…')
+      pick = await repick()
+    } catch (e: unknown) {
+      setNotice(`Could not re-read the folder: ${e instanceof Error ? e.message : String(e)}`)
+      return
+    }
+    if (pick.files.length === 0) {
+      setNotice('No importable files in the original folder anymore.')
+      return
+    }
+    const stub = {
+      dirName: pick.dirName,
+      dirHandle: null as unknown as PickedFolder['dirHandle'],
+      files: pick.files,
+      skipped: pick.skipped,
+      totalBytes: pick.totalBytes,
+    }
+    const plan = applyCaps(pick.files.map(f => ({ path: f.path, size: f.file.size })), defaultCaps())
+    if (plan.over) {
+      setOverLimit({ pick: stub, plan, repick })
+      return
+    }
+    const ok = confirm(`Re-import replaces every file in project “${activeProject}” with a fresh copy from “${pick.dirName}” (${pick.files.length} files, ${fmtBytes(pick.totalBytes)}). Continue?`)
+    if (!ok) return
+    await startUpload({ ...stub, dirHandle: stub.dirHandle }, stub.files, true)
+  }
+
+  function handleOverLimitChoice(choice: 'cancel' | 'capped' | 'all') {
+    const pending = overLimit
+    setOverLimit(null)
+    if (!pending || choice === 'cancel') {
+      setStatus('import cancelled (over limit)')
+      return
+    }
+    const files = choice === 'capped'
+      ? pending.pick.files.filter(f => pending.plan.within.some(w => w.path === f.path))
+      : pending.pick.files
+    // Fresh picks (repick === null) always create a new project; re-imports overwrite.
+    const overwrite = pending.repick !== null
+    if (pending.repick) {
+      const ok = confirm(`Re-import replaces every file in project “${activeProject}” with a fresh copy (${files.length} files). Continue?`)
+      if (!ok) return
+    }
+    void startUpload(pending.pick, files, overwrite)
+  }
+
+  async function startUpload(
+    pick: PickedFolder,
+    files: { path: string; file: File }[],
+    overwrite: boolean,
+  ) {
+    const suggested = sanitizeProjectName(overwrite ? activeProject : pick.dirName)
+    const raw = overwrite ? suggested : prompt('Import as project (letters, numbers, dash, underscore)', suggested)
+    if (!raw) {
+      setStatus('import cancelled')
+      return
+    }
+    const name = sanitizeProjectName(raw)
+    setStatus(`importing ${files.length} files → ${name}…`)
+    setImportProg({ name, progress: { sentFiles: 0, totalFiles: files.length, sentBytes: 0, totalBytes: files.reduce((n, f) => n + f.file.size, 0), phase: 'uploading' } })
+    try {
+      const result = await uploadImport(name, files, {
+        overwrite,
+        onProgress: (progress) => setImportProg({ name, progress }),
+      })
+      setImportProg(null)
+      if (pick.dirHandle) {
+        try { await saveFolderHandle(name, pick.dirHandle) } catch { /* re-import is optional */ }
+      }
+      skipSave.current = true
+      setActivePath('/index.html')
+      await loadProjects()
+      if (result.active) setActiveProject(result.active)
+      await loadFiles()
+      setStatus(`imported ${name}`)
+      setImportReport({ name, result, skipped: pick.skipped })
+    } catch (e: unknown) {
+      setImportProg(null)
+      setNotice(`Import failed: ${e instanceof Error ? e.message : String(e)}`)
+      setStatus('import failed')
+    }
+  }
+
   useEffect(() => { loadFiles(); refreshConfig(); loadProjects() }, [])
 
   useEffect(() => {
@@ -299,6 +443,16 @@ export default function App() {
             <option value="__refresh">Refresh list</option>
           </select>
           <button className="deck-btn" onClick={() => { void handleNewProject() }} title="Create a new app under projects/">New project</button>
+          <button
+            className="deck-btn"
+            onClick={() => { void handleOpenFolder() }}
+            title={isFolderImportSupported()
+              ? 'Pick a folder on your disk (Chrome/Edge/Opera) — imports a copy as a new project'
+              : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
+          >
+            Open folder…
+          </button>
+          <ReimportButton projectId={activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="deck-btn" onClick={() => setShowSettings(true)} title="Settings">Settings</button>
@@ -358,6 +512,25 @@ export default function App() {
       </div>
 
       <NoticeDialog notice={notice} onClose={() => setNotice(null)} />
+      {overLimit && (
+        <OverLimitDialog
+          pick={overLimit.pick}
+          maxBytes={defaultCaps().maxBytes}
+          maxFiles={defaultCaps().maxFiles}
+          withinCount={overLimit.plan.within.length}
+          withinBytes={overLimit.plan.within.reduce((n, f) => n + f.size, 0)}
+          onChoice={handleOverLimitChoice}
+        />
+      )}
+      {importProg && <ImportProgressDialog name={importProg.name} progress={importProg.progress} />}
+      {importReport && (
+        <ImportReportDialog
+          name={importReport.name}
+          result={importReport.result}
+          skipped={importReport.skipped}
+          onClose={() => setImportReport(null)}
+        />
+      )}
       <SettingsModal
         open={showSettings}
         onClose={() => setShowSettings(false)}

@@ -97,8 +97,37 @@ export function selectProject(id: string): ProjectInfo {
   return found
 }
 
-function validProjectId(id: string) {
+export function validProjectId(id: string) {
   return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(id)
+}
+
+export interface ImportWriteError { path: string; error: string }
+
+/* Folder-import batch writer (Step 10): writes caller-supplied text files
+ * under dest only. Used by POST /api/projects/import; unit-tested. */
+export function writeImportFiles(
+  dest: string,
+  files: { path: unknown; content: unknown }[],
+): { received: number; writeErrors: ImportWriteError[] } {
+  const writeErrors: ImportWriteError[] = []
+  let received = 0
+  for (const f of files) {
+    try {
+      const rec = f as { path?: unknown; content?: unknown }
+      const p = typeof rec?.path === 'string' ? rec.path : ''
+      const content = typeof rec?.content === 'string' ? rec.content : null
+      if (!p || content === null) throw new Error('path and content required')
+      const full = path.resolve(dest, '.' + p)
+      if (!full.startsWith(dest + path.sep) && full !== dest) throw new Error('Path traversal')
+      fs.mkdirSync(path.dirname(full), { recursive: true })
+      fs.writeFileSync(full, content, 'utf-8')
+      received += 1
+    } catch (e: any) {
+      const rec = f as { path?: unknown }
+      writeErrors.push({ path: String(rec?.path ?? '?'), error: e.message })
+    }
+  }
+  return { received, writeErrors }
 }
 
 export function createProject(id: string): ProjectInfo {

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool } from './env.js'
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
-import { createProject, ensureWorkspace, getFsRoot, listProjects, readActiveId, selectProject, WORKSPACE_ROOT } from './launcher.js'
+import { createProject, ensureWorkspace, getFsRoot, listProjects, readActiveId, selectProject, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
@@ -96,6 +96,51 @@ app.post('/api/projects/create', (req, res) => {
     const id = typeof req.body?.id === 'string' ? req.body.id : ''
     const project = createProject(id)
     res.json({ ok: true, active: project.id, root: project.root, projects: listProjects() })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
+})
+
+/* Folder import (Step 10): client enumerated a user-picked directory via
+ * showDirectoryPicker and uploads it in small batches. First batch creates
+ * an empty dir (no seed files — unlike /create); the final batch runs
+ * npm install when a package.json arrived and selects the project. */
+app.post('/api/projects/import', (req, res) => {
+  try {
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim() : ''
+    const files = Array.isArray(body.files) ? body.files : []
+    const done = body.done === true
+    const first = body.first === true
+    const overwrite = body.overwrite === true
+    if (!validProjectId(name)) throw new Error('Project name: letters, numbers, dash, underscore')
+    const SKIP = new Set(['node_modules', 'dist', '.vite', '.chrome-data'])
+    if (SKIP.has(name) || name.startsWith('.')) throw new Error('Reserved name')
+    const dest = path.join(WORKSPACE_ROOT, name)
+    if (first) {
+      if (fs.existsSync(dest)) {
+        if (!overwrite) throw new Error(`Project "${name}" already exists`)
+        fs.rmSync(dest, { recursive: true, force: true })
+      }
+      fs.mkdirSync(dest, { recursive: true })
+    } else if (!fs.existsSync(dest)) {
+      throw new Error(`Unknown import target: ${name}`)
+    }
+    const { received, writeErrors } = writeImportFiles(dest, files)
+    if (!done) return res.json({ ok: true, received, writeErrors })
+    let installed = false
+    let installError: string | undefined
+    if (fs.existsSync(path.join(dest, 'package.json'))) {
+      try {
+        execSync('npm install', { cwd: dest, stdio: 'inherit' })
+        installed = true
+      } catch (e: any) {
+        installError = e.message || 'npm install failed'
+      }
+    }
+    resetSketchForProjectSwitch()
+    const project = selectProject(name)
+    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects(), received, installed, installError, writeErrors })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
   }

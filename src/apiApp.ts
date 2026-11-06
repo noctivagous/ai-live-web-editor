@@ -12,7 +12,7 @@ import { mountWorkflowApi } from './workflowApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { activeToolsForMode } from './agentTools.js'
-import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard } from './sketchSession.js'
+import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard, withSketchPreamble } from './sketchSession.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -206,12 +206,16 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       const summary = summarizeAnnotations(notes)
       const resolvedUrl = typeof pageUrl === 'string' ? pageUrl : ''
       const resolutions = resolveAnnotationSelectors(notes)
-      const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl, resolutions, mode: getSketchMode() })
+      const mode = getSketchMode()
+      const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl, resolutions, mode })
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
-      const result = await agent.generate([{ role: 'user', content: prompt }], {
+      const messages = mode === 'sketch'
+        ? withSketchPreamble([{ role: 'user', content: prompt }])
+        : [{ role: 'user', content: prompt }]
+      const result = await agent.generate(messages as any, {
         maxSteps: 12,
-        activeTools: activeToolsForMode(getSketchMode()),
+        activeTools: activeToolsForMode(mode),
       })
       res.json({
         ok: true,
@@ -224,12 +228,6 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       console.error(e)
       res.status(500).json({ ok: false, error: e.message })
     }
-  })
-
-  app.post('/api/live-edit/agentation', async (req, res) => {
-    const { prepareAgentationPrompt } = await import('./live-edit/agentationSubmit.js')
-    const { status, payload } = await prepareAgentationPrompt(req.body || {})
-    res.status(status).json(payload)
   })
 
   app.get('/live-edit/overlay.js', (_req, res) => {

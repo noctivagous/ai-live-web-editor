@@ -228,6 +228,8 @@ export function mountChatOverlay() {
     size.h = Math.max(MIN_HEIGHT, sizing.h + ev.clientY - sizing.y)
     clampWin()
     if (window.__AI_LIVE_CHAT__) window.__AI_LIVE_CHAT__.width = size.w
+    const api = window.__AI_LIVE_EDIT__
+    if (api && typeof api.setToolbarOffset === 'function') api.setToolbarOffset(size.w + 32)
   })
   window.addEventListener('mouseup', () => {
     if (!sizing) return
@@ -271,32 +273,63 @@ export function mountChatOverlay() {
       clampWin()
       savePos(pos())
       if (window.__AI_LIVE_CHAT__) window.__AI_LIVE_CHAT__.width = size.w
+      const api = window.__AI_LIVE_EDIT__
+      if (api && typeof api.setToolbarOffset === 'function') api.setToolbarOffset(size.w + 32)
     }
-  })
-
-  // Agentation toolbar Send: the agentation entry posts the built prompt on
-  // the page window. Expand the chat, then forward it into the chat iframe,
-  // which sends it as a real user turn.
-  window.addEventListener('message', (ev) => {
-    const d = ev.data
-    if (!d || typeof d !== 'object' || d.ns !== 'ai-live-chat-send') return
-    if (typeof d.text !== 'string' || !d.text.trim()) return
-    try {
-      if (wrap.classList.contains('collapsed')) {
-        wrap.classList.remove('collapsed')
-        savePos(pos())
-      }
-      const target = new URL(chatFrameEl.src).origin
-      chatFrameEl.contentWindow.postMessage({ ns: 'ai-live-chat-send', text: d.text }, target)
-    } catch { /* chat iframe unreachable: turn is dropped, toolbar already cleared */ }
   })
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   window.__AI_LIVE_CHAT__ = { mounted: true, width: size.w, popover: usePopover }
-  // Annotation on the live page is Agentation (Step 5 Rung 1), mounted
-  // by the plugin's agentation entry; its toolbar position is seeded
-  // clear of this window. The old overlay toolbar is no longer
-  // installed here — overlay.js remains only for the static preview
-  // in the launcher UI, which fetches it itself.
+  void installAnnotateToolbar()
+}
+
+function showOverlayError(wrap, message, retry) {
+  let el = wrap.querySelector('.err')
+  if (!el) {
+    el = document.createElement('div')
+    el.className = 'err'
+    const text = document.createElement('span')
+    text.setAttribute('data-msg', '')
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.textContent = 'Retry'
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      el.remove()
+      void retry()
+    })
+    el.appendChild(text)
+    el.appendChild(btn)
+    wrap.appendChild(el)
+  }
+  el.querySelector('[data-msg]').textContent = message
+}
+
+async function installAnnotateToolbar() {
+  window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
+  const host = document.getElementById('ai-live-chat-host')
+  const wrap = host?.shadowRoot?.querySelector('.win')
+  if (!(window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed)) {
+    try {
+      const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js', { cache: 'no-store' }).then((r) => {
+        if (!r.ok) throw new Error('overlay ' + r.status)
+        return r.text()
+      })
+      const script = document.createElement('script')
+      script.textContent = src
+      document.documentElement.appendChild(script)
+    } catch (err) {
+      console.warn('[ai-live-editor] annotate overlay failed', err)
+      // Loud, not silent: the toolbar is how users discover Annotate.
+      if (wrap) {
+        const where = LAUNCHER_URL || location.origin
+        showOverlayError(wrap, `Annotate unavailable (${where}) — is the launcher running?`, installAnnotateToolbar)
+      }
+      return
+    }
+  }
+  const api = window.__AI_LIVE_EDIT__
+  const width = (window.__AI_LIVE_CHAT__ && window.__AI_LIVE_CHAT__.width) || DEFAULT_WIDTH
+  if (api && typeof api.setToolbarOffset === 'function') api.setToolbarOffset(width + 32)
 }
 
 export default function setupRenderer(ctx) {
@@ -305,7 +338,7 @@ export default function setupRenderer(ctx) {
   if (events && events.on) {
     events.on('dom:panel:mounted', (panel) => {
       mountChatOverlay()
-      panel.innerHTML = '<div style="padding:14px;font:12.5px system-ui;color:#a1a1aa;line-height:1.5">Chat is the floating window on this page (bottom right). Annotate is the feedback toolbar beside it.</div>'
+      panel.innerHTML = '<div style="padding:14px;font:12.5px system-ui;color:#a1a1aa;line-height:1.5">Chat is the floating window on this page (bottom right), next to Annotate.</div>'
     })
   }
 }

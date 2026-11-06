@@ -627,6 +627,21 @@ around; a future non-React target reopens the overlay question.
   Shield license (internal use free; commercial redistribution needs
   a license — see the license-watch todo).
 
+Update 2026-11-06 — Agentation removed again: the `/@fs`-served
+entry resolved a second React copy (invalid hook call, empty
+toolbar; fixed with `resolve.dedupe`) and the direction changed to
+restoring the in-house overlay instead of carrying the dependency.
+Removed: the `agentation` dependency, `agentation-entry.jsx`, the
+`POST /api/live-edit/agentation` endpoint + `agentationSubmit.ts`
+adapter, the plugin alias/dedupe, the Send-to-chat bridge, and the
+`agentationsToAnnotations` adapter (+ tests). Restored: the plugin
+annotate dock, `chat-overlay.js` installing `overlay.js` on live
+pages (both files byte-identical to pre-Agentation). Kept: the
+mode-aware submit prompt and sketch tool set (they serve overlay
+submits in both modes), plus the sketch preamble now applied in
+both `/api/live-edit/submit` handlers so sketch-mode annotation
+turns carry the hard system constraint, not just prompt wording.
+
 ---
 
 ## 6. Chrome DevTools depth — console, network, performance, debugger

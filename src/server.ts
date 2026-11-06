@@ -400,14 +400,18 @@ app.post('/api/live-edit/submit', async (req, res) => {
     const summary = summarizeAnnotations(notes)
     const pageUrl = typeof url === 'string' ? url : ''
     const resolutions = resolveAnnotationSelectors(notes)
-    const { getSketchMode } = await import('./sketchSession.js')
-    const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl, resolutions, mode: getSketchMode() })
+    const { getSketchMode, withSketchPreamble } = await import('./sketchSession.js')
+    const mode = getSketchMode()
+    const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl, resolutions, mode })
     const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.generate([{ role: 'user', content: prompt }], {
+    const messages = mode === 'sketch'
+      ? withSketchPreamble([{ role: 'user', content: prompt }])
+      : [{ role: 'user', content: prompt }]
+    const result = await agent.generate(messages as any, {
       maxSteps: 12,
-      activeTools: activeToolsForMode(getSketchMode()),
+      activeTools: activeToolsForMode(mode),
     })
     res.json({
       ok: true,
@@ -420,12 +424,6 @@ app.post('/api/live-edit/submit', async (req, res) => {
     console.error(e)
     res.status(500).json({ ok: false, error: e.message })
   }
-})
-
-app.post('/api/live-edit/agentation', async (req, res) => {
-  const { prepareAgentationPrompt } = await import('./live-edit/agentationSubmit.js')
-  const { status, payload } = await prepareAgentationPrompt(req.body || {})
-  res.status(status).json(payload)
 })
 
 // --- Annotation overlay script (injected into preview iframe / extension pages) ---

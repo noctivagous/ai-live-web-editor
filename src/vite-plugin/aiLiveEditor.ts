@@ -19,11 +19,6 @@ import { markPageOwner } from '../pageBridge.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PKG_ROOT = path.resolve(__dirname, '..')
-/* Agentation ships with the editor (repo-root node_modules), not with the
- * user's project — but the agentation entry is resolved from the project
- * root, so bare `import 'agentation'` fails there. Alias + allow it here. */
-const AGENTATION_DIR = path.resolve(__dirname, '..', '..', 'node_modules', 'agentation')
-const AGENTATION_OK = fs.existsSync(path.join(AGENTATION_DIR, 'package.json'))
 
 export type AiLiveEditorOptions = {
   /** Disk the agent may read/write. Default: Vite `config.root`. */
@@ -46,8 +41,8 @@ function resolveEnvFile(fsRoot: string, explicit?: string) {
 export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
   const apiBase = opts.apiBase ?? ''
   const chatFile = path.join(__dirname, 'client', 'chat-overlay.js')
+  const annotateFile = path.join(__dirname, 'client', 'annotate.js')
   const chatUi = path.resolve(__dirname, '../ui/chat-embed.tsx')
-  const agentationEntry = path.join(__dirname, 'client', 'agentation-entry.jsx')
 
   function loadClient(file: string) {
     return fs.readFileSync(file, 'utf-8').replaceAll('__LAUNCHER_URL__', JSON.stringify(apiBase))
@@ -57,17 +52,7 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
     name: 'ai-live-editor',
     apply: 'serve',
     config() {
-      return {
-        server: { fs: { allow: AGENTATION_OK ? [PKG_ROOT, AGENTATION_DIR] : [PKG_ROOT] } },
-        resolve: {
-          alias: AGENTATION_OK ? { agentation: AGENTATION_DIR } : {},
-          // The agentation entry is served from the editor repo via /@fs,
-          // so its bare `react` imports would resolve to the repo copy
-          // while the app uses the project copy — two Reacts, invalid
-          // hook call, empty toolbar. Dedupe pins a single copy.
-          dedupe: ['react', 'react-dom'],
-        },
-      }
+      return { server: { fs: { allow: [PKG_ROOT] } } }
     },
     configResolved(config) {
       const fsRoot = path.resolve(opts.fsRoot || config.root)
@@ -77,9 +62,11 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
     },
     resolveId(id) {
       if (id === 'ai-live-editor/chat-overlay') return '\0' + id
+      if (id === 'ai-live-editor/annotate') return '\0' + id
     },
     load(id) {
       if (id === '\0ai-live-editor/chat-overlay') return loadClient(chatFile)
+      if (id === '\0ai-live-editor/annotate') return loadClient(annotateFile)
     },
     configureServer(server: ViteDevServer) {
       const publicUrl = () => {
@@ -153,16 +140,6 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
             attrs: { type: 'module', src: '/@ai-live-editor/page-bridge.js' },
             injectTo: 'body',
           },
-          {
-            tag: 'script',
-            children: `window.__AI_LIVE_LAUNCHER__ = ${JSON.stringify(apiBase)}`,
-            injectTo: 'body',
-          },
-          {
-            tag: 'script',
-            attrs: { type: 'module', src: `/@fs${agentationEntry}` },
-            injectTo: 'body',
-          },
         ]
       },
     },
@@ -175,6 +152,16 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
           type: 'custom-render',
           renderer: {
             importFrom: 'ai-live-editor/chat-overlay',
+            importName: 'default',
+          },
+        })
+        ctx.docks.register({
+          id: 'ai-live-editor:annotate',
+          title: 'Annotate',
+          icon: 'ph:cursor-click-duotone',
+          type: 'action',
+          action: {
+            importFrom: 'ai-live-editor/annotate',
             importName: 'default',
           },
         })

@@ -4,6 +4,7 @@ import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricin
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import {
   DEFAULT_CHAT_LOG,
+  createSendGuard,
   historyForAgent,
   loadChat,
   publishChat,
@@ -143,6 +144,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   }
   const scroller = useRef<HTMLDivElement>(null)
   const fingerprint = useRef('')
+  const sendGuardRef = useRef(createSendGuard())
   const abortRef = useRef<AbortController | null>(null)
   // Highest chat revision seen or published: receivers apply only newer revs,
   // and publishes that lose the compare-and-swap resync instead of clobbering.
@@ -206,6 +208,10 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
 
   async function send() {
     if (!input.trim() || sending) return
+    // Synchronous double-submit guard: `sending` state arrives a render
+    // late, so a second Enter/click would otherwise open a second stream
+    // and both replies would append to one log.
+    if (!sendGuardRef.current.tryStart()) return
     // Fast path: the top bar already knows the key state.
     if (keyKnown === false) {
       setLog(l => [...l, { role: 'user', text: input }, { role: 'error', text: guidedKeyError(false) }])
@@ -306,6 +312,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       }
     } finally {
       if (abortRef.current === ctrl) abortRef.current = null
+      sendGuardRef.current.release()
       setSending(false)
       setWorkingLabel('')
     }

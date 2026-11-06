@@ -90,6 +90,26 @@ export function bootStopped(state: ChatShared): ChatShared {
   return { ...state, log: withStopped(state.log), sending: false }
 }
 
+/**
+ * Double-submit guard: `sending` state arrives a render late, so two rapid
+ * submits (Enter + click, double Enter) can both pass the state check and
+ * open two streams that append to one log. The ref-held flag below closes
+ * that window synchronously. Pure so the rule is unit-testable.
+ */
+export function createSendGuard() {
+  let active = false
+  return {
+    tryStart(): boolean {
+      if (active) return false
+      active = true
+      return true
+    },
+    release() {
+      active = false
+    },
+  }
+}
+
 export function readStoredChat(projectId: string): ChatShared | null {
   try {
     const raw = localStorage.getItem(chatStorageKey(projectId))

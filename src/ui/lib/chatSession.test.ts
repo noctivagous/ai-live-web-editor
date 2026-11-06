@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bootStopped, casWinner, emptyChat, historyForAgent, parseChat, rebaseLocalUserItems, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
+import { bootStopped, casWinner, createSendGuard, emptyChat, historyForAgent, parseChat, rebaseLocalUserItems, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
 
 describe('chatSession', () => {
   it('round-trips a log and drops other projects', () => {
@@ -93,6 +93,16 @@ describe('revision ordering', () => {
     const merged = rebaseLocalUserItems(local, winner)
     assert.deepEqual(merged.map((m) => (m as { text: string }).text), ['a', 'b', 'fresh send'])
     assert.equal(rebaseLocalUserItems(winner, winner), winner)
+  })
+})
+
+describe('send guard', () => {
+  it('blocks a second concurrent send and re-arms after release', () => {
+    const g = createSendGuard()
+    assert.equal(g.tryStart(), true)
+    assert.equal(g.tryStart(), false)
+    g.release()
+    assert.equal(g.tryStart(), true)
   })
 })
 

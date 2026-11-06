@@ -468,7 +468,7 @@ export async function pipeAgentChatStream(
       try {
         gate = await runVerifyGate(baseline)
       } catch (e: unknown) {
-        gate = { ran: true, layout: [], console: [], unverified: [e instanceof Error ? e.message : String(e)] }
+        gate = { ran: true, layout: [], expected: [], console: [], unverified: [e instanceof Error ? e.message : String(e)] }
       }
       const prompt = gatePrompt(gate)
       if (prompt && !req?.aborted && !abortSignal.aborted) {

@@ -14,6 +14,7 @@ import {
   snapshotCheckFrames,
 } from './checkFrames.js'
 import {
+  applyFormatToFindings,
   consoleFindings,
   diffFindings,
   formatGatePrompt,
@@ -21,6 +22,7 @@ import {
   type ConsoleEntry,
   type LayoutFinding,
 } from './gate.js'
+import { effectiveFormat, readProjectConfig } from '../projectConfig.js'
 
 export type GateBaseline = {
   at: number
@@ -34,6 +36,8 @@ export type GateBaseline = {
 export type GateResult = {
   ran: boolean
   layout: LayoutFinding[]
+  /** Findings the project format expects (page-format y-overflow); not issues. */
+  expected: LayoutFinding[]
   console: ConsoleEntry[]
   unverified: string[]
   skipped?: string
@@ -145,7 +149,7 @@ async function poolWidths(widths: number[]): Promise<{ findings: LayoutFinding[]
 
 /** Post-stream gate: settle, re-check every baselined width, diff to new-only findings. */
 export async function runVerifyGate(baseline: GateBaseline | null): Promise<GateResult> {
-  if (!baseline) return { ran: false, layout: [], console: [], unverified: [], skipped: 'gate disabled or no baseline' }
+  if (!baseline) return { ran: false, layout: [], expected: [], console: [], unverified: [], skipped: 'gate disabled or no baseline' }
   await settleHmr()
   const layout: LayoutFinding[] = []
   const consoleOut: ConsoleEntry[] = []
@@ -197,7 +201,10 @@ export async function runVerifyGate(baseline: GateBaseline | null): Promise<Gate
     }
   } catch { /* best effort */ }
 
-  return { ran: true, layout, console: consoleOut, unverified }
+  // Interpret findings through the project format (§B2): in a page
+  // project, vertical overflow is the document growing, not an issue.
+  const { issues, expected } = applyFormatToFindings(layout, effectiveFormat(readProjectConfig()))
+  return { ran: true, layout: issues, expected, console: consoleOut, unverified }
 }
 
 export function gatePrompt(result: GateResult): string | null {

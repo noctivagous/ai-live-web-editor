@@ -23,6 +23,9 @@ order of importance.
 
 ## A. Project type + device targets — the manifest file (extends Step 7)
 
+The manifest also carries the project's **format** — see §B2,
+which is load-bearing enough to get its own section.
+
 One file at the project root: `project.ai.json`.
 
 ```json
@@ -299,7 +302,10 @@ not new subsystems.
 ## Status
 
 - **Foundation slice BUILT 2026-11-06** (branch
-  `feat/project-foundation`, local): `src/projectConfig.ts`
+  `feat/project-foundation`; PUSHED TO MAIN same day as
+  snapshot commit 9716d9e, hand-merged onto the
+  Agentation-removal main; merged tree verified 192/192
+  tests, tsc + ui:build clean, brief re-verified live): `src/projectConfig.ts`
   (manifest read/write/sanitize, brief, target widths) +
   `src/projectConfigApi.ts` (`GET/POST /api/project/config`,
   both servers; explicit empty type un-designates) +

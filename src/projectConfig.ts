@@ -23,12 +23,36 @@ export const PROJECT_CONFIG_FILE = 'project.ai.json'
 /** Starter type registry keys (phase-11-06 §A); new types are data. */
 export const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site'] as const
 
+/**
+ * Project format (§B2): 'app' = SPA / viewport-fit shell (the page
+ * never scrolls; regions manage overflow), 'page' = document flow
+ * (the page scrolls and grows). Decides target adaptation and
+ * where the agent adds controls.
+ */
+export type ProjectFormat = 'app' | 'page'
+
+export function parseProjectFormat(value: unknown): ProjectFormat | undefined {
+  return value === 'app' || value === 'page' ? value : undefined
+}
+
 export interface ProjectConfig {
   type?: string
+  format?: ProjectFormat
   deviceTargets?: DeviceTarget[]
   defaultDeviceTarget?: DeviceTarget
   styleSet?: string
   features?: string[]
+}
+
+/**
+ * The format in force: the explicit setting wins; otherwise the
+ * type's default (content-site → page, any other designated type
+ * → app); undesignated projects assert no format.
+ */
+export function effectiveFormat(config: ProjectConfig): ProjectFormat | undefined {
+  if (config.format) return config.format
+  if (!config.type) return undefined
+  return config.type === 'content-site' ? 'page' : 'app'
 }
 
 export function projectConfigPath(root: string): string {
@@ -50,6 +74,8 @@ export function sanitizeProjectConfig(value: unknown): ProjectConfig {
   const v = value as Record<string, unknown>
   const out: ProjectConfig = {}
   if (typeof v.type === 'string' && v.type.trim()) out.type = v.type.trim()
+  const format = parseProjectFormat(v.format)
+  if (format) out.format = format
   const targets = parseDeviceTargets(v.deviceTargets)
   if (targets) out.deviceTargets = targets
   const def = parseDeviceTarget(v.defaultDeviceTarget)
@@ -97,6 +123,12 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
       : 'Project type: undesignated — build generically, no type-specific assumptions.',
     `Device targets: ${targets.join(', ')}. Build responsive from the start: the result must work at every target width (${targets.map(t => `${t} ${DEVICE_WIDTHS[t]}px`).join(', ')}); the desktop layout is the design surface, the others must always work even before any per-target customization.`,
   ]
+  const format = effectiveFormat(config)
+  if (format === 'app') {
+    lines.push('Format: app (viewport-fit SPA shell) — the page itself never scrolls; regions and panels manage their own overflow and chrome stays pinned. Add controls inside regions, toolbars and panels; never grow the page. Adapt across targets by rearranging regions, not by reflowing a document.')
+  } else if (format === 'page') {
+    lines.push('Format: page (document flow) — the page scrolls and grows; content lives in sections. Add controls and sections in the flow; adapt across targets by reflowing (stack columns, scale type), not by pinning fixed regions.')
+  }
   if (config.styleSet) lines.push(`Style set: ${config.styleSet} — use its tokens for new UI.`)
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)
   return lines.join('\n')

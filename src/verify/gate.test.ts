@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyFormatToFindings,
   consoleFindings,
   diffFindings,
   findingKey,
   formatGatePrompt,
   shouldTriggerGate,
   toLayoutFindings,
+  type LayoutFinding,
 } from './gate.js'
 
 describe('shouldTriggerGate', () => {
@@ -85,5 +87,44 @@ describe('formatGatePrompt', () => {
     assert.ok(prompt.includes('[error] boom'))
     assert.ok(prompt.includes('Could not verify'))
     assert.ok(prompt.includes('waive'))
+  })
+})
+
+describe('format interpretation (§B2)', () => {
+  const overflow = (axis: 'x' | 'y'): LayoutFinding => ({
+    key: `overflow:el:${axis} @375`,
+    kind: 'overflow',
+    detail: '{}',
+    width: 375,
+    axis,
+  })
+  const overlap: LayoutFinding = { key: 'overlap:a|b @375', kind: 'overlap', detail: '{}', width: 375 }
+
+  it('overflow findings carry their axis from the snapshot shape', () => {
+    const fromAxis = toLayoutFindings({ overflow: [{ stableId: 'n1', axis: 'y' }] }, 375)
+    assert.equal(fromAxis[0].axis, 'y')
+    const fromRight = toLayoutFindings({ overflowXOffenders: [{ stableId: 'n2', right: 12 }] }, 375)
+    assert.equal(fromRight[0].axis, 'x')
+    const fromBottom = toLayoutFindings({ overflow: [{ stableId: 'n3', bottom: 4 }] }, 375)
+    assert.equal(fromBottom[0].axis, 'y')
+  })
+
+  it('page format: y-overflow is expected, x-overflow and overlaps stay issues', () => {
+    const { issues, expected } = applyFormatToFindings([overflow('y'), overflow('x'), overlap], 'page')
+    assert.deepEqual(expected.map(f => f.axis), ['y'])
+    assert.equal(issues.length, 2)
+  })
+
+  it('app format and undesignated keep every finding an issue', () => {
+    for (const fmt of ['app', undefined] as const) {
+      const { issues, expected } = applyFormatToFindings([overflow('y')], fmt)
+      assert.equal(issues.length, 1)
+      assert.equal(expected.length, 0)
+    }
+  })
+
+  it('gate prompt notes expected findings without counting them as issues', () => {
+    const text = formatGatePrompt({ layout: [overflow('x')], console: [], unverified: [], expected: [overflow('y'), overflow('y')] })
+    assert.match(text, /Not issues: 2 vertical-overflow/)
   })
 })

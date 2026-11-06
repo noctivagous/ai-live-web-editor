@@ -5,7 +5,9 @@ import path from 'node:path'
 import test from 'node:test'
 import {
   declaredTargets,
+  effectiveFormat,
   isDesignated,
+  parseProjectFormat,
   projectBrief,
   readProjectConfig,
   sanitizeProjectConfig,
@@ -74,6 +76,31 @@ test('brief states type, targets and the responsive outcome', () => {
   assert.match(designated, /canvas-tool/)
   assert.match(designated, /Style set: noct/)
   assert.doesNotMatch(designated, /375px/)
+})
+
+test('format: sanitize, type defaults, explicit wins', () => {
+  assert.equal(parseProjectFormat('app'), 'app')
+  assert.equal(parseProjectFormat('scroll'), undefined)
+  assert.equal(sanitizeProjectConfig({ format: 'page' }).format, 'page')
+  assert.equal(sanitizeProjectConfig({ format: 'tall' }).format, undefined)
+  assert.equal(effectiveFormat({}), undefined)
+  assert.equal(effectiveFormat({ type: 'content-site' }), 'page')
+  assert.equal(effectiveFormat({ type: 'web-app' }), 'app')
+  assert.equal(effectiveFormat({ type: 'content-site', format: 'app' }), 'app')
+  const root = tmpRoot()
+  writeProjectConfig({ type: 'content-site', format: 'app' }, root)
+  assert.equal(readProjectConfig(root).format, 'app')
+  const cleared = writeProjectConfig({ format: undefined }, root)
+  assert.equal(cleared.format, undefined)
+  assert.equal(effectiveFormat(cleared), 'page')
+})
+
+test('brief states the format contract', () => {
+  assert.match(projectBrief({ type: 'web-app' }), /Format: app/)
+  assert.match(projectBrief({ type: 'web-app' }), /never grow the page/)
+  assert.match(projectBrief({ type: 'content-site' }), /Format: page/)
+  assert.match(projectBrief({ type: 'content-site' }), /reflowing/)
+  assert.doesNotMatch(projectBrief({}), /Format:/)
 })
 
 test('device parsers accept only known targets', () => {

@@ -9,6 +9,8 @@ export type LayoutFinding = {
   kind: string
   detail: string
   width?: number
+  /** Overflow findings carry the axis the offender spills on. */
+  axis?: 'x' | 'y'
 }
 
 export type ConsoleEntry = {
@@ -56,7 +58,10 @@ export function toLayoutFindings(
     for (const item of list) {
       if (!item || typeof item !== 'object') continue
       const f = item as Record<string, unknown>
-      out.push({ key: findingKey(f, width), kind, detail: JSON.stringify(f).slice(0, 300), width })
+      const axis = kind === 'overflow'
+        ? (f.axis === 'x' || f.axis === 'y' ? f.axis : f.right !== undefined ? 'x' : f.bottom !== undefined ? 'y' : undefined)
+        : undefined
+      out.push({ key: findingKey(f, width), kind, detail: JSON.stringify(f).slice(0, 300), width, axis })
     }
   }
   push('overlap', analysis.overlaps ?? analysis.overlapping)
@@ -81,10 +86,33 @@ export function consoleFindings(entries: ConsoleEntry[], sinceSeq: number): Cons
   )
 }
 
+/**
+ * Format interpretation (§B2): the same overflow finding means
+ * different things in the two project formats. In a `page` project
+ * the document grows vertically by design, so y-axis overflow is
+ * expected, not an issue; in an `app` project the shell must fit
+ * the viewport, so overflow on either axis is an issue. No format
+ * (undesignated) keeps every finding an issue.
+ */
+export function applyFormatToFindings(
+  findings: LayoutFinding[],
+  format: 'app' | 'page' | undefined,
+): { issues: LayoutFinding[], expected: LayoutFinding[] } {
+  if (format !== 'page') return { issues: findings, expected: [] }
+  const issues: LayoutFinding[] = []
+  const expected: LayoutFinding[] = []
+  for (const f of findings) {
+    if (f.kind === 'overflow' && f.axis === 'y') expected.push(f)
+    else issues.push(f)
+  }
+  return { issues, expected }
+}
+
 export function formatGatePrompt(args: {
   layout: LayoutFinding[]
   console: ConsoleEntry[]
   unverified: string[]
+  expected?: LayoutFinding[]
 }): string {
   const lines = [
     'Automatic verification found new issues after your edits. Fix each one or explicitly waive it with a one-line reason.',
@@ -106,6 +134,9 @@ export function formatGatePrompt(args: {
   if (args.unverified.length) {
     lines.push('Could not verify (treat as unverified, not clean):')
     for (const u of args.unverified) lines.push(`- ${u}`)
+  }
+  if (args.expected?.length) {
+    lines.push(`Not issues: ${args.expected.length} vertical-overflow finding(s) are expected in this project's page format (the document grows) and were not counted.`)
   }
   lines.push('Use resolve-source / layout-snapshot / get-console to investigate, then str-replace the fix.')
   return lines.join('\n')

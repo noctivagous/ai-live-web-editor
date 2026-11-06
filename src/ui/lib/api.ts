@@ -257,6 +257,7 @@ export async function getWorkflow() {
 
 export interface ProjectConfig {
   type?: string
+  format?: 'app' | 'page'
   deviceTargets?: DeviceTarget[]
   defaultDeviceTarget?: DeviceTarget
   styleSet?: string
@@ -268,7 +269,7 @@ export async function getProjectConfig() {
   return r.json() as Promise<{ ok: boolean, config: ProjectConfig, designated: boolean }>
 }
 
-export async function postProjectConfig(patch: ProjectConfig) {
+export async function postProjectConfig(patch: Record<string, unknown>) {
   const r = await fetch(`${API}/api/project/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

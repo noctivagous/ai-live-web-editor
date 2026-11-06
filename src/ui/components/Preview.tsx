@@ -63,6 +63,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   // shared workflow state; the type select writes project.ai.json.
   const [deviceTarget, setDeviceTargetState] = useState<DeviceTarget>('desktop')
   const [projectType, setProjectType] = useState('')
+  const [projectFormat, setProjectFormat] = useState('')
 
   async function refreshFoundation() {
     try {
@@ -72,6 +73,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     try {
       const pc = await getProjectConfig()
       setProjectType(pc?.config?.type || '')
+      setProjectFormat(pc?.config?.format || '')
     } catch { /* ignore */ }
   }
 
@@ -96,6 +98,14 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     try {
       const data = await postProjectConfig({ type })
       setProjectType(data?.config?.type || '')
+    } catch { /* ignore */ }
+  }
+
+  async function chooseFormat(format: string) {
+    setProjectFormat(format)
+    try {
+      const data = await postProjectConfig({ format })
+      setProjectFormat(data?.config?.format || '')
     } catch { /* ignore */ }
   }
 
@@ -236,6 +246,16 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             <option value="">No type</option>
             {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             {projectType && !PROJECT_TYPES.includes(projectType) && <option value={projectType}>{projectType}</option>}
+          </select>
+          <select
+            value={projectFormat}
+            onChange={(e) => void chooseFormat(e.target.value)}
+            title="Project format: App shell = viewport-fit SPA (page never scrolls). Page flow = document that scrolls and grows. Default follows the project type."
+            style={{ fontSize: 11, background: '#1e1e23', color: '#d4d4d8', border: '1px solid #2e2e36', borderRadius: 6, padding: '2px 4px' }}
+          >
+            <option value="">Format: type default</option>
+            <option value="app">App shell</option>
+            <option value="page">Page flow</option>
           </select>
           <span className="seg" role="group" aria-label="Device target">
             <button type="button" className={deviceTarget === 'phone' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('phone')} title="Phone (375px)">Phone</button>

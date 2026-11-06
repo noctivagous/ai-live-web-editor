@@ -9,6 +9,7 @@ projects/.chrome-data/
 projects/*/.chrome-data/
 projects/.active
 .env
+providers.json
 .DS_Store
 
 dist-verify/

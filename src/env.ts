@@ -149,7 +149,7 @@ function writeEnvFile(text: string) {
   fs.writeFileSync(getEnvPath(), text, { encoding: 'utf-8', mode: 0o600 })
 }
 
-function upsertEnvVar(name: string, value: string) {
+export function upsertEnvVar(name: string, value: string) {
   const encoded = /[\s#"']/.test(value) ? JSON.stringify(value) : value
   const line = `${name}=${encoded}`
   let text = readEnvFile()
@@ -162,7 +162,7 @@ function upsertEnvVar(name: string, value: string) {
   writeEnvFile(text)
 }
 
-function removeEnvVar(name: string) {
+export function removeEnvVar(name: string) {
   if (!fs.existsSync(getEnvPath())) return
   const next = readEnvFile().split(/\r?\n/).filter(line => {
     const t = line.trim()

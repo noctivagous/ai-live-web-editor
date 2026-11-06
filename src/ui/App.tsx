@@ -10,8 +10,9 @@ import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
 import {
   listFiles, readFile, writeFile, getConfig, probeModels, saveAiConfig,
+  getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject,
-  type LauncherConfig, type ProjectInfo,
+  type LauncherConfig, type ProjectInfo, type ConnectionsPayload,
 } from './lib/api'
 
 function connTone(status: string): string {
@@ -36,6 +37,7 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [activeProject, setActiveProject] = useState('')
   const [models, setModels] = useState<string[]>([])
+  const [connPayload, setConnPayload] = useState<ConnectionsPayload | null>(null)
   const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
 
   async function loadFiles() {
@@ -60,6 +62,16 @@ export default function App() {
     try {
       const data = await getConfig()
       setConfig(data)
+      let conns: ConnectionsPayload | null = null
+      try {
+        conns = await getConnections()
+        setConnPayload(conns)
+      } catch { setConnPayload(null) }
+      if (conns?.connections.length) {
+        // Model choices come from the active connection's verified models.
+        setModels([])
+        return
+      }
       if (data.hasApiKey || data.hasOpenAiKey) {
         try {
           const listed = await probeModels()
@@ -71,17 +83,38 @@ export default function App() {
           setModels(current ? [current] : [])
         }
       } else setModels([])
-    } catch { setConfig(null); setModels([]) }
+    } catch { setConfig(null); setModels([]); setConnPayload(null) }
   }
 
+  const activeConn = connPayload?.connections.find(c => c.id === connPayload.activeId) || null
+
   async function handleModel(id: string) {
-    if (!id || id === (config?.modelName || config?.model)) return
+    if (!id) return
     try {
-      const next = await saveAiConfig({ model: id })
-      setConfig(next)
+      if (activeConn) {
+        if (id === activeConn.model) return
+        await saveConnection({ id: activeConn.id, presetId: activeConn.presetId, model: id })
+      } else {
+        if (id === (config?.modelName || config?.model)) return
+        const next = await saveAiConfig({ model: id })
+        setConfig(next)
+      }
       setStatus(`model ${id}`)
+      void refreshConfig()
     } catch (e: unknown) {
       setStatus('model save failed: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
+  async function handleConnection(id: string) {
+    if (!id || id === connPayload?.activeId) return
+    try {
+      await activateConnection(id)
+      const conn = connPayload?.connections.find(c => c.id === id)
+      setStatus(`provider ${conn?.name || id} · ${conn?.model || ''}`)
+      void refreshConfig()
+    } catch (e: unknown) {
+      setStatus('provider switch failed: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -184,21 +217,53 @@ export default function App() {
           <span className={`pill mono ${connTone(status)}`} title={status}>
             <span className="dot" />{status.startsWith('real FS:') ? status.replace('real FS: ', '') : status.slice(0, 42)}
           </span>
-          <select
-            className={`pill mono ${keyTone}`}
-            value={hasKey ? (config?.modelName || '') : ''}
-            disabled={!hasKey}
-            onChange={e => { void handleModel(e.target.value) }}
-            title="Chat model"
-          >
-            {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
-            {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
-              <option value={config.modelName}>{config.modelName}</option>
-            )}
-            {models.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
+          {activeConn ? (
+            <>
+              <select
+                className={`pill mono ${keyTone}`}
+                value={activeConn.id}
+                onChange={e => { void handleConnection(e.target.value) }}
+                title="Provider connection"
+                style={{ maxWidth: 190 }}
+              >
+                {(connPayload?.connections || []).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <select
+                className={`pill mono ${keyTone}`}
+                value={activeConn.model}
+                onChange={e => { void handleModel(e.target.value) }}
+                title="Chat model"
+                style={{ maxWidth: 220 }}
+              >
+                {!activeConn.verifiedModels.some(m => m.id === activeConn.model) && (
+                  <option value={activeConn.model}>{activeConn.model}</option>
+                )}
+                {activeConn.verifiedModels
+                  .filter(m => m.modalities.includes('text'))
+                  .map(m => (
+                    <option key={m.id} value={m.id}>{m.id}</option>
+                  ))}
+              </select>
+            </>
+          ) : (
+            <select
+              className={`pill mono ${keyTone}`}
+              value={hasKey ? (config?.modelName || '') : ''}
+              disabled={!hasKey}
+              onChange={e => { void handleModel(e.target.value) }}
+              title="Chat model"
+            >
+              {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
+              {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
+                <option value={config.modelName}>{config.modelName}</option>
+              )}
+              {models.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
           <select
             className="deck-btn"
             value={activeProject}

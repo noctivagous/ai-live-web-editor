@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 import { resolveAgentModel } from '../../env.js'
+import { resolveConnectionModel } from '../../connections.js'
 import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strReplaceTool, inspectDOMTool, takeSnapshotTool, patchDOMTool, evalTool, poolOpenTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
 
@@ -44,7 +45,7 @@ Live-edit mode: the user may annotate elements on the page. When you receive a l
 3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
 `,
-  model: () => resolveAgentModel(),
+  model: () => resolveConnectionModel() ?? resolveAgentModel(),
   defaultOptions: { maxSteps: 12 },
   tools: {
     'list-real-files': listRealFilesTool,

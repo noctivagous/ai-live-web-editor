@@ -12,6 +12,8 @@ import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
+import { mountConnectionsApi } from './connectionsApi.js'
+import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
 import chokidar from 'chokidar'
 
@@ -22,18 +24,20 @@ const app = express()
 const PORT = Number(process.env.LAUNCHER_PORT) || 4112
 
 function publicConfig() {
-  const hasKey = hasAiKey()
+  const active = activePublic()
+  const hasKey = active ? active.hasKey : hasAiKey()
   const provider = publicProvider()
+  const modelName = active?.model || openaiModelName()
   return {
     ok: true,
     hasApiKey: hasKey,
     hasOpenAiKey: hasKey,
-    model: openaiModelName(),
-    modelName: openaiModelName(),
-    modelId: currentModelId(),
-    providerId: provider?.id || null,
-    providerName: provider?.name || null,
-    baseUrl: openaiBaseUrl(),
+    model: modelName,
+    modelName,
+    modelId: `openai/${modelName}`,
+    providerId: active?.providerId || provider?.id || null,
+    providerName: active?.providerName || provider?.name || null,
+    baseUrl: active?.baseUrl ?? openaiBaseUrl(),
     launcherUrl: `http://localhost:${PORT}`,
     previewStaticUrl: '/projects/',
     previewHmrUrl: 'http://localhost:5173',
@@ -49,6 +53,7 @@ app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src *
 app.use(express.json({ limit: '20mb' }))
 mountPoolPage(app)
 mountWorkflowApi(app)
+mountConnectionsApi(app)
 
 ensureWorkspace()
 markLauncherOwner()
@@ -132,6 +137,7 @@ app.post('/api/config/key', (req, res) => {
       baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl : undefined,
       model: typeof body.model === 'string' ? body.model : undefined,
     })
+    syncFromLegacy()
     res.json({ ...publicConfig(), saved: true })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })

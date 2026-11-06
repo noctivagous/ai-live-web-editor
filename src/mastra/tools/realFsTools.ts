@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
+import { execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { getFsRoot } from '../../launcher.js'
@@ -188,4 +189,58 @@ export const poolOpenTool = createTool({
   description: 'Open a URL in the optional Playwright Chrome pool (headed, persistent profile). Requires Playwright pool enabled in Settings.',
   inputSchema: z.object({ url: z.string() }),
   execute: async ({ url }) => poolOpen(url),
+})
+
+const CHECK_TIMEOUT_MS = 120_000
+const CHECK_TAIL_CHARS = 4_000
+
+function tail(text: string): string {
+  const t = String(text || '')
+  return t.length > CHECK_TAIL_CHARS ? '…(truncated)\n' + t.slice(-CHECK_TAIL_CHARS) : t
+}
+
+/**
+ * Run the active project's own build script and return the tail of its
+ * output. The ONLY tool whose result may render a Deck Test card —
+ * never invent test results elsewhere.
+ */
+export const runProjectCheckTool = createTool({
+  id: 'run-project-check',
+  description: 'Run the active project\'s build script (from its package.json) with a timeout and return the tail of the output. Use to verify behaviour changes before claiming done.',
+  inputSchema: z.object({}),
+  execute: async () => {
+    const root = getFsRoot()
+    const pkgPath = path.join(root, 'package.json')
+    if (!fs.existsSync(pkgPath)) return { ok: false, error: 'No package.json in the active project' }
+    let scripts: Record<string, string> = {}
+    try {
+      const parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { scripts?: unknown }
+      if (parsed.scripts && typeof parsed.scripts === 'object') {
+        scripts = parsed.scripts as Record<string, string>
+      }
+    } catch (e: unknown) {
+      return { ok: false, error: 'Could not parse package.json: ' + (e instanceof Error ? e.message : String(e)) }
+    }
+    if (typeof scripts.build !== 'string' || !scripts.build) {
+      return { ok: false, error: 'No build script in package.json' }
+    }
+    try {
+      const out = execFileSync('npm', ['run', 'build'], {
+        cwd: root,
+        timeout: CHECK_TIMEOUT_MS,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      return { ok: true, script: 'build', outputTail: tail(out) }
+    } catch (e: unknown) {
+      const err = e as { stdout?: unknown; stderr?: unknown; message?: string; killed?: boolean }
+      const combined = [err.stdout, err.stderr].filter(Boolean).join('\n')
+      return {
+        ok: false,
+        script: 'build',
+        timedOut: err.killed === true,
+        error: tail(combined) || (err.message ?? 'build failed'),
+      }
+    }
+  },
 })

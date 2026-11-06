@@ -507,6 +507,7 @@ export default function App() {
             onNeedSetup={reopenSetup}
             onOpenPath={(p) => { void loadFile(p) }}
             onAfterChat={() => { loadFiles(); setTimeout(() => loadFile(activePath), 400) }}
+            pricing={activeConn?.pricing}
           />
         </div>
       </div>

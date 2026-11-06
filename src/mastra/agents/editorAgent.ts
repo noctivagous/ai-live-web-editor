@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent'
 import { resolveAgentModel } from '../../env.js'
 import { resolveConnectionModel } from '../../connections.js'
-import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strReplaceTool, inspectDOMTool, takeSnapshotTool, patchDOMTool, evalTool, poolOpenTool } from '../tools/realFsTools.js'
+import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strReplaceTool, inspectDOMTool, takeSnapshotTool, patchDOMTool, evalTool, poolOpenTool, runProjectCheckTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
 
 export const editorAgent = new Agent({
@@ -60,5 +60,6 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'pool-open': poolOpenTool,
     'layout-snapshot': layoutSnapshotTool,
     'layout-svg': layoutSvgTool,
+    'run-project-check': runProjectCheckTool,
   }
 })

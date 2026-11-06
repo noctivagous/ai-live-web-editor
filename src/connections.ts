@@ -21,6 +21,8 @@ import {
  * working unchanged.
  */
 
+export interface ConnectionPricing { input: number; output: number }
+
 export interface StoredConnection {
   id: string
   presetId: string
@@ -32,6 +34,8 @@ export interface StoredConnection {
   verifiedModels: ModelInfo[]
   status: 'verified' | 'configured' | 'failed'
   updatedAt: number
+  /** Optional per-1M-token USD prices for cost estimates. Absent = show tokens only. */
+  pricing?: ConnectionPricing
 }
 
 export interface ModalityDefault {
@@ -202,6 +206,7 @@ export function upsertConnection(input: {
   model: string
   key?: string
   verifiedModels?: ModelInfo[]
+  pricing?: ConnectionPricing | null
 }): StoredConnection {
   const store = getStore()
   const preset = presetById(input.presetId) || presetById('custom')!
@@ -242,6 +247,19 @@ export function upsertConnection(input: {
   if (input.verifiedModels) {
     conn.verifiedModels = input.verifiedModels
     conn.status = 'verified'
+  }
+  if (input.pricing !== undefined) {
+    const p = input.pricing
+    if (p === null) {
+      delete conn.pricing
+    } else if (
+      p && typeof p.input === 'number' && typeof p.output === 'number' &&
+      Number.isFinite(p.input) && Number.isFinite(p.output) && p.input >= 0 && p.output >= 0
+    ) {
+      conn.pricing = { input: p.input, output: p.output }
+    } else {
+      throw new Error('Pricing must be two non-negative numbers (USD per 1M tokens)')
+    }
   }
   if (!store.modalityDefaults.text) {
     store.modalityDefaults.text = { connectionId: conn.id, model: conn.model }

@@ -1,5 +1,11 @@
 /** Map Mastra fullStream chunks to compact SSE events for the chat UI. */
 
+export interface TurnUsage {
+  input: number
+  output: number
+  total: number
+}
+
 export type ChatStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'workflow'; mode: 'files' | 'sketch'; reason?: string }
@@ -9,7 +15,7 @@ export type ChatStreamEvent =
   | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
   | { type: 'text-delta'; text: string }
   | { type: 'error'; error: string }
-  | { type: 'done' }
+  | { type: 'done'; usage?: TurnUsage | null; model?: string }
 
 type LooseRecord = Record<string, unknown>
 
@@ -166,6 +172,28 @@ function chunkText(p: LooseRecord): string {
   return firstString(p, ['text', 'textDelta', 'delta', 'argsTextDelta'])
 }
 
+function num(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+/**
+ * Normalise provider/Mastra usage payloads (camelCase AI SDK or
+ * snake_case gateway shapes) to TurnUsage. Returns null when the
+ * provider reported nothing — callers must render "not reported",
+ * never 0.
+ */
+export function toTurnUsage(raw: unknown): TurnUsage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const input = num(r.inputTokens ?? r.input_tokens ?? r.promptTokens ?? r.prompt_tokens)
+  const output = num(r.outputTokens ?? r.output_tokens ?? r.completionTokens ?? r.completion_tokens)
+  const total = num(r.totalTokens ?? r.total_tokens)
+  if (input === null && output === null && total === null) return null
+  const i = input ?? 0
+  const o = output ?? 0
+  return { input: i, output: o, total: total ?? i + o }
+}
+
 export function mapMastraChunk(chunk: unknown): ChatStreamEvent | null {
   if (!chunk || typeof chunk !== 'object') return null
   const c = chunk as { type?: string; payload?: unknown }
@@ -296,12 +324,31 @@ export async function pipeAgentChatStream(
       abortSignal,
       activeTools: activeToolsForMode(mode),
     })
+    let model: string | undefined
     for await (const chunk of result.fullStream) {
       if (req?.aborted || abortSignal.aborted) break
+      const c = chunk as { type?: string; payload?: unknown } | null
+      if (c && typeof c === 'object' && (c.type === 'start' || c.type === 'step-start')) {
+        const p = asRecord(c.payload ?? chunk)
+        model = firstString(p, ['modelId', 'model']) || model
+      }
       const mapped = mapMastraChunk(chunk)
       if (mapped) send(mapped)
     }
-    send({ type: 'done' })
+    // Usage lives outside the chunk mapping: some gateways omit it, so a
+    // missing value is "not reported", never 0.
+    let usage: TurnUsage | null = null
+    try {
+      const r = result as unknown as { totalUsage?: unknown }
+      const raw = typeof r.totalUsage === 'function' || (r.totalUsage && typeof (r.totalUsage as PromiseLike<unknown>).then === 'function')
+        ? await (r.totalUsage as PromiseLike<unknown>)
+        : r.totalUsage
+      usage = toTurnUsage(raw)
+      if (!usage) console.warn('[chat] provider did not report token usage for this turn')
+    } catch (e: unknown) {
+      console.warn('[chat] usage lookup failed:', e instanceof Error ? e.message : String(e))
+    }
+    send({ type: 'done', usage, model })
     res.end()
   } catch (e: unknown) {
     if (req?.aborted || abortSignal.aborted || isAbortError(e)) {

@@ -102,6 +102,8 @@ export interface TaggedModel {
   modalities: ('text' | 'image' | 'video' | 'audio')[]
 }
 
+export interface ConnectionPricing { input: number; output: number }
+
 export interface ConnectionInfo {
   id: string
   presetId: string
@@ -114,6 +116,7 @@ export interface ConnectionInfo {
   updatedAt: number
   hasKey: boolean
   active: boolean
+  pricing?: ConnectionPricing
 }
 
 export interface ModalityDefault {
@@ -171,6 +174,7 @@ export async function probeConnection(input: { key?: string, baseUrl?: string, p
 export async function saveConnection(input: {
   id?: string, presetId: string, name?: string, baseUrl?: string,
   model: string, key?: string, verifiedModels?: TaggedModel[],
+  pricing?: ConnectionPricing | null,
 }) {
   return postJson<ConnectionsPayload & { saved: string }>('/api/connections', input)
 }
@@ -221,6 +225,7 @@ export async function chat(messages: {role:string, content:string}[]) {
   return r.json()
 }
 
+export type { TurnUsage } from './chatSession'
 export type ChatStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'workflow'; mode: ChatWorkflow; reason?: string }
@@ -230,7 +235,7 @@ export type ChatStreamEvent =
   | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
   | { type: 'text-delta'; text: string }
   | { type: 'error'; error: string }
-  | { type: 'done' }
+  | { type: 'done'; usage?: import('./chatSession').TurnUsage | null; model?: string }
 
 export type ChatWorkflow = 'files' | 'sketch'
 

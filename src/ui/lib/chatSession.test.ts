@@ -51,3 +51,21 @@ describe('chatSession', () => {
     assert.equal(withStopped(once).length, once.length)
   })
 })
+
+describe('usage persistence', () => {
+  it('round-trips per-turn usage through serialize/parse', () => {
+    const state = {
+      v: 1 as const,
+      projectId: 'lumen',
+      log: [
+        { role: 'user', text: 'hi' },
+        { role: 'ai', text: '', usage: { input: 100, output: 20, total: 120 } },
+      ] as LogItem[],
+      sending: false,
+      workingLabel: '',
+      updatedAt: 1,
+    }
+    const parsed = parseChat(JSON.parse(serializeChat(state)), 'lumen')
+    assert.deepEqual(parsed?.log[1], { role: 'ai', text: '', usage: { input: 100, output: 20, total: 120 } })
+  })
+})

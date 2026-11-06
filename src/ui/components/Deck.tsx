@@ -1,8 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ToolStep } from '../lib/chatSession'
 import {
-  TOOL_GROUP_LABEL, formatElapsed, looksLikeKeyError, slideTurns, stepElapsed, turnTitle,
-  type DeckCard, type DeckTurn,
+  TOOL_GROUP_LABEL, fmtCost, fmtTokens, formatElapsed, looksLikeKeyError, slideTurns, stepElapsed, turnCost, turnTitle,
+  type DeckCard, type DeckTurn, type TokenPricing,
 } from '../lib/deck'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { Markdown } from './Markdown'
@@ -117,13 +117,17 @@ export function TurnView({ turn, anchorId, onNeedSetup, embed }: {
 }
 
 /** Compact task rail for the sidebar: one chip per turn + current progress. */
-export function TurnStrip({ turns, onJump }: {
+export function TurnStrip({ turns, onJump, pricing }: {
   turns: DeckTurn[]
   onJump: (turn: DeckTurn) => void
+  pricing?: TokenPricing | null
 }) {
   const shown = turns.filter(t => t.intent !== null)
   if (!shown.length) return null
   const last = shown[shown.length - 1]
+  const withUsage = shown.filter(t => t.usage)
+  const sessionTotal = withUsage.reduce((n, t) => n + (t.usage?.total || 0), 0)
+  const sessionCost = pricing ? withUsage.reduce((n, t) => n + (turnCost(t.usage, pricing) || 0), 0) : null
   return (
     <div className="turn-strip">
       <div className="ts-items">
@@ -141,6 +145,16 @@ export function TurnStrip({ turns, onJump }: {
           </button>
         ))}
       </div>
+      {withUsage.length > 0 && (
+        <div
+          className="ts-tokens"
+          title={withUsage.length < shown.length
+            ? `Tokens so far (some turns did not report usage)`
+            : 'Tokens so far this session'}
+        >
+          Σ {fmtTokens(sessionTotal)} tok{sessionCost !== null && sessionCost > 0 ? ` · ${fmtCost(sessionCost)} est` : ''}
+        </div>
+      )}
       {last.progress.total > 0 && (
         <div className="ts-prog" title={`Current turn: ${last.progress.done}/${last.progress.total} steps done`}>
           <div className="ts-prog-bar"><span style={{ width: `${last.progress.pct}%` }} /></div>
@@ -208,7 +222,7 @@ function packKey(pack: Record<number, number[][]>): string {
   return Object.keys(pack).sort().map(k => `${k}:${pack[Number(k)].map(s => s.join(',')).join('|')}`).join(';')
 }
 
-export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, onOpenPath, workflow, onWorkflowMode, onClear, sketch, onSketchAction, input, onInput, onSend, onStop, annot, inIframe, onPick, onSubmit, onInsertToken }: {
+export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, onOpenPath, workflow, onWorkflowMode, onClear, sketch, onSketchAction, input, onInput, onSend, onStop, annot, inIframe, onPick, onSubmit, onInsertToken, pricing }: {
   turns: DeckTurn[]
   sending: boolean
   workingLabel: string
@@ -229,6 +243,7 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
   onPick: () => void
   onSubmit: () => void
   onInsertToken: (token: string) => void
+  pricing?: TokenPricing | null
 }) {
   const [active, setActive] = useState(0)
   const [overview, setOverview] = useState(false)
@@ -402,6 +417,7 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
                 {t.progress.total ? `${t.progress.done}/${t.progress.total} steps · ` : ''}
                 {t.cards.filter(c => c.kind === 'tools').length} tool card{t.cards.filter(c => c.kind === 'tools').length === 1 ? '' : 's'}
                 {t.files.length ? ` · ${t.files.length} file${t.files.length === 1 ? '' : 's'}` : ''}
+                {t.usage ? ` · ${fmtTokens(t.usage.total)} tok` : ''}
               </span>
               {t.cards.find(c => c.kind === 'result') && (
                 <span className="ov-snip">{(t.cards.find(c => c.kind === 'result') as { text: string }).text.slice(0, 140)}</span>
@@ -422,6 +438,14 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
                   <span className="dslide-num">{String(i + 1).padStart(2, '0')}</span>
                   <span className="dslide-title">{turnTitle(s.turn)}{s.slices > 1 ? ` · ${s.slice + 1}/${s.slices}` : ''}</span>
                   {s.turn.progress.total > 0 && <span className="dslide-prog">{s.turn.progress.done}/{s.turn.progress.total}</span>}
+                  {s.turn.usage && (
+                    <span className="dslide-tokens" title={s.turn.usage ? `in ${s.turn.usage.input.toLocaleString()} / out ${s.turn.usage.output.toLocaleString()}` : 'tokens used'}>
+                      {fmtTokens(s.turn.usage.total)} tok{(() => {
+                        const c = turnCost(s.turn.usage, pricing)
+                        return c !== null && c > 0 ? ` · ${fmtCost(c)} est` : ''
+                      })()}
+                    </span>
+                  )}
                   <span className={`dslide-status ${s.turn.status}`}><StatusGlyph status={s.turn.status} /></span>
                 </div>
                 <div className="dslide-cards">

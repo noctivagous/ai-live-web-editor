@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type WorkflowSnapshot } from '../lib/api'
-import { groupTurns, looksLikeKeyError, slideTurns, workingSet } from '../lib/deck'
+import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import {
   DEFAULT_CHAT_LOG,
@@ -88,7 +88,7 @@ function appendRole(log: LogItem[], role: 'ai' | 'think', text: string): LogItem
   return [...log, { role, text }]
 }
 
-export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, projectId = '', onOpenPath }: {
+export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, projectId = '', onOpenPath, pricing }: {
   activePath: string
   keyKnown: boolean | undefined
   onNeedSetup: () => void
@@ -96,6 +96,8 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   embed?: boolean
   projectId?: string
   onOpenPath?: (path: string) => void
+  /** Optional per-1M-token USD pricing for cost estimates; absent = tokens only. */
+  pricing?: TokenPricing | null
 }) {
   const [log, setLog] = useState<LogItem[]>(() => loadChat(projectId).log)
   const [input, setInput] = useState('')
@@ -262,6 +264,22 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       } else if (ev.type === 'error') {
         const msg = ev.error
         setLog(l => [...l, { role: 'error', text: looksLikeKeyError(msg) ? guidedKeyError(keyKnown === true) : `Chat failed: ${msg.slice(0, 2000)}` }])
+      } else if (ev.type === 'done' && ev.usage) {
+        // Attach usage to the turn's last ai/tools entry; tool-only turns
+        // get a usage-only marker (Deck renders no empty result card).
+        const usage = ev.usage
+        setLog(l => {
+          for (let i = l.length - 1; i >= 0; i--) {
+            const item = l[i]
+            if (item.role === 'ai' || item.role === 'tools') {
+              const next = [...l]
+              next[i] = { ...item, usage } as LogItem
+              return next
+            }
+            if (item.role === 'user') break
+          }
+          return [...l, { role: 'ai', text: '', usage }]
+        })
       }
     }
     try {
@@ -419,7 +437,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         sending={sending}
         onSketchAction={(action) => void sketchAction(action)}
       />
-      <TurnStrip turns={turns} onJump={(turn) => {
+      <TurnStrip turns={turns} pricing={pricing} onJump={(turn) => {
         document.getElementById(turnAnchor(turn.index))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
       }} />
       <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 12.5, minHeight: 0 }}>
@@ -466,6 +484,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           onPick={() => postChatCommand('pick')}
           onSubmit={() => postChatCommand('submit')}
           onInsertToken={insertToken}
+          pricing={pricing}
         />
       )}
     </div>

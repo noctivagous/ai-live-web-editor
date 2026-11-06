@@ -13,6 +13,7 @@ export const FILE_ACTIVE_TOOLS = [
   'layout-snapshot',
   'layout-svg',
   'pool-open',
+  'run-project-check',
 ] as const
 
 export const SKETCH_ACTIVE_TOOLS = [

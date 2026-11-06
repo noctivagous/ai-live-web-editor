@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { abortSignalFromReq, beginChatSse, isAbortError, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult } from './chatStream.js'
+import { abortSignalFromReq, beginChatSse, isAbortError, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult, toTurnUsage } from './chatStream.js'
 
 describe('mapMastraChunk', () => {
   it('maps Mastra payload.text text-delta', () => {
@@ -186,5 +186,26 @@ describe('abortSignalFromReq', () => {
     assert.equal(signal.aborted, true)
     const already = abortSignalFromReq({ aborted: true })
     assert.equal(already.aborted, true)
+  })
+})
+
+describe('toTurnUsage', () => {
+  it('maps camelCase AI SDK usage', () => {
+    assert.deepEqual(
+      toTurnUsage({ inputTokens: 120, outputTokens: 30, totalTokens: 150 }),
+      { input: 120, output: 30, total: 150 },
+    )
+  })
+  it('maps snake_case gateway usage and derives the total', () => {
+    assert.deepEqual(
+      toTurnUsage({ input_tokens: 10, output_tokens: 5 }),
+      { input: 10, output: 5, total: 15 },
+    )
+  })
+  it('returns null — never zeros — when the provider reports nothing', () => {
+    assert.equal(toTurnUsage(undefined), null)
+    assert.equal(toTurnUsage(null), null)
+    assert.equal(toTurnUsage({}), null)
+    assert.equal(toTurnUsage({ model: 'x' }), null)
   })
 })

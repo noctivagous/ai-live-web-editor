@@ -59,6 +59,9 @@ export function mountConnectionsApi(app: Express) {
         model: typeof body.model === 'string' ? body.model : '',
         key: typeof body.key === 'string' ? body.key : undefined,
         verifiedModels: Array.isArray(body.verifiedModels) ? body.verifiedModels : undefined,
+        pricing: body.pricing === null || (body.pricing && typeof body.pricing === 'object')
+          ? { input: Number((body.pricing as { input?: unknown }).input), output: Number((body.pricing as { output?: unknown }).output) }
+          : undefined,
       })
       res.json({ ...publicStore(), saved: conn.id })
     } catch (e) {

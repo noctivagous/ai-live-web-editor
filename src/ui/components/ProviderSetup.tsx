@@ -7,7 +7,7 @@ import {
 import {
   activateConnection, deleteConnection, getConnections, probeConnection,
   saveConnection, saveModalityDefaults, testConnection,
-  type ConnectionInfo, type ConnectionsPayload, type ProbeErrorKind, type TaggedModel,
+  type ConnectionInfo, type ConnectionPricing, type ConnectionsPayload, type ProbeErrorKind, type TaggedModel,
 } from '../lib/api'
 import { PROVIDER_LOGOS } from '../lib/logos'
 
@@ -89,6 +89,8 @@ function CardEditor({ preset, conn, onClose, onSaved }: EditorProps) {
   const [baseUrl, setBaseUrl] = useState(conn?.baseUrl || preset.defaultBaseUrl)
   const [model, setModel] = useState(conn?.model || '')
   const [tagged, setTagged] = useState<TaggedModel[]>(conn?.verifiedModels || [])
+  const [priceIn, setPriceIn] = useState(conn?.pricing ? String(conn.pricing.input) : '')
+  const [priceOut, setPriceOut] = useState(conn?.pricing ? String(conn.pricing.output) : '')
   const [probe, setProbe] = useState<'idle' | 'probing' | 'ok' | 'error'>('idle')
   const [probeError, setProbeError] = useState<{ kind: ProbeErrorKind, message: string } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -151,6 +153,17 @@ function CardEditor({ preset, conn, onClose, onSaved }: EditorProps) {
     setSaving(true)
     setSaveError(null)
     try {
+      let pricing: ConnectionPricing | null | undefined
+      if (priceIn.trim() || priceOut.trim()) {
+        const input = Number(priceIn)
+        const output = Number(priceOut)
+        if (!Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) {
+          throw new Error('Pricing must be two non-negative numbers (USD per 1M tokens)')
+        }
+        pricing = { input, output }
+      } else if (conn?.pricing) {
+        pricing = null
+      }
       await saveConnection({
         id: conn?.id,
         presetId: preset.slotId,
@@ -159,6 +172,7 @@ function CardEditor({ preset, conn, onClose, onSaved }: EditorProps) {
         model,
         key: key.trim() || undefined,
         verifiedModels: tagged.length ? tagged : undefined,
+        pricing,
       })
       onSaved()
     } catch (e: unknown) {
@@ -262,6 +276,25 @@ function CardEditor({ preset, conn, onClose, onSaved }: EditorProps) {
               <input className="deck-input" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
             </>
           )}
+          <label className="field-label">Price per 1M tokens, USD (optional, for cost estimates)</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="deck-input"
+              value={priceIn}
+              onChange={e => setPriceIn(e.target.value)}
+              placeholder="Input, e.g. 3"
+              inputMode="decimal"
+              style={{ width: '50%' }}
+            />
+            <input
+              className="deck-input"
+              value={priceOut}
+              onChange={e => setPriceOut(e.target.value)}
+              placeholder="Output, e.g. 15"
+              inputMode="decimal"
+              style={{ width: '50%' }}
+            />
+          </div>
           <div className="field-hint">
             {preset.getKeyUrl && (
               <>Need a key? <a href={preset.getKeyUrl} target="_blank" rel="noreferrer">Get one from {preset.name}</a>. </>

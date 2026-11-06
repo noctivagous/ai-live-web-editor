@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { classifyTool, filesFromSteps, formatElapsed, groupTurns, packHeights, slideTurns, slideTurnsOrDefault, turnTitle, workingSet } from './deck.js'
+import { classifyTool, filesFromSteps, fmtCost, fmtTokens, formatElapsed, groupTurns, packHeights, slideTurns, slideTurnsOrDefault, turnCost, turnTitle, workingSet } from './deck.js'
 import type { LogItem } from './chatSession.js'
 
 const step = (id: string, name: string, status: 'running' | 'done' | 'error' = 'done', detail = name, result?: string) =>
@@ -121,5 +121,50 @@ describe('packHeights', () => {
   it('handles empties and zero capacity', () => {
     assert.deepEqual(packHeights([], 400), [])
     assert.deepEqual(packHeights([100], 0), [[0]])
+  })
+})
+
+describe('turn usage', () => {
+  it('maps run-project-check to the Test group', () => {
+    assert.equal(classifyTool('run-project-check'), 'check')
+  })
+  it('attaches ai usage to the turn and skips empty result cards', () => {
+    const turns = groupTurns([
+      { role: 'user', text: 'hi' },
+      { role: 'ai', text: '', usage: { input: 100, output: 20, total: 120 } },
+    ])
+    assert.equal(turns.length, 1)
+    assert.deepEqual(turns[0].usage, { input: 100, output: 20, total: 120 })
+    assert.ok(!turns[0].cards.some(c => c.kind === 'result'))
+  })
+  it('keeps result cards for ai text with usage', () => {
+    const turns = groupTurns([
+      { role: 'user', text: 'hi' },
+      { role: 'ai', text: 'done', usage: { input: 1, output: 2, total: 3 } },
+    ])
+    assert.deepEqual(turns[0].usage, { input: 1, output: 2, total: 3 })
+    assert.equal(turns[0].cards.filter(c => c.kind === 'result').length, 1)
+  })
+  it('leaves usage null when the provider reported nothing', () => {
+    const turns = groupTurns([{ role: 'user', text: 'hi' }, { role: 'ai', text: 'done' }])
+    assert.equal(turns[0].usage, null)
+  })
+})
+
+describe('fmtTokens and turnCost', () => {
+  it('compacts counts and guards junk', () => {
+    assert.equal(fmtTokens(950), '950')
+    assert.equal(fmtTokens(2400), '2.4k')
+    assert.equal(fmtTokens(12400), '12k')
+    assert.equal(fmtTokens(NaN), '—')
+  })
+  it('prices a turn from per-1M rates, null when unpriced', () => {
+    assert.equal(turnCost(null, { input: 3, output: 15 }), null)
+    assert.equal(turnCost({ input: 1_000_000, output: 0, total: 1_000_000 }, { input: 3, output: 15 }), 3)
+    assert.equal(turnCost({ input: 1, output: 1, total: 2 }, undefined), null)
+  })
+  it('formats small costs with more precision', () => {
+    assert.equal(fmtCost(0.004), '$0.0040')
+    assert.equal(fmtCost(1.5), '$1.50')
   })
 })

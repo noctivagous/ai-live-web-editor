@@ -1030,7 +1030,36 @@ Deck is the right answer surface; it is currently showing time only.
 
 | Date | Build / step | Median tokens | Median turns | Median elapsed | Notes |
 |---|---|---|---|---|---|
-| — | baseline (pre-Step 1) | — | — | — | not yet measured |
+| — | baseline (pre-Step 1) | — | — | — | not yet measured — needs 5 live runs on a built launcher; code landed 2026-11-06 |
+
+Landed 2026-11-06 (code; yardstick numbers pending live runs):
+
+- Usage forwarding: `pipeAgentChatStream` awaits `result.totalUsage`
+  (shape verified against installed `@mastra/core`
+  `stream/base/output.d.ts`), normalises via `toTurnUsage`
+  (camelCase + snake_case, null when absent), sends
+  `done { usage, model }`. Gateway silence → server warning + "not
+  reported", never 0. (`src/chatStream.ts` + tests.)
+- Display: per-turn tokens on Deck slides/tiles, session total in the
+  turn strip; cost shown only with connection pricing, labelled `est`.
+  Usage persists in the chat log; old logs render "—".
+  (`src/ui/lib/deck.ts`, `Deck.tsx`, `Chat.tsx`, `chatSession.ts`.)
+- Cost source decision: provider live cost APIs need a separate Admin
+  key, not the BYOK project key (OpenAI Costs/Usage endpoints reject
+  project keys), so no per-turn server lookup. Static per-1M-token
+  pricing on the connection (editable in ProviderSetup) it is;
+  tokens-only when unset. Revisit only if we ever hold admin keys.
+- `run-project-check` tool (project `build` script, 120s timeout,
+  4k-char tail) in Files set + agent tools; Deck `check`/`Test` group.
+  Verified live: ran `vite build` in `projects/lumen`, ok:true.
+  Test card renders only from this tool — no fake cards.
+- Plan card decision: keep grouping as today (Intent/Inspect/Edit/
+  Live/Result); no explicit `plan` tool. Revisit if multi-step runs
+  become unreadable.
+- Verified: full suite 94/94, `npm run ui:build` clean, `tsc` shows
+  only the two pre-existing §0 errors. Not run: live chat turns for
+  the yardstick table or the manual Deck check (sandbox blocks
+  listening sockets); do both on a real machine, then fill the row.
 
 ### Risks / alternatives rejected
 

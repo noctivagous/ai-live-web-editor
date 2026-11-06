@@ -1,4 +1,29 @@
-import type { LogItem, ToolStep } from './chatSession.js'
+import type { LogItem, ToolStep, TurnUsage } from './chatSession.js'
+
+export interface TokenPricing { input: number; output: number }
+
+/** Compact token count: 950 → "950", 12.4k, 3.1M. */
+export function fmtTokens(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '—'
+  if (n < 1000) return `${Math.round(n)}`
+  if (n < 10000) return `${(n / 1000).toFixed(1)}k`
+  if (n < 1000000) return `${Math.round(n / 1000)}k`
+  return `${(n / 1000000).toFixed(1)}M`
+}
+
+/** Estimated turn cost in USD from per-1M-token pricing. Null when unpriced. */
+export function turnCost(usage: TurnUsage | null | undefined, pricing?: TokenPricing | null): number | null {
+  if (!usage || !pricing) return null
+  if (!Number.isFinite(pricing.input) || !Number.isFinite(pricing.output)) return null
+  return (usage.input / 1_000_000) * pricing.input + (usage.output / 1_000_000) * pricing.output
+}
+
+export function fmtCost(usd: number): string {
+  if (!Number.isFinite(usd) || usd < 0) return '—'
+  if (usd === 0) return '$0'
+  if (usd < 0.01) return `$${usd.toFixed(4)}`
+  return `$${usd.toFixed(2)}`
+}
 
 /**
  * Deck grouping: turn the flat chat log into the Agentic Deck structure
@@ -8,12 +33,13 @@ import type { LogItem, ToolStep } from './chatSession.js'
  * startedAt/endedAt on tool steps.
  */
 
-export type ToolGroup = 'inspect' | 'edit' | 'live' | 'other'
+export type ToolGroup = 'inspect' | 'edit' | 'live' | 'check' | 'other'
 
 export const TOOL_GROUP_LABEL: Record<ToolGroup, string> = {
   inspect: 'Inspect',
   edit: 'Edit files',
   live: 'Live page',
+  check: 'Test',
   other: 'Tools',
 }
 
@@ -23,11 +49,13 @@ const INSPECT_TOOLS = new Set([
 ])
 const EDIT_TOOLS = new Set(['str-replace', 'write-real-file', 'writeRealFileTool'])
 const LIVE_TOOLS = new Set(['patch-dom', 'eval-js'])
+const CHECK_TOOLS = new Set(['run-project-check'])
 
 export function classifyTool(name: string): ToolGroup {
   if (INSPECT_TOOLS.has(name)) return 'inspect'
   if (EDIT_TOOLS.has(name)) return 'edit'
   if (LIVE_TOOLS.has(name)) return 'live'
+  if (CHECK_TOOLS.has(name)) return 'check'
   return 'other'
 }
 
@@ -53,6 +81,8 @@ export interface DeckTurn {
   progress: { done: number, total: number, pct: number }
   /** File paths the agent touched in this turn, in first-seen order. */
   files: string[]
+  /** Token usage for the turn, or null when the provider did not report it. */
+  usage: TurnUsage | null
 }
 
 const FILE_RE = /(?:^|[\s"'(])(\/[^\s"'()]+\.[A-Za-z0-9]+)/g
@@ -90,19 +120,20 @@ function turnStatus(cards: DeckCard[], steps: ToolStep[], isLast: boolean, sendi
 
 export function groupTurns(log: LogItem[], opts: { sending?: boolean } = {}): DeckTurn[] {
   const sending = Boolean(opts.sending)
-  const raw: { intent: string | null, cards: DeckCard[], steps: ToolStep[] }[] = []
-  let cur: { intent: string | null, cards: DeckCard[], steps: ToolStep[] } | null = null
+  const raw: { intent: string | null, cards: DeckCard[], steps: ToolStep[], usage: TurnUsage | null }[] = []
+  let cur: { intent: string | null, cards: DeckCard[], steps: ToolStep[], usage: TurnUsage | null } | null = null
 
   const ensure = () => {
-    if (!cur) { cur = { intent: null, cards: [], steps: [] }; raw.push(cur) }
+    if (!cur) { cur = { intent: null, cards: [], steps: [], usage: null }; raw.push(cur) }
     return cur
   }
-  const pushTools = (steps: ToolStep[]) => {
+  const pushTools = (item: { steps: ToolStep[], usage?: TurnUsage }) => {
     const turn = ensure()
-    turn.steps.push(...steps)
+    turn.steps.push(...item.steps)
+    if (item.usage && !turn.usage) turn.usage = item.usage
     // Group consecutive steps of the same class into one card, keeping order:
     // an inspect → edit → inspect sequence stays three cards, not two.
-    for (const step of steps) {
+    for (const step of item.steps) {
       const group = classifyTool(step.name)
       const last = turn.cards[turn.cards.length - 1]
       if (last && last.kind === 'tools' && last.group === group) last.steps.push(step)
@@ -112,14 +143,16 @@ export function groupTurns(log: LogItem[], opts: { sending?: boolean } = {}): De
 
   for (const item of log) {
     if (item.role === 'user') {
-      cur = { intent: item.text, cards: [{ kind: 'intent', text: item.text }], steps: [] }
+      cur = { intent: item.text, cards: [{ kind: 'intent', text: item.text }], steps: [], usage: null }
       raw.push(cur)
     } else if (item.role === 'tools') {
-      pushTools(item.steps)
+      pushTools(item)
     } else if (item.role === 'think') {
       ensure().cards.push({ kind: 'reasoning', text: item.text })
     } else if (item.role === 'ai') {
-      ensure().cards.push({ kind: 'result', text: item.text })
+      if (item.usage && !ensure().usage) ensure().usage = item.usage
+      // Usage-only markers (tool-only turns) carry no text: no card, usage kept.
+      if (item.text) ensure().cards.push({ kind: 'result', text: item.text })
     } else if (item.role === 'error') {
       ensure().cards.push({ kind: 'error', text: item.text })
     } else {
@@ -138,6 +171,7 @@ export function groupTurns(log: LogItem[], opts: { sending?: boolean } = {}): De
       status: turnStatus(t.cards, t.steps, i === raw.length - 1, sending),
       progress: { done, total, pct: total ? Math.round((done / total) * 100) : (t.cards.some(c => c.kind === 'result') ? 100 : 0) },
       files: filesFromSteps(t.steps),
+      usage: t.usage,
     }
   })
 }
@@ -159,6 +193,7 @@ export function slideTurnsOrDefault(turns: DeckTurn[], defaultText: string): Dec
     status: 'pending',
     progress: { done: 0, total: 0, pct: 0 },
     files: [],
+    usage: null,
   }]
 }
 

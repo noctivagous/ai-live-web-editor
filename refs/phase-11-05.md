@@ -1193,6 +1193,22 @@ Landed 2026-11-06: `src/ui/lib/folderImport.ts` (+ tests),
 blocks listening sockets); verify by opening the built launcher and
 importing a fixture folder.
 
+Update 2026-11-06 — the "revisit only if users reject the copy
+model" case happened: **Open (live sync) shipped as a second button
+next to Import**. Import stays a copy; Open does the client-side FS
+bridge the spike deferred (write-back through retained `readwrite`
+handles, `lastModified`+size polling instead of a watcher). Wiring:
+`POST /api/projects/sync/changes` (stateless diff vs a client-held
+baseline) + `POST /api/projects/sync` (apply uploads/deletes) in
+`src/server.ts`; `listProjectFiles`/`deleteSyncFiles` in
+`src/launcher.ts`; `src/ui/lib/folderSync.ts` (plan core + handle IO),
+`src/ui/components/FolderSync.tsx` (status bar + per-row conflict
+dialog), header gets Import…/Open… buttons in `src/ui/App.tsx`.
+Conflicts and one-sided deletions always ask per path; binaries and
+dep/build dirs never sync. Not yet live-verified in a browser (same
+sandbox reason); dogfood by opening a folder with Open… and editing
+on both sides.
+
 ### Risks / alternatives rejected
 
 - Shipping a picker that silently can't affect the agent's root —

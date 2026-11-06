@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool } from './env.js'
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
-import { createProject, ensureWorkspace, getFsRoot, listProjects, readActiveId, selectProject, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
+import { createProject, deleteSyncFiles, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
@@ -144,6 +144,45 @@ app.post('/api/projects/import', (req, res) => {
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
   }
+})
+
+/* Folder sync (Open-folder): stateless diff endpoint. The browser client
+ * keeps the baseline; it sends the paths it believes exist (known) and the
+ * last sync time (since). The server reports what changed and what is gone —
+ * no server-side session state. */
+app.post('/api/projects/sync/changes', (req, res) => {
+  try {
+    const body = req.body || {}
+    const since = typeof body.since === 'number' && body.since > 0 ? body.since : 0
+    const known = Array.isArray(body.known)
+      ? body.known.filter((p: unknown): p is string => typeof p === 'string')
+      : []
+    const root = getFsRoot()
+    const entries = listProjectFiles(root)
+    const now = Date.now()
+    const MAX = 3000
+    const changed = entries.filter(e => e.mtimeMs > since).slice(0, MAX)
+    const present = new Set(entries.map(e => e.path))
+    const deleted = known.filter(p => !present.has(p)).slice(0, MAX)
+    res.json({ ok: true, now, changed, deleted, truncated: entries.length > MAX })
+  } catch (e: any) { res.status(500).json({ ok: false, error: e.message }) }
+})
+
+/* Folder sync (Open-folder): apply the browser's disk diff. Same safePath
+ * discipline as the import writer; never runs npm install or reselects the
+ * project. Honors the sketch write guard like /api/fs/write. */
+app.post('/api/projects/sync', (req, res) => {
+  try {
+    const blocked = sketchWriteGuard()
+    if (blocked) return res.status(409).json({ ok: false, ...blocked })
+    const body = req.body || {}
+    const files = Array.isArray(body.files) ? body.files : []
+    const deletes = Array.isArray(body.deletes) ? body.deletes : []
+    const dest = getFsRoot()
+    const { received, writeErrors } = writeImportFiles(dest, files)
+    const { deleted, deleteErrors } = deleteSyncFiles(dest, deletes)
+    res.json({ ok: true, received, writeErrors, deleted, deleteErrors })
+  } catch (e: any) { res.status(500).json({ ok: false, error: e.message }) }
 })
 
 const projectSse = new Set<express.Response>()

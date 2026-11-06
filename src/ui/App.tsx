@@ -5,11 +5,19 @@ import { Preview } from './components/Preview'
 import { Chat } from './components/Chat'
 import { NoticeDialog, SettingsModal } from './components/Modal'
 import { ImportProgressDialog, ImportReportDialog, OverLimitDialog, ReimportButton } from './components/FolderImport'
+import { SyncConflictsDialog, SyncStatusBar, type ConflictChoice, type ConflictItem } from './components/FolderSync'
 import {
-  applyCaps, defaultCaps, fmtBytes, isFolderImportSupported, pickFolder, sanitizeProjectName,
+  applyCaps, classifyPath, defaultCaps, fmtBytes, isFolderImportSupported, loadFolderHandle, pickFolder,
+  repickFolder, sanitizeProjectName,
   saveFolderHandle, uploadImport,
   type ImportBatchResult, type ImportProgress, type PickedFolder, type SkippedEntry,
 } from './lib/folderImport'
+import {
+  SYNC_POLL_MS, clearSyncRecord, deleteDiskEntry, ensureWritePermission, hasWritePermission,
+  loadSyncRecord, pickSyncFolder, planSync, readDiskText, saveSyncRecord, snapshotDisk,
+  uploadSyncBatches, writeDiskText,
+  type SyncBaseline, type SyncStatus,
+} from './lib/folderSync'
 import { SetupWizard } from './components/SetupWizard'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
@@ -18,7 +26,7 @@ import { loadCollapse, saveCollapse } from './lib/collapse'
 import {
   listFiles, readFile, writeFile, getConfig, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
-  listProjects, selectProject, createProject,
+  listProjects, selectProject, createProject, fetchSyncChanges,
   type LauncherConfig, type ProjectInfo, type ConnectionsPayload,
 } from './lib/api'
 
@@ -43,18 +51,33 @@ export default function App() {
 
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [activeProject, setActiveProject] = useState('')
-  // Folder import (Step 10): import-a-copy via showDirectoryPicker.
+  // Folder import: Import is a copy, Open is live two-way sync.
   const [overLimit, setOverLimit] = useState<{
     pick: PickedFolder
     plan: ReturnType<typeof applyCaps>
     repick: null | (() => Promise<Omit<PickedFolder, 'dirHandle'>>)
+    mode: 'import' | 'sync'
   } | null>(null)
   const [importProg, setImportProg] = useState<{ name: string; progress: ImportProgress } | null>(null)
   const [importReport, setImportReport] = useState<{
     name: string
     result: ImportBatchResult
     skipped: SkippedEntry[]
+    mode?: 'import' | 'sync'
+    syncDirName?: string
   } | null>(null)
+  // Folder sync (Open): live two-way sync with the picked folder.
+  const [syncSession, setSyncSession] = useState<{
+    projectId: string
+    dirName: string
+    status: SyncStatus
+    message: string
+    lastAt: number | null
+  } | null>(null)
+  const [syncConflicts, setSyncConflicts] = useState<ConflictItem[] | null>(null)
+  const syncHandleRef = useRef<PickedFolder['dirHandle'] | null>(null)
+  const syncBaseRef = useRef<SyncBaseline | null>(null)
+  const syncBusyRef = useRef(false)
   const [models, setModels] = useState<string[]>([])
   const [connPayload, setConnPayload] = useState<ConnectionsPayload | null>(null)
   const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
@@ -229,7 +252,7 @@ export default function App() {
     const plan = applyCaps(pick.files.map(f => ({ path: f.path, size: f.file.size })), defaultCaps())
     // Over the caps (default 50 MB / 2000 files)? Ask — never silently cut.
     if (plan.over) {
-      setOverLimit({ pick, plan, repick: null })
+      setOverLimit({ pick, plan, repick: null, mode: 'import' })
       return
     }
     await startUpload(pick, pick.files, false)
@@ -266,7 +289,7 @@ export default function App() {
     }
     const plan = applyCaps(pick.files.map(f => ({ path: f.path, size: f.file.size })), defaultCaps())
     if (plan.over) {
-      setOverLimit({ pick: stub, plan, repick })
+      setOverLimit({ pick: stub, plan, repick, mode: 'import' })
       return
     }
     const ok = confirm(`Re-import replaces every file in project “${activeProject}” with a fresh copy from “${pick.dirName}” (${pick.files.length} files, ${fmtBytes(pick.totalBytes)}). Continue?`)
@@ -284,6 +307,11 @@ export default function App() {
     const files = choice === 'capped'
       ? pending.pick.files.filter(f => pending.plan.within.some(w => w.path === f.path))
       : pending.pick.files
+    // Open (live sync) shares the capped initial copy; the loop converges the rest.
+    if (pending.mode === 'sync') {
+      void startSyncUpload(pending.pick, files)
+      return
+    }
     // Fresh picks (repick === null) always create a new project; re-imports overwrite.
     const overwrite = pending.repick !== null
     if (pending.repick) {
@@ -330,7 +358,336 @@ export default function App() {
     }
   }
 
+  /* Folder sync (Open): pick with readwrite, copy in, then stay synced. */
+  async function handleOpenSync() {
+    if (!isFolderImportSupported()) {
+      setNotice('Live sync needs Chrome, Edge, or Opera on desktop (the File System Access picker is Chromium-only). Alternatives: run this editor inside your own app directory (Vite-plugin path), or use Import for a copy.')
+      return
+    }
+    let handle: PickedFolder['dirHandle']
+    try {
+      setStatus('reading folder…')
+      handle = await pickSyncFolder()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('AbortError') || (e instanceof DOMException && e.name === 'AbortError')) {
+        setStatus('open cancelled')
+        return
+      }
+      setNotice(`Could not read the folder: ${msg}`)
+      setStatus('folder read failed')
+      return
+    }
+    if (!(await ensureWritePermission(handle))) {
+      setNotice('Live sync needs read + write permission for the picked folder. Nothing was copied — use Import for a permission-free copy instead.')
+      setStatus('sync permission denied')
+      return
+    }
+    let rest: Omit<PickedFolder, 'dirHandle'>
+    try {
+      rest = await repickFolder(handle)
+    } catch (e: unknown) {
+      setNotice(`Could not read the folder: ${e instanceof Error ? e.message : String(e)}`)
+      setStatus('folder read failed')
+      return
+    }
+    const pick: PickedFolder = { ...rest, dirHandle: handle }
+    if (pick.files.length === 0) {
+      setNotice(`No importable files in “${pick.dirName}”. Only text source files sync; dependencies (.git, node_modules), build output, and binaries are skipped.`)
+      setStatus('nothing to open')
+      return
+    }
+    const plan = applyCaps(pick.files.map(f => ({ path: f.path, size: f.file.size })), defaultCaps())
+    if (plan.over) {
+      setOverLimit({ pick, plan, repick: () => repickFolder(handle), mode: 'sync' })
+      return
+    }
+    await startSyncUpload(pick, pick.files)
+  }
+
+  async function startSyncUpload(pick: PickedFolder, files: { path: string; file: File }[]) {
+    const suggested = sanitizeProjectName(pick.dirName)
+    const raw = prompt('Open live-synced project (letters, numbers, dash, underscore)', suggested)
+    if (!raw) {
+      setStatus('open cancelled')
+      return
+    }
+    const name = sanitizeProjectName(raw)
+    setStatus(`opening ${files.length} files → ${name}…`)
+    setImportProg({ name, progress: { sentFiles: 0, totalFiles: files.length, sentBytes: 0, totalBytes: files.reduce((n, f) => n + f.file.size, 0), phase: 'uploading' } })
+    try {
+      const result = await uploadImport(name, files, {
+        onProgress: (progress) => setImportProg({ name, progress }),
+      })
+      setImportProg(null)
+      if (pick.dirHandle) {
+        try { await saveFolderHandle(name, pick.dirHandle) } catch { /* resume is optional */ }
+      }
+      // Baseline both sides so the first pass is quiet.
+      const { snapshot } = await snapshotDisk(pick.dirHandle)
+      const srv = await fetchSyncChanges(0, [])
+      const baseline: SyncBaseline = { disk: snapshot, serverPaths: srv.changed.map(c => c.path), at: srv.now }
+      const projectId = result.active || name
+      saveSyncRecord(projectId, { dirName: pick.dirName, baseline })
+      syncHandleRef.current = pick.dirHandle
+      syncBaseRef.current = baseline
+      skipSave.current = true
+      setActivePath('/index.html')
+      await loadProjects()
+      setActiveProject(projectId)
+      await loadFiles()
+      setSyncSession({ projectId, dirName: pick.dirName, status: 'live', message: 'live sync on — changes flow both ways', lastAt: Date.now() })
+      setStatus(`opened ${name} — live sync on`)
+      setImportReport({ name, result, skipped: pick.skipped, mode: 'sync', syncDirName: pick.dirName })
+    } catch (e: unknown) {
+      setImportProg(null)
+      setNotice(`Open failed: ${e instanceof Error ? e.message : String(e)}`)
+      setStatus('open failed')
+    }
+  }
+
+  function describeSyncPass(up: number, down: number, skippedBinary: number): string {
+    const skip = skippedBinary > 0 ? ` · ${skippedBinary} non-text skipped` : ''
+    if (up + down === 0) return skippedBinary > 0 ? `in sync (${skippedBinary} non-text file(s) not synced)` : 'in sync'
+    return `↑${up} to project · ↓${down} to folder${skip}`
+  }
+
+  /** Re-read both sides after applying a pass; the loop diffs against this. */
+  async function refreshSyncBaseline(handle: PickedFolder['dirHandle']): Promise<void> {
+    const { snapshot } = await snapshotDisk(handle)
+    const srv = await fetchSyncChanges(0, [])
+    const baseline: SyncBaseline = { disk: snapshot, serverPaths: srv.changed.map(c => c.path), at: srv.now }
+    syncBaseRef.current = baseline
+    setSyncSession(s => {
+      if (!s) return s
+      saveSyncRecord(s.projectId, { dirName: s.dirName, baseline })
+      return s
+    })
+  }
+
+  async function runSyncPass() {
+    const handle = syncHandleRef.current
+    const base = syncBaseRef.current
+    const session = syncSession
+    if (!handle || !base || !session || syncBusyRef.current) return
+    if (session.projectId !== activeProject) return
+    if (document.hidden) return
+    syncBusyRef.current = true
+    try {
+      if (!(await hasWritePermission(handle))) {
+        setSyncSession(s => s && ({ ...s, status: 'paused', message: 'folder permission lost — press Resume' }))
+        return
+      }
+      const { snapshot: disk } = await snapshotDisk(handle)
+      const srv = await fetchSyncChanges(base.at, base.serverPaths)
+      const plan = planSync({
+        baseDisk: base.disk,
+        baseServerPaths: base.serverPaths,
+        disk,
+        serverChanged: srv.changed.map(c => c.path),
+        serverDeleted: srv.deleted,
+      })
+      // Text-only bridge: skip anything the picker would never import.
+      const keep = (p: string) => classifyPath(p.replace(/^\//, '')) === 'keep'
+      const skippedBinary = [...plan.upload, ...plan.download].filter(p => !keep(p)).length
+      plan.upload = plan.upload.filter(keep)
+      plan.download = plan.download.filter(keep)
+      // Same bytes on both sides (mtime skew only) converge without asking.
+      const realConflicts: string[] = []
+      for (const p of plan.conflicts) {
+        let same = false
+        try {
+          const [diskText, serverData] = await Promise.all([readDiskText(handle, p), readFile(p)])
+          same = !serverData.error && diskText === (serverData.content ?? '')
+        } catch { /* fall through to the dialog */ }
+        if (!same) realConflicts.push(p)
+      }
+      const decisions: ConflictItem[] = [
+        ...realConflicts.map(path => ({ path, kind: 'conflict' as const })),
+        ...plan.diskDeleted.map(path => ({ path, kind: 'diskDeleted' as const })),
+        ...plan.serverDeleted.map(path => ({ path, kind: 'serverDeleted' as const })),
+      ]
+      if (decisions.length > 0) {
+        // Defer the whole pass: apply nothing until the user decides.
+        setSyncConflicts(decisions)
+        setSyncSession(s => s && ({ ...s, message: `${decisions.length} change(s) need a decision` }))
+        return
+      }
+      let up = 0
+      let down = 0
+      if (plan.upload.length > 0) {
+        const batches = []
+        for (const p of plan.upload) batches.push({ path: p, content: await readDiskText(handle, p) })
+        const r = await uploadSyncBatches(batches)
+        if (r.errors.length > 0) throw new Error(r.errors[0].error)
+        up = r.received
+      }
+      if (plan.download.length > 0) {
+        for (const p of plan.download) {
+          const data = await readFile(p)
+          if (data.error || typeof data.content !== 'string') throw new Error(`Could not read ${p} from the project`)
+          await writeDiskText(handle, p, data.content)
+          down += 1
+        }
+      }
+      await refreshSyncBaseline(handle)
+      if (up + down > 0) await loadFiles()
+      setSyncSession(s => s && ({ ...s, status: 'live', lastAt: Date.now(), message: describeSyncPass(up, down, skippedBinary) }))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/permission|NotAllowed/i.test(msg)) {
+        setSyncSession(s => s && ({ ...s, status: 'paused', message: 'folder permission lost — press Resume' }))
+      } else {
+        setSyncSession(s => s && ({ ...s, status: 'error', message: `sync pass failed (retrying): ${msg.slice(0, 120)}` }))
+      }
+    } finally {
+      syncBusyRef.current = false
+    }
+  }
+
+  async function resolveSyncConflicts(choices: ConflictChoice[]) {
+    const handle = syncHandleRef.current
+    const items = syncConflicts || []
+    if (!handle || items.length === 0) {
+      setSyncConflicts(null)
+      return
+    }
+    setSyncConflicts(null)
+    setSyncSession(s => s && ({ ...s, message: 'applying your choices…' }))
+    try {
+      const uploads: { path: string; content: string }[] = []
+      const serverDeletes: string[] = []
+      for (const item of items) {
+        const choice = choices.find(c => c.path === item.path)
+        if (!choice) continue
+        if (item.kind === 'conflict') {
+          if (choice.side === 'disk') uploads.push({ path: item.path, content: await readDiskText(handle, item.path) })
+          else {
+            const data = await readFile(item.path)
+            if (data.error || typeof data.content !== 'string') throw new Error(`Could not read ${item.path} from the project`)
+            await writeDiskText(handle, item.path, data.content)
+          }
+        } else if (item.kind === 'diskDeleted') {
+          if (choice.side === 'disk') serverDeletes.push(item.path)
+          else {
+            const data = await readFile(item.path)
+            if (data.error || typeof data.content !== 'string') throw new Error(`Could not read ${item.path} from the project`)
+            await writeDiskText(handle, item.path, data.content)
+          }
+        } else {
+          if (choice.side === 'disk') uploads.push({ path: item.path, content: await readDiskText(handle, item.path) })
+          else await deleteDiskEntry(handle, item.path)
+        }
+      }
+      if (uploads.length > 0 || serverDeletes.length > 0) {
+        const r = await uploadSyncBatches(uploads, serverDeletes)
+        if (r.errors.length > 0) throw new Error(r.errors[0].error)
+      }
+      await refreshSyncBaseline(handle)
+      await loadFiles()
+      setSyncSession(s => s && ({ ...s, status: 'live', lastAt: Date.now(), message: 'choices applied — in sync' }))
+    } catch (e: unknown) {
+      setSyncSession(s => s && ({ ...s, status: 'error', message: `apply failed (retrying): ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}` }))
+    }
+  }
+
+  function postponeSyncConflicts() {
+    setSyncConflicts(null)
+    // Stay paused so the same decisions don't pop back up in 8s;
+    // Sync now re-runs the check whenever the user is ready.
+    setSyncSession(s => s && ({ ...s, status: 'paused', message: 'paused for your decisions — press Sync now to review' }))
+  }
+
+  async function resumeSync() {
+    const s = syncSession
+    if (!s) return
+    let handle = syncHandleRef.current
+    if (!handle) {
+      try {
+        handle = await pickSyncFolder()
+      } catch {
+        setStatus('resume cancelled')
+        return
+      }
+      // Rebinding a handle: make sure it's the same folder before the old
+      // baseline starts moving files around.
+      const { snapshot } = await snapshotDisk(handle)
+      const known = new Set(syncBaseRef.current?.serverPaths || [])
+      const overlap = Object.keys(snapshot).filter(p => known.has(p)).length
+      const total = Object.keys(snapshot).length
+      if (!confirm(`Rebind live sync for “${s.projectId}” to folder “${handle.name}”? ${overlap} of ${total} files match the project. A different folder would upload its files into the project.`)) {
+        setStatus('resume cancelled — kept paused')
+        return
+      }
+      try { await saveFolderHandle(s.projectId, handle) } catch { /* optional */ }
+      syncHandleRef.current = handle
+    }
+    if (!(await ensureWritePermission(handle))) {
+      setSyncSession({ ...s, status: 'paused', message: 'folder permission denied — press Resume to try again' })
+      return
+    }
+    setSyncSession({ ...s, status: 'live', message: 'live sync resumed', lastAt: Date.now() })
+    void runSyncPass()
+  }
+
+  function disconnectSync() {
+    if (!syncSession) return
+    if (!confirm(`Stop live sync for “${syncSession.projectId}”? The project stays as an ordinary copy; your folder keeps its files.`)) return
+    clearSyncRecord(syncSession.projectId)
+    syncHandleRef.current = null
+    syncBaseRef.current = null
+    setSyncConflicts(null)
+    setSyncSession(null)
+    setStatus('sync disconnected — project kept as a copy')
+  }
+
   useEffect(() => { loadFiles(); refreshConfig(); loadProjects() }, [])
+
+  // Restore a sync session when landing on a project that has one.
+  useEffect(() => {
+    if (!activeProject) return
+    if (syncSession?.projectId === activeProject) return
+    const rec = loadSyncRecord(activeProject)
+    if (!rec) {
+      // Switched to an ordinary project: drop the in-memory session
+      // (the baseline was already saved after every clean pass).
+      if (syncHandleRef.current) {
+        syncHandleRef.current = null
+        syncBaseRef.current = null
+        setSyncConflicts(null)
+        setSyncSession(null)
+      }
+      return
+    }
+    void (async () => {
+      const h = await loadFolderHandle(activeProject)
+      if (!h) {
+        syncHandleRef.current = null
+        syncBaseRef.current = rec.baseline
+        setSyncSession({ projectId: activeProject, dirName: rec.dirName, status: 'paused', message: 'folder handle expired — press Resume and pick the folder again', lastAt: null })
+        return
+      }
+      syncHandleRef.current = h
+      syncBaseRef.current = rec.baseline
+      if (await hasWritePermission(h)) {
+        setSyncSession({ projectId: activeProject, dirName: rec.dirName, status: 'live', message: 'live sync resumed', lastAt: Date.now() })
+      } else {
+        setSyncSession({ projectId: activeProject, dirName: rec.dirName, status: 'paused', message: 'folder permission needs re-grant — press Resume', lastAt: null })
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject])
+
+  // Poll loop: runs only for the synced project, never while a decision or
+  // an import/upload dialog is open.
+  useEffect(() => {
+    if (!syncSession || syncSession.projectId !== activeProject) return
+    if (syncSession.status === 'paused') return
+    if (importProg || overLimit || syncConflicts) return
+    const t = setInterval(() => { void runSyncPass() }, SYNC_POLL_MS)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncSession, activeProject, importProg, overLimit, syncConflicts])
 
   useEffect(() => {
     const es = new EventSource('/api/projects/events')
@@ -450,15 +807,35 @@ export default function App() {
               ? 'Pick a folder on your disk (Chrome/Edge/Opera) — imports a copy as a new project'
               : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
           >
-            Open folder…
+            Import…
           </button>
-          <ReimportButton projectId={activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
+          <button
+            className="deck-btn"
+            onClick={() => { void handleOpenSync() }}
+            title={isFolderImportSupported()
+              ? 'Pick a folder and keep it in live two-way sync with the project (Chrome/Edge/Opera)'
+              : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
+          >
+            Open…
+          </button>
+          <ReimportButton projectId={activeProject} suppress={syncSession?.projectId === activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="deck-btn" onClick={() => setShowSettings(true)} title="Settings">Settings</button>
           <button className="deck-btn" onClick={() => save()}>Save</button>
         </div>
       </header>
+      {syncSession && syncSession.projectId === activeProject && (
+        <SyncStatusBar
+          dirName={syncSession.dirName}
+          status={syncSession.status}
+          message={syncSession.message}
+          lastAt={syncSession.lastAt}
+          onSyncNow={() => { void runSyncPass() }}
+          onDisconnect={disconnectSync}
+          onResume={() => { void resumeSync() }}
+        />
+      )}
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 10, padding: 12 }}>
         <div className="panel" style={{ width: leftW, flexShrink: 0 }}>
@@ -529,7 +906,16 @@ export default function App() {
           name={importReport.name}
           result={importReport.result}
           skipped={importReport.skipped}
+          mode={importReport.mode}
+          syncDirName={importReport.syncDirName}
           onClose={() => setImportReport(null)}
+        />
+      )}
+      {syncConflicts && (
+        <SyncConflictsDialog
+          items={syncConflicts}
+          onResolve={(choices) => { void resolveSyncConflicts(choices) }}
+          onPostpone={postponeSyncConflicts}
         />
       )}
       <SettingsModal

@@ -261,6 +261,30 @@ export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' 
   return r.json() as Promise<WorkflowSnapshot>
 }
 
+/* ── Folder sync (Open-folder) ── */
+
+export interface SyncServerChange { path: string; mtimeMs: number; size: number }
+
+export interface SyncChangesResult {
+  ok: boolean
+  now: number
+  changed: SyncServerChange[]
+  deleted: string[]
+  truncated?: boolean
+  error?: string
+}
+
+export async function fetchSyncChanges(since: number, known: string[]): Promise<SyncChangesResult> {
+  const r = await fetch('/api/projects/sync/changes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ since, known }),
+  })
+  const data = await r.json() as SyncChangesResult
+  if (!r.ok || data.ok === false) throw new Error(data.error || `Sync check failed (${r.status})`)
+  return data
+}
+
 export function isAbortError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false
   const name = (err as { name?: string }).name

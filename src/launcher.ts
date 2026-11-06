@@ -101,6 +101,70 @@ export function validProjectId(id: string) {
   return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(id)
 }
 
+export interface ProjectFileEntry { path: string; mtimeMs: number; size: number }
+
+/** Directory names never synced or listed (deps, build output, caches). */
+const SYNC_SKIP_DIR = new Set(['node_modules', 'dist', '.vite', '.chrome-data'])
+
+/* Folder sync (Open-folder): list every syncable file under a project dir
+ * with mtimes, using the same skip rules as /api/fs/list. Used by the sync
+ * changes endpoint; unit-tested with tmp dirs. */
+export function listProjectFiles(root: string): ProjectFileEntry[] {
+  const out: ProjectFileEntry[] = []
+  function walk(dir: string, base: string) {
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch { return }
+    for (const e of entries) {
+      if (SYNC_SKIP_DIR.has(e.name)) continue
+      const full = path.join(dir, e.name)
+      const rel = base ? base + '/' + e.name : e.name
+      if (e.isDirectory()) walk(full, rel)
+      else if (e.isFile()) {
+        try {
+          const st = fs.statSync(full)
+          out.push({ path: '/' + rel, mtimeMs: st.mtimeMs, size: st.size })
+        } catch { /* raced deletion, skip */ }
+      }
+    }
+  }
+  walk(root, '')
+  return out
+}
+
+export interface DeleteSyncResult {
+  deleted: number
+  deleteErrors: { path: string; error: string }[]
+}
+
+/* Folder sync (Open-folder): delete caller-named files under dest only.
+ * Same traversal discipline as writeImportFiles; directories are never
+ * removed, missing files are reported, the batch never aborts early. */
+export function deleteSyncFiles(dest: string, paths: unknown[]): DeleteSyncResult {
+  const deleteErrors: { path: string; error: string }[] = []
+  let deleted = 0
+  for (const entry of paths) {
+    try {
+      if (typeof entry !== 'string' || !entry.startsWith('/')) throw new Error('path must be an absolute project path')
+      const full = path.resolve(dest, '.' + entry)
+      if (!full.startsWith(dest + path.sep) && full !== dest) throw new Error('Path traversal')
+      let st
+      try {
+        st = fs.statSync(full)
+      } catch {
+        throw new Error('Not found')
+      }
+      if (!st.isFile()) throw new Error('Not a file')
+      fs.unlinkSync(full)
+      deleted += 1
+    } catch (e: any) {
+      deleteErrors.push({ path: String(entry ?? '?'), error: e.message })
+    }
+  }
+  return { deleted, deleteErrors }
+}
+
 export interface ImportWriteError { path: string; error: string }
 
 /* Folder-import batch writer (Step 10): writes caller-supplied text files

@@ -106,14 +106,14 @@ export function isFolderImportSupported(): boolean {
 }
 
 /* Minimal structural types so we don't depend on TS DOM-lib picker types. */
-interface DirHandle {
+export interface DirHandle {
   name: string
   kind: 'directory'
   values(): AsyncIterableIterator<FileHandle | DirHandle>
   queryPermission(opts?: { mode: string }): Promise<string>
   requestPermission(opts?: { mode: string }): Promise<string>
 }
-interface FileHandle {
+export interface FileHandle {
   kind: 'file'
   name: string
   getFile(): Promise<File>

@@ -72,18 +72,20 @@ export function ImportProgressDialog({ name, progress }: {
   )
 }
 
-export function ImportReportDialog({ name, result, skipped, onClose }: {
+export function ImportReportDialog({ name, result, skipped, onClose, mode, syncDirName }: {
   name: string
   result: ImportBatchResult
   skipped: SkippedEntry[]
   onClose: () => void
+  mode?: 'import' | 'sync'
+  syncDirName?: string
 }) {
   const failed = result.writeErrors || []
   const byReason = (r: SkippedEntry['reason']) => skipped.filter(s => s.reason === r)
   return (
     <Overlay wide onClose={onClose}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-        <b>Imported <span className="mono">{name}</span> — a copy, not a sync</b>
+        <b>{mode === 'sync' ? <>Opened <span className="mono">{name}</span> — live sync on</> : <>Imported <span className="mono">{name}</span> — a copy, not a sync</>}</b>
         <button onClick={onClose} className="deck-btn" style={{ marginLeft: 'auto' }}>Close</button>
       </div>
       <div style={{ fontSize: 13, color: '#ccc', marginBottom: 10 }}>
@@ -97,8 +99,9 @@ export function ImportReportDialog({ name, result, skipped, onClose }: {
             : null}
       </div>
       <p style={{ color: '#999', fontSize: 12, margin: '0 0 10px' }}>
-        This is a one-time copy into <span className="mono">projects/{name}</span>.
-        Later edits to the original folder do not sync back — use Re-import for a fresh copy.
+        {mode === 'sync'
+          ? <>Two-way sync with <span className="mono">{syncDirName || 'your folder'}</span>: agent edits land in your folder, disk edits appear here. Binaries and deps/build output are not synced.</>
+          : <>This is a one-time copy into <span className="mono">projects/{name}</span>. Later edits to the original folder do not sync back — use Re-import for a fresh copy, or Open for live sync.</>}
       </p>
       {skipped.length > 0 && (
         <details style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
@@ -124,8 +127,9 @@ export function ImportReportDialog({ name, result, skipped, onClose }: {
 }
 
 /** One-click re-import for projects that remember their folder handle. */
-export function ReimportButton({ projectId, onPick }: {
+export function ReimportButton({ projectId, suppress, onPick }: {
   projectId: string
+  suppress?: boolean
   onPick: (repick: () => Promise<Omit<PickedFolder, 'dirHandle'>>) => void
 }) {
   const [available, setAvailable] = useState(false)
@@ -136,7 +140,7 @@ export function ReimportButton({ projectId, onPick }: {
     void loadFolderHandle(projectId).then(h => { if (live) setAvailable(h !== null) })
     return () => { live = false }
   }, [projectId])
-  if (!available) return null
+  if (suppress || !available) return null
   return (
     <button
       className="deck-btn"

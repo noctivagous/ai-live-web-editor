@@ -19,6 +19,11 @@ import { markPageOwner } from '../pageBridge.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PKG_ROOT = path.resolve(__dirname, '..')
+/* Agentation ships with the editor (repo-root node_modules), not with the
+ * user's project — but the agentation entry is resolved from the project
+ * root, so bare `import 'agentation'` fails there. Alias + allow it here. */
+const AGENTATION_DIR = path.resolve(__dirname, '..', '..', 'node_modules', 'agentation')
+const AGENTATION_OK = fs.existsSync(path.join(AGENTATION_DIR, 'package.json'))
 
 export type AiLiveEditorOptions = {
   /** Disk the agent may read/write. Default: Vite `config.root`. */
@@ -52,7 +57,10 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
     name: 'ai-live-editor',
     apply: 'serve',
     config() {
-      return { server: { fs: { allow: [PKG_ROOT] } } }
+      return {
+        server: { fs: { allow: AGENTATION_OK ? [PKG_ROOT, AGENTATION_DIR] : [PKG_ROOT] } },
+        resolve: { alias: AGENTATION_OK ? { agentation: AGENTATION_DIR } : {} },
+      }
     },
     configResolved(config) {
       const fsRoot = path.resolve(opts.fsRoot || config.root)

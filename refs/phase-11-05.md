@@ -849,6 +849,41 @@ entry (`main.jsx` → `App`), CSS/token files — so the map says
 "App renders <PricingGrid> (template multi-column-3)" in our
 vocabulary, not generic symbols only.
 
+**Component registry lives here, not only in Step 1.** Step 1 authors
+our shipped catalog; this step is where a *project's* registry —
+whatever its origin — becomes marker data in the map. One unified
+registry shape (`name, file, propsSummary, whenToUse?, origin,
+confidence`), three origins, in precedence order:
+
+1. **Declared (ours):** the project carries our catalog manifest
+   (seeded starter, or Library Insert installed it). Authoritative:
+   props and when-to-use are curated, `origin: catalog`,
+   `confidence: declared`. Coverage is total by construction.
+2. **Declared (theirs):** an imported project with shadcn
+   (`components.json` + components dir) or an equivalent manifest.
+   Parse the manifest + component files; props come from the source.
+   `origin: shadcn|manifest`, `confidence: declared` for existence,
+   `inferred` for prop summaries we had to extract.
+3. **Inferred (no registry at all):** the common import case — a
+   dropped-in or Path 2 Vite app with no manifest. The Rung 1
+   extractor synthesises the registry: capitalised component
+   definitions/exports under `src/components/**` (then anywhere),
+   props from destructured parameters / TS prop types, ranked by
+   used-by count from the import/render graph. Everything is
+   `origin: inferred`, so the agent and UI must show it as
+   discovered, not curated. No when-to-use prose is fabricated; the
+   agent falls back to names + prop shapes.
+
+The registry is a slice of the same map (component nodes, renders/
+imported-by edges), not a second index. Agent injection is the
+Step 1 contract (~names + one-liners) when declared, and
+names + prop shapes when inferred. Two upgrades close the gap for
+imported projects, both opt-in: **Adopt** writes the inferred
+registry to `.ai-live/components.json` (generated marker data, same
+rule as the map — never hand-marker comments) so it can be curated
+over time; **Install catalog** offers Step 1's primitives alongside
+the project's own components, never replacing them.
+
 ### Todos
 
 - [ ] Rung 0 spike (timeboxed): heuristic selector→file join on
@@ -868,6 +903,21 @@ vocabulary, not generic symbols only.
   ranking, truncation note; add to Files tool set. Acceptance on a
   20-file fixture: map fits budget and names the entry component
   first.
+- [ ] Registry loader: merge declared (our catalog manifest, then
+  shadcn files under its components dir — note `components.json` is
+  config, not an installed-component list) with inferred components,
+  deduped by file, each entry carrying `origin` + `confidence`.
+  Fixtures: catalog project, shadcn project, bare imported project.
+- [ ] Inferred-registry quality bar: on the bare-import fixture, the
+  top used-by components are found with file + prop shape; entries
+  that cannot be parsed are listed by file only, never given
+  fabricated props or when-to-use prose.
+- [ ] Adopt action (opt-in, UI + agent-visible): write the inferred
+  registry to `.ai-live/components.json`; watcher treats it as
+  declared thereafter. Never write it silently on import/open.
+- [ ] Agent contract test: on an imported project, a "use the
+  existing button/card if there is one" ask reuses the inferred
+  component (check imports in the edit) instead of inventing one.
 - [ ] Watcher invalidation: map rebuilds on add/change/unlink under
   the active root (reuse the launcher watcher; debounce).
 - [ ] Rung 2 injection: top-N map in Files-turn context only above a

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { historyForAgent, parseChat, serializeChat, emptyChat, withStopped, STOPPED_TEXT, type LogItem } from './chatSession.js'
+import { bootStopped, casWinner, emptyChat, historyForAgent, parseChat, rebaseLocalUserItems, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
 
 describe('chatSession', () => {
   it('round-trips a log and drops other projects', () => {
@@ -52,6 +52,50 @@ describe('chatSession', () => {
   })
 })
 
+describe('revision ordering', () => {
+  const at = (rev: number, log: LogItem[]): ChatShared => ({
+    v: 1 as const, projectId: 'lumen', log, sending: false, workingLabel: '', updatedAt: 0, rev,
+  })
+
+  it('round-trips rev through serialize/parse, defaulting old states to 0', () => {
+    const parsed = parseChat(JSON.parse(serializeChat(at(7, []))), 'lumen')
+    assert.equal(parsed?.rev, 7)
+    const legacy = parseChat({ v: 1, projectId: 'lumen', log: [] }, 'lumen')
+    assert.equal(legacy?.rev, 0)
+  })
+
+  it('casWinner keeps the newer stored state and accepts newer writes', () => {
+    const stored = at(5, [{ role: 'user', text: 'fresh' }])
+    const stale = at(3, [{ role: 'user', text: 'stale' }])
+    assert.equal(casWinner(stored, stale), stored)
+    const incoming = at(6, [])
+    assert.equal(casWinner(stored, incoming), incoming)
+    assert.equal(casWinner(null, stale), stale)
+  })
+
+  it('bootStopped unlocks a persisted mid-turn state exactly once', () => {
+    const stuck: ChatShared = {
+      ...at(4, [{ role: 'user', text: 'edit' }]),
+      sending: true,
+    }
+    const booted = bootStopped(stuck)
+    assert.equal(booted.sending, false)
+    assert.equal(booted.rev, 4)
+    const tail = booted.log[booted.log.length - 1]
+    assert.equal(tail.role, 'system')
+    assert.equal(bootStopped(booted), booted)
+    assert.equal(bootStopped(at(1, [])).sending, false)
+  })
+
+  it('rebaseLocalUserItems keeps a missing user message, never duplicates', () => {
+    const winner: LogItem[] = [{ role: 'user', text: 'a' }, { role: 'ai', text: 'b' }]
+    const local: LogItem[] = [{ role: 'user', text: 'a' }, { role: 'user', text: 'fresh send' }]
+    const merged = rebaseLocalUserItems(local, winner)
+    assert.deepEqual(merged.map((m) => (m as { text: string }).text), ['a', 'b', 'fresh send'])
+    assert.equal(rebaseLocalUserItems(winner, winner), winner)
+  })
+})
+
 describe('usage persistence', () => {
   it('round-trips per-turn usage through serialize/parse', () => {
     const state = {
@@ -64,6 +108,7 @@ describe('usage persistence', () => {
       sending: false,
       workingLabel: '',
       updatedAt: 1,
+      rev: 7,
     }
     const parsed = parseChat(JSON.parse(serializeChat(state)), 'lumen')
     assert.deepEqual(parsed?.log[1], { role: 'ai', text: '', usage: { input: 100, output: 20, total: 120 } })

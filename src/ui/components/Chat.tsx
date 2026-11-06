@@ -8,6 +8,7 @@ import {
   loadChat,
   publishChat,
   publishChatAbort,
+  rebaseLocalUserItems,
   subscribeChat,
   withStopped,
   type LogItem,
@@ -143,6 +144,9 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const scroller = useRef<HTMLDivElement>(null)
   const fingerprint = useRef('')
   const abortRef = useRef<AbortController | null>(null)
+  // Highest chat revision seen or published: receivers apply only newer revs,
+  // and publishes that lose the compare-and-swap resync instead of clobbering.
+  const revRef = useRef(0)
   // Last server snapshot: guards polling/peer refreshes so identical snapshots
   // never reset state (which would re-render and yank the scroll position).
   const sketchRef = useRef('')
@@ -378,14 +382,16 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
 
   useEffect(() => {
     const loaded = loadChat(projectId)
+    revRef.current = loaded.rev
     fingerprint.current = JSON.stringify({ log: loaded.log, sending: loaded.sending, workingLabel: loaded.workingLabel })
     setLog(loaded.log)
     setSending(loaded.sending)
     setWorkingLabel(loaded.workingLabel)
     return subscribeChat(projectId, (state) => {
-      const next = JSON.stringify({ log: state.log, sending: state.sending, workingLabel: state.workingLabel })
-      if (next === fingerprint.current) return
-      fingerprint.current = next
+      // Stale or echo: only newer revisions move the log.
+      if (state.rev <= revRef.current) return
+      revRef.current = state.rev
+      fingerprint.current = JSON.stringify({ log: state.log, sending: state.sending, workingLabel: state.workingLabel })
       setLog(state.log)
       setSending(state.sending)
       setWorkingLabel(state.workingLabel)
@@ -399,7 +405,25 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     if (next === fingerprint.current) return
     fingerprint.current = next
     const t = setTimeout(() => {
-      publishChat({ v: 1, projectId: projectId || 'default', log, sending, workingLabel, updatedAt: Date.now() })
+      const winner = publishChat({ v: 1, projectId: projectId || 'default', log, sending, workingLabel, updatedAt: Date.now(), rev: revRef.current + 1 })
+      if (winner.rev === revRef.current + 1) {
+        revRef.current = winner.rev
+        return
+      }
+      // Refused: a newer state won elsewhere. Resync to it, keeping any
+      // local user message it lacks, then publish the merge once. If that
+      // merge is refused too, keep it locally — the effect re-fires and
+      // republishes at the new rev, so the message still lands.
+      const merged = rebaseLocalUserItems(log, winner.log)
+      const final = merged === winner.log
+        ? winner
+        : publishChat({ ...winner, log: merged, updatedAt: Date.now(), rev: winner.rev + 1 })
+      revRef.current = final.rev
+      fingerprint.current = JSON.stringify({ log: final.log, sending: final.sending, workingLabel: final.workingLabel })
+      const viewLog = final.log !== merged && merged !== winner.log ? merged : final.log
+      if (viewLog !== log) setLog(viewLog)
+      if (final.sending !== sending) setSending(final.sending)
+      if (final.workingLabel !== workingLabel) setWorkingLabel(final.workingLabel)
     }, sending ? 80 : 0)
     return () => clearTimeout(t)
   }, [log, sending, workingLabel, projectId])

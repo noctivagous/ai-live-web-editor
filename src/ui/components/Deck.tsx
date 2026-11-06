@@ -131,6 +131,7 @@ export function DeckCardView({ card, onNeedSetup, embed }: {
         </div>
       )
     case 'system':
+      if (!card.text) return null
       return <div className="dcard-system">{card.text}</div>
   }
 }
@@ -296,6 +297,17 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
       if (cards.length) slides.push({ turn: t, cards, slice: k, slices: slices.length })
     })
   }
+  const tokenTotal = (() => {
+    let total = 0
+    let seen = false
+    for (const t of turns) {
+      if (t.usage) {
+        seen = true
+        total += t.usage.total
+      }
+    }
+    return seen ? total : null
+  })()
   const realCount = slideTurns(turns).length
   const firstSlideOfTurn = new Map<number, number>()
   slides.forEach((s, i) => {
@@ -417,6 +429,7 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
         sending={sending}
         workingLabel={workingLabel}
         showDeckButton={false}
+        tokenTotal={tokenTotal}
         onWorkflowMode={onWorkflowMode}
         onClear={onClear}
         onOpenDeck={() => {}}

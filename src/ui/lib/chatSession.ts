@@ -21,9 +21,7 @@ export type ChatShared = {
 
 export const CHAT_CHANNEL = 'ai-live-editor.chat'
 export const STOPPED_TEXT = 'Stopped.'
-export const DEFAULT_CHAT_LOG: LogItem[] = [
-  { role: 'system', text: 'AI has real FS tools (read/write) and live-page inspect/patch/eval on the Vite app. Ask: "inspect the page" or "make this a todo app"' },
-]
+export const DEFAULT_CHAT_LOG: LogItem[] = []
 
 const LOG_CAP = 80
 
@@ -120,11 +118,19 @@ export function readStoredChat(projectId: string): ChatShared | null {
   }
 }
 
+const LEGACY_HINT = 'AI has real FS tools (read/write) and live-page inspect/patch/eval on the Vite app. Ask: "inspect the page" or "make this a todo app"'
+
+/** Drop the retired default hint from logs persisted before its removal. */
+export function stripLegacyHint(log: LogItem[]): LogItem[] {
+  if (!log.some((m) => m.role === 'system' && 'text' in m && m.text === LEGACY_HINT)) return log
+  return log.filter((m) => !(m.role === 'system' && 'text' in m && m.text === LEGACY_HINT))
+}
+
 export function loadChat(projectId: string): ChatShared {
   try {
     const stored = readStoredChat(projectId)
     if (!stored) return emptyChat(projectId)
-    return bootStopped(stored)
+    return bootStopped({ ...stored, log: stripLegacyHint(stored.log) })
   } catch {
     return emptyChat(projectId)
   }

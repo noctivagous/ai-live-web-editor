@@ -457,6 +457,17 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     setWorkingLabel('')
   }
 
+  const chatTokens = useMemo(() => {
+    let total = 0
+    let seen = false
+    for (const item of log) {
+      if (item.usage) {
+        seen = true
+        total += item.usage.total
+      }
+    }
+    return seen ? total : null
+  }, [log])
   const turns = useMemo(() => groupTurns(log, { sending }), [log, sending])
   const slides = useMemo(() => slideTurnsOrDefault(turns, defaultSystemText), [turns])
   const touchedFiles = useMemo(() => workingSet(log), [log])
@@ -469,6 +480,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         sending={sending}
         workingLabel={workingLabel}
         showDeckButton
+        tokenTotal={chatTokens}
         onWorkflowMode={(mode) => void setWorkflowMode(mode)}
         onClear={clearChat}
         onOpenDeck={openDeck}

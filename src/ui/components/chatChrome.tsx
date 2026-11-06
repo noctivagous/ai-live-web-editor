@@ -1,15 +1,17 @@
 import React from 'react'
-import { Eraser, Folder, Layers, MessageSquarePlus, MousePointerClick, PenTool, SendHorizontal, Square, StickyNote } from 'lucide-react'
+import { Coins, Eraser, Folder, Layers, MessageSquarePlus, MousePointerClick, PenTool, SendHorizontal, Square, StickyNote } from 'lucide-react'
 import type { ChatWorkflow, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
+import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, sending, workingLabel, showDeckButton, onWorkflowMode, onClear, onOpenDeck }: {
+export function ChatHeader({ workflow, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onClear, onOpenDeck }: {
   workflow: ChatWorkflow
   sending: boolean
   workingLabel: string
   showDeckButton: boolean
+  tokenTotal: number | null
   onWorkflowMode: (mode: ChatWorkflow) => void
   onClear: () => void
   onOpenDeck: () => void
@@ -21,7 +23,8 @@ export function ChatHeader({ workflow, sending, workingLabel, showDeckButton, on
         <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('files')}><Folder size={12} />Files</button>
         <button type="button" className={workflow === 'sketch' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('sketch')}><PenTool size={12} />Live sketch</button>
       </div>
-      <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ marginLeft: 'auto', padding: '4px 8px' }}><Eraser size={12} />Clear</button>
+      <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ marginLeft: 'auto' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
+      <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>
       {showDeckButton && (
         <button type="button" className="deck-btn btn-icon" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}><Layers size={12} />Deck</button>
       )}

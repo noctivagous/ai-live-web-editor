@@ -124,3 +124,17 @@ describe('usage persistence', () => {
     assert.deepEqual(parsed?.log[1], { role: 'ai', text: '', usage: { input: 100, output: 20, total: 120 } })
   })
 })
+
+describe('stripLegacyHint', () => {
+  it('removes the retired default hint but keeps real system lines', async () => {
+    const { stripLegacyHint } = await import('./chatSession.js')
+    const log: LogItem[] = [
+      { role: 'system', text: 'AI has real FS tools (read/write) and live-page inspect/patch/eval on the Vite app. Ask: "inspect the page" or "make this a todo app"' },
+      { role: 'system', text: 'Stopped.' },
+      { role: 'user', text: 'hi' },
+    ]
+    const stripped = stripLegacyHint(log)
+    assert.equal(stripped.length, 2)
+    assert.ok(stripped.every((m) => !('text' in m && m.text.startsWith('AI has real FS tools'))))
+  })
+})

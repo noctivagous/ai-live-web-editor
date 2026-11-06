@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { FolderOpen, Import, Plus, Save, Settings } from 'lucide-react'
 import { FileTree } from './components/FileTree'
 import { MonacoEditor } from './components/MonacoEditor'
 import { Preview } from './components/Preview'
@@ -799,7 +800,7 @@ export default function App() {
             <hr />
             <option value="__refresh">Refresh list</option>
           </select>
-          <button className="deck-btn" onClick={() => { void handleNewProject() }} title="Create a new app under projects/">New project</button>
+          <button className="deck-btn" onClick={() => { void handleNewProject() }} title="Create a new app under projects/"><Plus size={13} />New project</button>
           <button
             className="deck-btn"
             onClick={() => { void handleOpenFolder() }}
@@ -807,7 +808,7 @@ export default function App() {
               ? 'Pick a folder on your disk (Chrome/Edge/Opera) — imports a copy as a new project'
               : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
           >
-            Import…
+            <Import size={13} />Import…
           </button>
           <button
             className="deck-btn"
@@ -816,13 +817,13 @@ export default function App() {
               ? 'Pick a folder and keep it in live two-way sync with the project (Chrome/Edge/Opera)'
               : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
           >
-            Open…
+            <FolderOpen size={13} />Open…
           </button>
           <ReimportButton projectId={activeProject} suppress={syncSession?.projectId === activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <button className="deck-btn" onClick={() => setShowSettings(true)} title="Settings">Settings</button>
-          <button className="deck-btn" onClick={() => save()}>Save</button>
+          <button className="deck-btn" onClick={() => setShowSettings(true)} title="Settings"><Settings size={13} />Settings</button>
+          <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
       </header>
       {syncSession && syncSession.projectId === activeProject && (

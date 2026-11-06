@@ -17,6 +17,7 @@ import {
   undoLastSketch,
   type SketchPatch,
 } from './sketchSession.js'
+import { getDeviceTarget, parseDeviceTarget, setDeviceTarget } from './deviceSession.js'
 
 function restoreFailed(result: unknown): string | null {
   if (!result || typeof result !== 'object') return 'restore returned nothing'
@@ -94,9 +95,13 @@ async function restoreOnPage(patch: SketchPatch) {
   })
 }
 
+function workflowSnapshot() {
+  return { ...snapshotPublic(getSketchState()), deviceTarget: getDeviceTarget() }
+}
+
 export function mountWorkflowApi(app: Express) {
   app.get('/api/workflow', (_req, res) => {
-    res.json(snapshotPublic(getSketchState()))
+    res.json(workflowSnapshot())
   })
 
   app.post('/api/workflow', async (req, res) => {
@@ -104,6 +109,8 @@ export function mountWorkflowApi(app: Express) {
       const body = req.body || {}
       const mode = parseSketchMode(body.mode)
       if (mode) setSketchMode(mode)
+      const device = parseDeviceTarget(body.deviceTarget)
+      if (device) setDeviceTarget(device)
       const action = body.action
       if (action === 'undo') {
         const { undone } = undoLastSketch()
@@ -112,7 +119,7 @@ export function mountWorkflowApi(app: Express) {
           const err = restoreFailed(result)
           if (err) {
             appendSketchPatch(undone)
-            return res.status(502).json({ ...snapshotPublic(getSketchState()), restoreError: err })
+            return res.status(502).json({ ...workflowSnapshot(), restoreError: err })
           }
         }
       } else if (action === 'discard') {
@@ -123,15 +130,15 @@ export function mountWorkflowApi(app: Express) {
           if (err) errors.push(`${patch.selector}: ${err}`)
         }
         if (errors.length) {
-          return res.status(502).json({ ...snapshotPublic(getSketchState()), restoreError: errors.join('; ') })
+          return res.status(502).json({ ...workflowSnapshot(), restoreError: errors.join('; ') })
         }
       } else if (action === 'accept') {
         const translation = translateSketchToSource()
         acceptSketch()
-        res.json({ ...snapshotPublic(getSketchState()), translation })
+        res.json({ ...workflowSnapshot(), translation })
         return
       }
-      res.json(snapshotPublic(getSketchState()))
+      res.json(workflowSnapshot())
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       res.status(500).json({ ok: false, error: message })

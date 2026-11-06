@@ -12,6 +12,7 @@ function snap(over: Partial<WorkflowSyncSnapshot> = {}): WorkflowSyncSnapshot {
   return {
     ok: true,
     mode: 'files',
+    deviceTarget: 'desktop',
     accepted: false,
     patches: [],
     ...over,

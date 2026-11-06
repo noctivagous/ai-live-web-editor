@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchOverlaySource, staticPreviewUrl, submitLiveEdit, type PageNote } from '../lib/api'
+import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
+import { subscribeWorkflow } from '../lib/workflowSync'
+
+const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site']
+const TARGET_WIDTHS: Record<DeviceTarget, number | null> = { phone: 375, tablet: 768, desktop: null }
 
 const STATIC_URL = '/projects/'
 const DEFAULT_HMR = 'http://localhost:5173'
@@ -55,6 +59,45 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   const [noteCount, setNoteCount] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // Project foundation (phase-11-06): the device control reflects the
+  // shared workflow state; the type select writes project.ai.json.
+  const [deviceTarget, setDeviceTargetState] = useState<DeviceTarget>('desktop')
+  const [projectType, setProjectType] = useState('')
+
+  async function refreshFoundation() {
+    try {
+      const wf = await getWorkflow()
+      if (wf?.deviceTarget) setDeviceTargetState(wf.deviceTarget)
+    } catch { /* ignore */ }
+    try {
+      const pc = await getProjectConfig()
+      setProjectType(pc?.config?.type || '')
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    void refreshFoundation()
+    const off = subscribeWorkflow(() => { void refreshFoundation() })
+    const timer = setInterval(() => { void refreshFoundation() }, 5000)
+    return () => { off(); clearInterval(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url])
+
+  async function chooseDevice(target: DeviceTarget) {
+    setDeviceTargetState(target)
+    try {
+      const data = await postWorkflow({ deviceTarget: target })
+      if (data?.deviceTarget) setDeviceTargetState(data.deviceTarget)
+    } catch { /* ignore */ }
+  }
+
+  async function chooseType(type: string) {
+    setProjectType(type)
+    try {
+      const data = await postProjectConfig({ type })
+      setProjectType(data?.config?.type || '')
+    } catch { /* ignore */ }
+  }
 
   async function switchUrl(next: string) {
     setAnnotating(false)
@@ -183,7 +226,22 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             <span className="dot" />{noteCount} note{noteCount === 1 ? '' : 's'}
           </span>
         )}
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+          <select
+            value={projectType}
+            onChange={(e) => void chooseType(e.target.value)}
+            title="Project type (project.ai.json). Undesignated projects build generically."
+            style={{ fontSize: 11, background: '#1e1e23', color: '#d4d4d8', border: '1px solid #2e2e36', borderRadius: 6, padding: '2px 4px' }}
+          >
+            <option value="">No type</option>
+            {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            {projectType && !PROJECT_TYPES.includes(projectType) && <option value={projectType}>{projectType}</option>}
+          </select>
+          <span className="seg" role="group" aria-label="Device target">
+            <button type="button" className={deviceTarget === 'phone' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('phone')} title="Phone (375px)">Phone</button>
+            <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('tablet')} title="Tablet (768px)">Tablet</button>
+            <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('desktop')} title="Desktop (1280px)">Desktop</button>
+          </span>
           <button type="button" className="deck-btn" style={smallBtn} onClick={() => setKey(k => k + 1)}>Reload</button>
           <button type="button" className="deck-btn" style={smallBtn} onClick={() => void switchUrl(STATIC_URL)}>Static</button>
           <button type="button" className="deck-btn" style={smallBtn} onClick={() => void switchUrl(liveUrl)}>Live :5173</button>
@@ -230,7 +288,23 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </div>
         </div>
       ) : (
-        <iframe ref={frameRef} key={`${url}-${key}`} src={url} style={{ flex: 1, width: '100%', height: '100%', border: 'none', background: 'white', minHeight: 0 }} title="preview" />
+        <iframe
+          ref={frameRef}
+          key={`${url}-${key}`}
+          src={url}
+          style={{
+            flex: 1,
+            width: TARGET_WIDTHS[deviceTarget] ? `${TARGET_WIDTHS[deviceTarget]}px` : '100%',
+            height: '100%',
+            border: 'none',
+            background: 'white',
+            minHeight: 0,
+            alignSelf: 'center',
+            boxShadow: TARGET_WIDTHS[deviceTarget] ? '0 0 0 1px #2e2e36' : undefined,
+            transition: 'width 200ms ease',
+          }}
+          title="preview"
+        />
       ))}
     </div>
   )

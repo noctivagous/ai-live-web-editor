@@ -7,8 +7,20 @@
  */
 import { checkClients, pageCommand, pageCommandCheck } from '../pageBridge.js'
 import { toLayoutFindings, type LayoutFinding } from './gate.js'
+import { readProjectConfig, targetWidths } from '../projectConfig.js'
 
-export const CHECK_WIDTHS = [375, 1280]
+/** Every target width (phone / tablet / desktop); the fallback set. */
+export const CHECK_WIDTHS = [375, 768, 1280]
+
+/**
+ * Widths the gate must verify for the active project: the manifest's
+ * declared device targets (phase-11-06 §B). Undesignated projects
+ * declare nothing, so all three widths are checked — the app always
+ * works on every target until the user narrows it.
+ */
+export function currentCheckWidths(): number[] {
+  return targetWidths(readProjectConfig())
+}
 const FRAME_HEIGHT = 800
 
 function ensureCode(widths: number[]): string {

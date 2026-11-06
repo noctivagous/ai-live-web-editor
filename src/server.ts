@@ -12,6 +12,7 @@ import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
+import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
@@ -53,6 +54,7 @@ app.use((req,res,next)=>{res.setHeader('Content-Security-Policy', "default-src *
 app.use(express.json({ limit: '20mb' }))
 mountPoolPage(app)
 mountWorkflowApi(app)
+mountProjectConfigApi(app)
 mountConnectionsApi(app)
 
 ensureWorkspace()
@@ -372,7 +374,8 @@ app.post('/api/chat', async (req, res) => {
     const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const result = await agent.generate(messages, {
+    const { projectBrief } = await import('./projectConfig.js')
+    const result = await agent.generate([{ role: 'system', content: projectBrief() }, ...(Array.isArray(messages) ? messages : [])], {
       maxSteps: 12,
       activeTools: activeToolsForMode(getSketchMode()),
     })
@@ -404,12 +407,14 @@ app.post('/api/live-edit/submit', async (req, res) => {
     const { getSketchMode, withSketchPreamble } = await import('./sketchSession.js')
     const mode = getSketchMode()
     const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl, resolutions, mode })
+    const { projectBrief } = await import('./projectConfig.js')
     const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
+    const briefed = `${projectBrief()}\n\n${prompt}`
     const messages = mode === 'sketch'
-      ? withSketchPreamble([{ role: 'user', content: prompt }])
-      : [{ role: 'user', content: prompt }]
+      ? withSketchPreamble([{ role: 'user', content: briefed }])
+      : [{ role: 'user', content: briefed }]
     const result = await agent.generate(messages as any, {
       maxSteps: 12,
       activeTools: activeToolsForMode(mode),

@@ -1,18 +1,20 @@
 import React from 'react'
-import { Coins, Eraser, Folder, Layers, MessageSquarePlus, MousePointerClick, PenTool, SendHorizontal, Square, StickyNote } from 'lucide-react'
-import type { ChatWorkflow, WorkflowSnapshot } from '../lib/api'
+import { Coins, Eraser, Folder, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
+import type { ChatWorkflow, DeviceTarget, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onClear, onOpenDeck }: {
+export function ChatHeader({ workflow, deviceTarget, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onClear, onOpenDeck }: {
   workflow: ChatWorkflow
+  deviceTarget: DeviceTarget
   sending: boolean
   workingLabel: string
   showDeckButton: boolean
   tokenTotal: number | null
   onWorkflowMode: (mode: ChatWorkflow) => void
+  onDeviceTarget: (target: DeviceTarget) => void
   onClear: () => void
   onOpenDeck: () => void
 }) {
@@ -22,6 +24,11 @@ export function ChatHeader({ workflow, sending, workingLabel, showDeckButton, to
       <div className="seg" role="group" aria-label="Chat workflow">
         <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('files')}><Folder size={12} />Files</button>
         <button type="button" className={workflow === 'sketch' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('sketch')}><PenTool size={12} />Live sketch</button>
+      </div>
+      <div className="seg" role="group" aria-label="Device target" title="Device target: the design surface. The app must still work at every declared target.">
+        <button type="button" className={deviceTarget === 'phone' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('phone')} title="Phone (375px)"><Smartphone size={13} /></button>
+        <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('tablet')} title="Tablet (768px)"><Tablet size={13} /></button>
+        <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('desktop')} title="Desktop (1280px)"><Monitor size={13} /></button>
       </div>
       <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ marginLeft: 'auto' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
       <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>

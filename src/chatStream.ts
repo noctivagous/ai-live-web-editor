@@ -405,6 +405,10 @@ export async function pipeAgentChatStream(
   if (mode === 'sketch' && routed.intent === 'mixed') payload = withSystemPreamble(SKETCH_MIXED_PREAMBLE, messages)
   else if (mode === 'sketch') payload = withSystemPreamble(SKETCH_TURN_PREAMBLE, messages)
   else if (routed.switched) payload = withSystemPreamble(FILES_ROUTED_PREAMBLE, messages)
+  // Project brief (phase-11-06): type, device targets, style set —
+  // every agent turn knows what kind of project it is building.
+  const { projectBrief } = await import('./projectConfig.js')
+  payload = withSystemPreamble(projectBrief(), payload)
   const { send } = beginChatSse(res, req)
   const abortSignal = abortSignalFromReq(req)
   if (routed.switched) send({ type: 'workflow', mode: routed.mode, reason: routed.reason })

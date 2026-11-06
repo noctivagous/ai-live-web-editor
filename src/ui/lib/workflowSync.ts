@@ -33,12 +33,17 @@ function patchesEqual(
  * sketch panel, patch list, actions, placeholder). */
 export function workflowSnapshotsEqual(a: WorkflowSyncSnapshot, b: WorkflowSyncSnapshot): boolean {
   return a.mode === b.mode
+    && a.deviceTarget === b.deviceTarget
     && Boolean(a.accepted) === Boolean(b.accepted)
     && patchesEqual(a.patches || [], b.patches || [])
 }
 
 function parseMode(value: unknown): ChatWorkflow | null {
   return value === 'files' || value === 'sketch' ? value : null
+}
+
+function parseDeviceTarget(value: unknown): WorkflowSnapshot['deviceTarget'] {
+  return value === 'phone' || value === 'tablet' || value === 'desktop' ? value : 'desktop'
 }
 
 /** Normalize a server snapshot; null when it is not a workflow snapshot. */
@@ -50,6 +55,7 @@ export function parseWorkflowSnapshot(raw: unknown): WorkflowSyncSnapshot | null
   return {
     ok: row.ok !== false,
     mode,
+    deviceTarget: parseDeviceTarget(row.deviceTarget),
     accepted: Boolean(row.accepted),
     patches: row.patches.map((p) => {
       const patch = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>

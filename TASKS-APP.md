@@ -39,3 +39,25 @@ into style
 working on layouts it has guidance and can choose from templates
 and arrangements instead of make things from its training data.  
 will have module, compound, multi-column layout controls.
+- (2026-11-06) designated project type / device target convention
+stored on the filesystem as a file.
+- device target segmented control.
+- draggable configurable layout ui rects in annotation mode.
+rows cols.
+- within a project type, different guidance structures / settings
+so that the AI makes the project within rules for outcomes.
+- tools made for different project types, just like Xcode.
+- style manager: comes with different gui and page styles, and
+the AI refers to it as it makes the project.
+- the editor comes with premade component systems like settings
+and app shell and mastra and AI. it doesn't have to look up common
+or many scenarios but instead refers first to its database, and
+also has some premade libraries ready.
+- it will know about paperjs and other libs, state machines, etc.
+it will have noct libs like grids available.
+- "Install app feature..." will install e.g. a settings system
+and adapt it to the app. but it will ask questions ahead of time
+about implementation choices, allow the user to add amendments
+to the plan. it will let the user install say a chat system but
+collect info about how it should appear in the app.
+- conversations like master-detail.

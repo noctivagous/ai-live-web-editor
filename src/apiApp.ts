@@ -9,6 +9,7 @@ import { getFsRoot } from './launcher.js'
 import { mountPageBridge } from './pageBridge.js'
 import { mountPoolPage } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
+import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { activeToolsForMode } from './agentTools.js'
@@ -59,6 +60,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountPageBridge(app)
   mountPoolPage(app)
   mountWorkflowApi(app)
+  mountProjectConfigApi(app)
   mountConnectionsApi(app)
 
   app.get('/api/fs/health', (_req, res) => {
@@ -179,7 +181,8 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       if (parsed) setSketchMode(parsed)
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
-      const result = await agent.generate(messages, {
+      const { projectBrief } = await import('./projectConfig.js')
+      const result = await agent.generate([{ role: 'system', content: projectBrief() }, ...(Array.isArray(messages) ? messages : [])], {
         maxSteps: 12,
         activeTools: activeToolsForMode(getSketchMode()),
       })
@@ -209,11 +212,13 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       const resolutions = resolveAnnotationSelectors(notes)
       const mode = getSketchMode()
       const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl, resolutions, mode })
+      const { projectBrief } = await import('./projectConfig.js')
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
+      const briefed = `${projectBrief()}\n\n${prompt}`
       const messages = mode === 'sketch'
-        ? withSketchPreamble([{ role: 'user', content: prompt }])
-        : [{ role: 'user', content: prompt }]
+        ? withSketchPreamble([{ role: 'user', content: briefed }])
+        : [{ role: 'user', content: briefed }]
       const result = await agent.generate(messages as any, {
         maxSteps: 12,
         activeTools: activeToolsForMode(mode),

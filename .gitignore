@@ -13,3 +13,6 @@ providers.json
 .DS_Store
 
 dist-verify/
+
+# Per-project local config written by the AI editor (not source)
+projects/*/project.ai.json

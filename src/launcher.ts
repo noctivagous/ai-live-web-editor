@@ -88,10 +88,21 @@ export function startVite() {
   console.log('[vite] started in', root, child.pid ? `pid ${child.pid}` : '')
 }
 
+/** Adopt the project's saved default device target, if any (phase-11-06 §B). */
+async function adoptProjectDevice(root: string) {
+  try {
+    const { readProjectConfig } = await import('./projectConfig.js')
+    const { setDeviceTarget } = await import('./deviceSession.js')
+    const def = readProjectConfig(root).defaultDeviceTarget
+    if (def) setDeviceTarget(def)
+  } catch { /* manifest is optional local config */ }
+}
+
 export function selectProject(id: string): ProjectInfo {
   const found = listProjects().find((p) => p.id === id)
   if (!found) throw new Error(`Unknown project: ${id}`)
   setFsRoot(found.root)
+  void adoptProjectDevice(found.root)
   writeActiveId(found.id)
   startVite()
   return found
@@ -296,6 +307,7 @@ export function ensureWorkspace() {
   const dest = path.join(WORKSPACE_ROOT, id)
   if (!fs.existsSync(path.join(dest, 'package.json'))) seedProjectDir(dest)
   setFsRoot(dest)
+  void adoptProjectDevice(dest)
   writeActiveId(id)
   startVite()
   return getFsRoot()

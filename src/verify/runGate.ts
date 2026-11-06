@@ -7,7 +7,7 @@ import { pageCommand } from '../pageBridge.js'
 import { liveConsole } from '../liveTarget.js'
 import { verifyGateEnabled } from '../env.js'
 import {
-  CHECK_WIDTHS,
+  currentCheckWidths,
   consoleCheckFrames,
   destroyCheckFrames,
   ensureCheckFrames,
@@ -75,7 +75,7 @@ export async function captureBaseline(): Promise<GateBaseline | null> {
   base.bridgeLayout = layout.findings
   base.bridgeWidth = layout.width
   base.bridgeSeq = seq
-  const markers = await ensureCheckFrames()
+  const markers = await ensureCheckFrames(currentCheckWidths())
   if (markers.length) {
     const snaps = await snapshotCheckFrames()
     const consoles = await consoleCheckFrames(0)
@@ -182,7 +182,7 @@ export async function runVerifyGate(baseline: GateBaseline | null): Promise<Gate
     await destroyCheckFrames()
   } else if (baseline.bridgeWidth === undefined) {
     // No bridge at all (no live page to host frames): pool fallback widths.
-    const { findings, unverified: poolUn } = await poolWidths(CHECK_WIDTHS)
+    const { findings, unverified: poolUn } = await poolWidths(currentCheckWidths())
     const baseKeys = new Set([...baseline.bridgeLayout.map((f) => f.key)])
     layout.push(...findings.filter((f) => !baseKeys.has(f.key)))
     unverified.push(...poolUn)

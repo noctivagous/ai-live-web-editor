@@ -153,8 +153,54 @@ Decisions (settled here, revisit only with evidence):
    Files / Library, search, preview, **Insert** (reuses
    `POST /api/fs/write`) and **Ask AI to use it** (seeds chat).
 
+#### Update 2026-11-06 — NoctCode AppKit changes the seed, not the shape
+
+`noctivagous/NCTGraphite` holds **noct-code-appkit**: 63 Lit 3 +
+TypeScript components in 8 groups (layout, data, logic, meta,
+widgets, flow, gui, app), inventoried in that repo's
+`NOCTCODE-APPKIT-COMPONENT-INVENTORY.md`. It is this step's idea,
+already built, at larger scope — and it sharpens three of the
+decisions above:
+
+- **The manifest should be generated, not hand-written.** Every
+  AppKit component exports a `NoctComponentMeta` (name, props,
+  description) under a base-class contract, and `noct-registry`
+  exposes the catalogue to AI at runtime — "query capability
+  without vector search". That is decision 4 with the economics
+  done right: adopt the metadata *contract* shape for
+  `catalog/components.json`, whoever the components are.
+- **The copy-own unit already exists.** AppKit's groups map onto
+  this phase's needs almost one-to-one: layout primitives
+  (`noct-grid`, `noct-stack`, `noct-splitter`) are the StackPanel
+  ask; `app/` is the premade-systems catalogue (app shell,
+  settings, auth, router, theme) that phase-11-06 §G plans to
+  build; `noct-theme` + its token CSS are the style-manager seed
+  (phase-11-06 §F); `noct-segmented` is the device-target control
+  pattern (§B); `gui/` is a working relative of the annotation
+  layout work (§C / Step 4).
+- **The open decision is format, not content.** Step 1 settled
+  React-first because our projects are React and models write
+  shadcn-style React best. AppKit is Lit custom elements — which
+  *do* run inside React apps, are framework-agnostic, and carry
+  their own agent-facing metadata (the counterweight to models
+  not knowing `noct-*` tags from training). Porting 63 components
+  to React would spend exactly the effort the registry exists to
+  save. Recommendation: **pilot, don't port** — ship a subset
+  copy-own as Lit into one starter, generate the manifest from
+  the components' own metadata, and let this step's acceptance
+  test decide (agent asked for a settings page reaches for the
+  catalogue — `noct-app-settings` is sitting right there). Port
+  individual components to React later only where React-idiomatic
+  behavior demonstrably matters (forms are the likely case).
+
 ### Todos
 
+- [ ] AppKit pilot (2026-11-06): pick the pilot subset from
+  NCTGraphite's noct-code-appkit (layout primitives +
+  `noct-app-settings` + `noct-theme`), copy-own into one starter
+  as Lit, generate `components.json` entries from
+  `NoctComponentMeta`, and run the acceptance test below against
+  it before writing any React equivalents.
 - [ ] Create `catalog/` in-repo: `components.json` manifest + one file
   per component (React, CSS-var themed, no external deps).
 - [ ] Implement layout primitives: `Stack`, `Row`, `Grid`, `Spacer`,

@@ -239,9 +239,12 @@ export type ChatStreamEvent =
 
 export type ChatWorkflow = 'files' | 'sketch'
 
+export type DeviceTarget = 'phone' | 'tablet' | 'desktop'
+
 export interface WorkflowSnapshot {
   ok: boolean
   mode: ChatWorkflow
+  deviceTarget: DeviceTarget
   accepted: boolean
   patches: { id: string, selector: string, op: string, ok: boolean, detail: string }[]
   error?: string
@@ -252,7 +255,29 @@ export async function getWorkflow() {
   return r.json() as Promise<WorkflowSnapshot>
 }
 
-export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept' }) {
+export interface ProjectConfig {
+  type?: string
+  deviceTargets?: DeviceTarget[]
+  defaultDeviceTarget?: DeviceTarget
+  styleSet?: string
+  features?: string[]
+}
+
+export async function getProjectConfig() {
+  const r = await fetch(`${API}/api/project/config`)
+  return r.json() as Promise<{ ok: boolean, config: ProjectConfig, designated: boolean }>
+}
+
+export async function postProjectConfig(patch: ProjectConfig) {
+  const r = await fetch(`${API}/api/project/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  return r.json() as Promise<{ ok: boolean, config: ProjectConfig, designated: boolean }>
+}
+
+export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept', deviceTarget?: DeviceTarget }) {
   const r = await fetch(`${API}/api/workflow`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

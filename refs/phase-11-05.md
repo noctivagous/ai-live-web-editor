@@ -601,9 +601,12 @@ around; a future non-React target reopens the overlay question.
 - [ ] Rung 2: placement/rearrange → Step 4 boxes + Step 3 template
   kinds in the submit prompt, theme tokens attached.
 - [ ] Manual verification matrix: element note on an existing card
-  (verified 2026-11-06, mock provider, Files mode); text-selection
-  note; drag-area note; layout placement; each in Files and Sketch
-  modes. Record results in the commit.
+  (verified 2026-11-06, mock provider, in BOTH modes: Files → agent
+  str-replace at the annotation's sourceFile line; Sketch → agent
+  patch-dom on the live element, no file written — submits are now
+  mode-aware: patch-oriented prompt + sketch preamble + sketch tool
+  set); text-selection note; drag-area note; layout placement; each
+  in Files and Sketch modes. Record results in the commit.
 - [ ] License watch: Agentation is PolyForm Shield — free for
   internal use; redistributing it inside a product we sell needs a
   commercial license. Record a decision here before any distribution

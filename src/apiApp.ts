@@ -206,7 +206,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       const summary = summarizeAnnotations(notes)
       const resolvedUrl = typeof pageUrl === 'string' ? pageUrl : ''
       const resolutions = resolveAnnotationSelectors(notes)
-      const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl, resolutions })
+      const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl, resolutions, mode: getSketchMode() })
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
       const result = await agent.generate([{ role: 'user', content: prompt }], {

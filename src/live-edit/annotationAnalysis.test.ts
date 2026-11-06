@@ -116,6 +116,27 @@ describe('buildLiveEditPrompt with Agentation fields', () => {
     assert.ok(prompt.includes('annotations with a Source line name the exact rendering file'))
   })
 
+  it('sketch mode switches the prompt to patch-dom and never mentions file writes', () => {
+    const annotations = agentationToAnnotations([{
+      id: 'a1',
+      comment: 'Make it bolder',
+      element: 'h1 "Inbox"',
+      fullPath: 'body > h1',
+      sourceFile: `${ROOT}/App.jsx:647:13`,
+    }], ROOT)
+    const prompt = buildLiveEditPrompt({
+      annotations,
+      summary: summarizeAnnotations(annotations),
+      pageNotes: '',
+      pageUrl: 'http://localhost:5173/',
+      mode: 'sketch',
+    })
+    assert.ok(prompt.includes('Live sketch mode'))
+    assert.ok(prompt.includes('patch-dom with small sequential ops'))
+    assert.ok(prompt.includes('patch the live element instead of editing it'))
+    assert.ok(!prompt.includes('str-replace the fix'))
+  })
+
   it('overlay-style notes keep the resolve-source workflow', () => {
     const annotations = [{ selector: 'div.card', text: 'too dark' }]
     const prompt = buildLiveEditPrompt({

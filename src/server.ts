@@ -400,8 +400,8 @@ app.post('/api/live-edit/submit', async (req, res) => {
     const summary = summarizeAnnotations(notes)
     const pageUrl = typeof url === 'string' ? url : ''
     const resolutions = resolveAnnotationSelectors(notes)
-    const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl, resolutions })
     const { getSketchMode } = await import('./sketchSession.js')
+    const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl, resolutions, mode: getSketchMode() })
     const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')

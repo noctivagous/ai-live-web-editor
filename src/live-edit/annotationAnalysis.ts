@@ -148,8 +148,11 @@ export function buildLiveEditPrompt(input: {
   pageNotes: string
   pageUrl: string
   resolutions?: AnnotationResolution[]
+  /** 'sketch' = live editing mode: patch the page, never write files. */
+  mode?: 'files' | 'sketch'
 }): string {
   const { annotations, summary, pageNotes, pageUrl, resolutions } = input
+  const sketch = input.mode === 'sketch'
   const resolvedBySelector = new Map<string, AnnotationResolution>()
   for (const r of resolutions || []) {
     if (r.selector) resolvedBySelector.set(r.selector, r)
@@ -164,7 +167,9 @@ export function buildLiveEditPrompt(input: {
     const parts = [`${i + 1}. [${intent}] ${a.selector}${target}${where}: ${a.text}`]
     if (a.element) parts.push(`   Element: ${a.element}`)
     if (a.selectedText) parts.push(`   Selected text: "${a.selectedText}"`)
-    if (a.sourceFile) parts.push(`   Source: ${a.sourceFile} — this is the exact file and line that renders it; read that range and edit there.`)
+    if (a.sourceFile) parts.push(sketch
+      ? `   Source: ${a.sourceFile} — the file and line that renders it; for structure only, patch the live element instead of editing it.`
+      : `   Source: ${a.sourceFile} — this is the exact file and line that renders it; read that range and edit there.`)
     if (a.boundingBox) parts.push(`   Box: x=${Math.round(a.boundingBox.x)} y=${Math.round(a.boundingBox.y)} ${Math.round(a.boundingBox.width)}x${Math.round(a.boundingBox.height)}`)
     if (a.computedStyles) parts.push(`   Current styles: ${a.computedStyles.slice(0, 300)}`)
     return parts.join('\n')
@@ -172,7 +177,9 @@ export function buildLiveEditPrompt(input: {
   const hints = summary.styleHints.map(h => `- ${h.selector}: ${JSON.stringify(h.properties)}`)
   const out = [
     'Live-edit request: the user annotated the page at ' + pageUrl + '.',
-    'Apply each annotation to the real files under the active project. Vite HMR will show the change.',
+    sketch
+      ? 'Live sketch mode: apply each annotation as a patch to the live page with patch-dom. Do not edit files; the user reviews the sketch and Accepts to convert it to source.'
+      : 'Apply each annotation to the real files under the active project. Vite HMR will show the change.',
     'Annotations (priority: bug, move, layout, style, copy, note):',
     ...lines,
   ]
@@ -180,9 +187,11 @@ export function buildLiveEditPrompt(input: {
   for (const m of summary.moveLinks) out.push(`Move: relocate ${m.sourceSelector} before ${m.targetSelector} (${m.text})`)
   if (hints.length) out.push('Style hints parsed from the notes (verify before applying):', ...hints)
   out.push(
-    annotations.some(a => a.sourceFile)
-      ? 'Workflow: annotations with a Source line name the exact rendering file — ranged read-real-file there, then str-replace the fix. For the rest, resolve-source each selector first. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.'
-      : 'Workflow: resolve-source each selector (hints above are best-effort — verify), then ranged read-real-file and str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
+    sketch
+      ? 'Workflow: take-snapshot / inspect-dom if you need page structure, then patch-dom with small sequential ops — one visual change per patch-dom call (ops: text, style, class, attr, insert, move, remove). Never write files in sketch mode.'
+      : annotations.some(a => a.sourceFile)
+        ? 'Workflow: annotations with a Source line name the exact rendering file — ranged read-real-file there, then str-replace the fix. For the rest, resolve-source each selector first. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.'
+        : 'Workflow: resolve-source each selector (hints above are best-effort — verify), then ranged read-real-file and str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
   )
   return out.join('\n')
 }

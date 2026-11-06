@@ -506,51 +506,108 @@ this step's work (see Todos).
   the *real* running page with real selectors.
   Source: [therundown.ai/tools/tldraw](https://www.therundown.ai/tools/tldraw).
 
-### Plan — extend the existing overlay, keep the submit contract
+### Plan — adopt Agentation, replace the overlay (revised 2026-11-06)
 
-1. **Drag-region annotation:** mousedown-drag on the overlay draws a
-   representative box (viewport rect → Step 4 box schema + note).
-   On submit, a region either (a) describes an issue on what's under
-   it (resolve elements intersecting the rect → selectors), or
-   (b) declares a *new* layout box ("put a X here") — the note's
-   intent, classified in `annotationAnalysis.ts` alongside today's
-   types. Extend `PageNote` with an optional `region` (rect +
-   viewport) rather than inventing a parallel payload.
-2. **Wireframe controls palette:** a small set (box, row, column,
-   text, button — reuse Step 3 template kinds at miniature scale)
-   the user drags onto the page; each lands as a proposed box with
-   position/size. Submit folds them into the same prompt as regions:
-   "add a `multi-column` block here, styled like the page".
-3. **Submit incorporates style:** the prompt builder already emits
-   style hints (`parseStyleHint`); extend it so wireframe boxes carry
-   the page's detected theme tokens (Step 7 profile) — "incorporate
-   them into style" means generated code uses existing tokens, not
-   arbitrary colours.
+Decision: annotation capture is [Agentation](https://www.agentation.com/)
+(npm `agentation`, React component + optional `agentation-mcp` server),
+not a further build-out of `overlay.js`. Agentation already ships what
+this step was going to build by hand: click / text-selection /
+multi-select / drag-area annotation, a layout mode with a 65+ component
+palette and rearrange (annotations of `kind: "placement"` /
+`"rearrange"`), a wireframe mode, computed styles, and — decisive for
+Step 8 — a `sourceFile` (absolute path + line + column) on every
+annotation, resolved from the React fiber tree. That is Rung 0's
+DOM ↔ source identity for our React starters, delivered by the capture
+tool instead of a resolver we build. The old plan below ("extend the
+existing overlay") is superseded; `annotationAnalysis.ts` and the
+submit contract survive, the capture UI does not.
+
+**Spike (2026-11-06, branch `spike/agentation`, verified):** the Vite
+plugin injects a virtual entry (same `/@fs` pattern as chat-embed)
+that mounts `<Agentation>` with the editor package's own React 18 —
+zero changes to the project being edited. On `projects/lumen` the
+toolbar rendered (shadow-DOM `<agentation-toolbar>`), a click on the
+Inbox `h1` produced a full annotation via `onAnnotationAdd`:
+selector path, bounding box, computed styles, nearby text, and
+`sourceFile: …/projects/lumen/App.jsx:647:13`. Layout mode (`L`)
+rendered its palette. One collision found: our chat-overlay popover
+sits over Agentation's bottom-right toggle — the production wiring
+must offset the toolbar (its `className` prop), as
+`parkToolbarNextToChat` did for the old overlay.
+
+Four rungs, ship only as the loop demands (mirrors Step 8):
+
+**Rung 1 (now): plugin-mounted capture, existing submit contract.**
+Replace the plugin's annotate client + the Preview iframe injection
+with the Agentation mount. Wire `onSubmit(output, annotations)` to a
+launcher endpoint that adapts Agentation's annotation JSON onto the
+existing pipeline: `fullPath` → `selector`, `comment` → note text,
+plus `sourceFile`, `boundingBox`, `computedStyles`, and layout-mode
+`kind`s into `annotationAnalysis.ts` / the prompt builder (sourceFile
+short-circuits the grep-for-file step). Delete `overlay.js` and
+`client/annotate.js` once parity is verified. Static preview keeps
+the old overlay until it is dev-served — it is the only surface
+Agentation cannot reach (no React dev graph in a static build).
+
+**Rung 2: layout/wireframe output lands as boxes.** Map
+placement/rearrange annotations onto the Step 4 box schema and the
+Step 3 template kinds, so a placed component becomes "add a
+`multi-column` block here" in the prompt, with page theme tokens
+(Step 7) attached. This replaces the hand-built wireframe palette
+todo — Agentation's palette is the palette.
+
+**Rung 3 (only if the submit flow chafes): two-way MCP sync.** Run
+`agentation-mcp` (port 4747), point the component's `endpoint` at it,
+and give the editor agent MCP tools via Mastra's `MCPClient`
+(get pending, resolve with summary, `watch_annotations` hands-free
+loop). This is the "agents talk back" model; it earns its server
+process only when one-way submit demonstrably loses feedback.
+
+Out of scope regardless: Agentation is React-18+ and desktop-only.
+Our starters are React, so this is a fit, not a constraint to engineer
+around; a future non-React target reopens the overlay question.
 
 ### Todos
 
+- [x] Rung 1: productionise the spike — `agentation` as a dependency
+  of the editor package, plugin entry mounting `<Agentation>` with
+  the toolbar offset clear of the chat overlay, gated to the live
+  (`:5173`) preview path. Built 2026-11-06 on
+  `feat/agentation-rung1`: the toolbar collision is solved by
+  seeding Agentation's persisted `feedback-toolbar-position` once
+  (the stored point anchors the ~293px container, toggle at its
+  right end, so the seed sits a container-width left of the chat
+  edge; a user-dragged position is never overridden).
+- [x] Adapter endpoint: Agentation `onSubmit` payload →
+  `PageNote`-extended prompt input; `annotationAnalysis.ts` learns
+  `sourceFile` (direct file/line, no grep), `placement` /
+  `rearrange` kinds, and computed-styles context. Unit tests next to
+  the existing analysis tests. (`POST /api/live-edit/agentation`,
+  shared handler in `src/live-edit/agentationSubmit.ts`.)
+- [x] Parity check vs overlay v1 (note intent verified end-to-end on
+  lumen with a mock provider: annotate → Send → agent str-replace at
+  the `sourceFile` line → HMR showed the change), then delete the
+  plugin's `client/annotate.js` and its DevTools dock entry, and
+  stop the chat overlay installing the old toolbar on live pages.
+  `overlay.js` and its route stay: the static preview still uses
+  them, as planned above.
 - [ ] Close the sketch loop: on Accept, convert the patch log to
   source — resolve each selector to its rendering file (grep /
-  Step 8 map), apply the equivalent `str-replace` edits in Files
+  Step 8 map / Agentation `sourceFile` when the patch came from an
+  annotation), apply the equivalent `str-replace` edits in Files
   mode, then verify with `layout-snapshot` after HMR and report any
   patch that could not be translated. Acceptance: accept a sketch,
   reload the page, the change is still there.
-- [ ] Overlay: drag-rectangle region capture (with Esc-cancel and
-  note prompt on release); store as `region` notes.
-- [ ] `annotationAnalysis.ts`: classify region notes (issue vs
-  new-box), resolve intersecting elements to selectors, emit Step 4
-  box data in the prompt. Unit tests next to existing analysis tests.
-- [ ] Wireframe palette in the overlay: box / row / column / text /
-  button, drag-to-place, drag-to-move/resize after placement,
-  delete control. Cap the set — this is a sketch tool, not Figma.
-- [ ] Submit path: regions + wireframe boxes + style/theme hints in
-  one `/api/live-edit/submit` payload; Sketch-mode runs apply via
-  `patch-dom` insert, Files-mode runs via template insert (Step 3).
-- [ ] Enable annotate on the live `:5173` preview (same-origin path
-  UI-INTEGRATION flags), not only the static preview.
-- [ ] Manual verification matrix: region-issue on an existing card;
-  region-new-box on empty space; wireframe multi-column drop;
-  each in Files and Sketch modes. Record results in the commit.
+- [ ] Rung 2: placement/rearrange → Step 4 boxes + Step 3 template
+  kinds in the submit prompt, theme tokens attached.
+- [ ] Manual verification matrix: element note on an existing card
+  (verified 2026-11-06, mock provider, Files mode); text-selection
+  note; drag-area note; layout placement; each in Files and Sketch
+  modes. Record results in the commit.
+- [ ] License watch: Agentation is PolyForm Shield — free for
+  internal use; redistributing it inside a product we sell needs a
+  commercial license. Record a decision here before any distribution
+  of the editor beyond internal use.
 
 ### Risks / alternatives rejected
 
@@ -559,6 +616,13 @@ this step's work (see Todos).
 - Pixel/freehand sketch input: the agent needs boxes + intent, not
   strokes. Representative boxes are the TASKS-APP wording and the
   right granularity.
+- Building our own drag-region/wireframe overlay (the previous plan):
+  superseded by adopting Agentation (see Plan above) — it ships the
+  modes, the palette, and source resolution, and is maintained
+  upstream. Accepted risks of the dependency: React-18+/desktop-only
+  (fits our starters), upstream release cadence, and the PolyForm
+  Shield license (internal use free; commercial redistribution needs
+  a license — see the license-watch todo).
 
 ---
 

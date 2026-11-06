@@ -226,6 +226,12 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
     }
   })
 
+  app.post('/api/live-edit/agentation', async (req, res) => {
+    const { handleAgentationSubmit } = await import('./live-edit/agentationSubmit.js')
+    const { status, payload } = await handleAgentationSubmit(req.body || {})
+    res.status(status).json(payload)
+  })
+
   app.get('/live-edit/overlay.js', (_req, res) => {
     res.type('application/javascript')
     res.setHeader('Cache-Control', 'no-store')

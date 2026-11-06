@@ -11,10 +11,23 @@ export interface PageAnnotation {
   selector?: string
   targetSelector?: string
   source?: string
+  /** Agentation fields (optional; overlay notes leave them unset). */
+  kind?: 'feedback' | 'placement' | 'rearrange'
+  element?: string
+  selectedText?: string
+  sourceFile?: string
+  boundingBox?: { x: number, y: number, width: number, height: number }
+  computedStyles?: string
+  placement?: { componentType: string, width: number, height: number, text?: string }
+  rearrange?: { selector: string, label: string, originalRect: { x: number, y: number, width: number, height: number }, currentRect: { x: number, y: number, width: number, height: number } }
+  intentTag?: string
 }
 
 export function classifyIntent(annotation: PageAnnotation): string {
   if (annotation?.type === 'move') return 'move'
+  if (annotation?.kind === 'rearrange') return 'move'
+  if (annotation?.kind === 'placement') return 'layout'
+  if (annotation?.intentTag === 'fix') return 'bug'
   const text = String(annotation?.text ?? '').toLowerCase()
   if (/\b(bug|broken|issue|fix|error)\b/.test(text)) return 'bug'
   if (/\b(copy|text|wording|typo|label)\b/.test(text)) return 'copy'
@@ -40,14 +53,14 @@ export function parseStyleHint(annotation: PageAnnotation): { selector: string; 
 }
 
 export interface AnnotationSummary {
-  insights: Array<{ id?: string; type?: string; selector?: string; text?: string; intent: string }>
+  insights: Array<{ id?: string; type?: string; selector?: string; text?: string; intent: string; sourceFile?: string; kind?: string }>
   prioritizedIds: string[]
   moveLinks: Array<{ id?: string; text?: string; sourceSelector: string; targetSelector: string }>
   styleHints: Array<{ selector: string; properties: Record<string, string> }>
 }
 
 export function summarizeAnnotations(annotations: PageAnnotation[]): AnnotationSummary {
-  const insights = annotations.map(a => ({ id: a?.id, type: a?.type, selector: a?.selector, text: a?.text, intent: classifyIntent(a) }))
+  const insights = annotations.map(a => ({ id: a?.id, type: a?.type, selector: a?.selector, text: a?.text, intent: classifyIntent(a), sourceFile: a?.sourceFile, kind: a?.kind }))
   const priorityOrder = ['bug', 'move', 'layout', 'style', 'copy', 'note']
   const prioritizedIds = insights
     .slice()
@@ -73,6 +86,61 @@ export interface AnnotationResolution {
   confidence?: string
 }
 
+/** The subset of an Agentation annotation this pipeline consumes. */
+export interface AgentationAnnotation {
+  id?: string
+  comment?: string
+  element?: string
+  elementPath?: string
+  fullPath?: string
+  selectedText?: string
+  sourceFile?: string
+  boundingBox?: { x: number, y: number, width: number, height: number }
+  computedStyles?: string
+  kind?: 'feedback' | 'placement' | 'rearrange'
+  intent?: string
+  placement?: { componentType: string, width: number, height: number, text?: string }
+  rearrange?: { selector: string, label: string, originalRect: { x: number, y: number, width: number, height: number }, currentRect: { x: number, y: number, width: number, height: number } }
+}
+
+/**
+ * Adapt Agentation annotations onto the live-edit pipeline. The prize
+ * field is `sourceFile` (absolute path:line:col from React's fiber
+ * debug source): relativised against the project root, it lets the
+ * agent skip the grep-for-the-rendering-file step entirely.
+ */
+export function agentationToAnnotations(list: unknown, fsRoot = ''): PageAnnotation[] {
+  if (!Array.isArray(list)) return []
+  const root = fsRoot.replace(/\/+$/, '')
+  return list.map((raw): PageAnnotation => {
+    const a = (raw || {}) as AgentationAnnotation
+    let sourceFile = a.sourceFile || undefined
+    if (sourceFile && root && sourceFile.startsWith(root + '/')) {
+      sourceFile = '/' + sourceFile.slice(root.length + 1)
+    }
+    const placementText = a.placement
+      ? `Place a ${a.placement.componentType} here (${Math.round(a.placement.width)}x${Math.round(a.placement.height)}).${a.placement.text ? ' ' + a.placement.text : ''}`
+      : ''
+    const rearrangeText = a.rearrange
+      ? `Move ${a.rearrange.label || a.rearrange.selector} from (${Math.round(a.rearrange.originalRect.x)}, ${Math.round(a.rearrange.originalRect.y)}) to (${Math.round(a.rearrange.currentRect.x)}, ${Math.round(a.rearrange.currentRect.y)}).`
+      : ''
+    return {
+      id: a.id,
+      kind: a.kind,
+      element: a.element,
+      selector: a.fullPath || a.elementPath || a.rearrange?.selector || '',
+      text: a.comment?.trim() || placementText || rearrangeText,
+      selectedText: a.selectedText,
+      sourceFile,
+      boundingBox: a.boundingBox,
+      computedStyles: a.computedStyles,
+      placement: a.placement,
+      rearrange: a.rearrange,
+      intentTag: a.intent,
+    }
+  }).filter(a => a.text || a.selector)
+}
+
 /** Build the agent prompt for a submit: annotations first, verification last. */
 export function buildLiveEditPrompt(input: {
   annotations: PageAnnotation[]
@@ -92,8 +160,14 @@ export function buildLiveEditPrompt(input: {
     const r = resolvedBySelector.get(String(a.selector || ''))
     const where = r?.file
       ? ` (≈ ${r.file}${r.component ? ` ${r.component}` : ''}${r.startLine ? `:${r.startLine}${r.endLine && r.endLine !== r.startLine ? `-${r.endLine}` : ''}` : ''})`
-      : ' (≈ source unresolved — call resolve-source first)'
-    return `${i + 1}. [${intent}] ${a.selector}${target}${where}: ${a.text}`
+      : a.sourceFile ? '' : ' (≈ source unresolved — call resolve-source first)'
+    const parts = [`${i + 1}. [${intent}] ${a.selector}${target}${where}: ${a.text}`]
+    if (a.element) parts.push(`   Element: ${a.element}`)
+    if (a.selectedText) parts.push(`   Selected text: "${a.selectedText}"`)
+    if (a.sourceFile) parts.push(`   Source: ${a.sourceFile} — this is the exact file and line that renders it; read that range and edit there.`)
+    if (a.boundingBox) parts.push(`   Box: x=${Math.round(a.boundingBox.x)} y=${Math.round(a.boundingBox.y)} ${Math.round(a.boundingBox.width)}x${Math.round(a.boundingBox.height)}`)
+    if (a.computedStyles) parts.push(`   Current styles: ${a.computedStyles.slice(0, 300)}`)
+    return parts.join('\n')
   })
   const hints = summary.styleHints.map(h => `- ${h.selector}: ${JSON.stringify(h.properties)}`)
   const out = [
@@ -106,7 +180,9 @@ export function buildLiveEditPrompt(input: {
   for (const m of summary.moveLinks) out.push(`Move: relocate ${m.sourceSelector} before ${m.targetSelector} (${m.text})`)
   if (hints.length) out.push('Style hints parsed from the notes (verify before applying):', ...hints)
   out.push(
-    'Workflow: resolve-source each selector (hints above are best-effort — verify), then ranged read-real-file and str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
+    annotations.some(a => a.sourceFile)
+      ? 'Workflow: annotations with a Source line name the exact rendering file — ranged read-real-file there, then str-replace the fix. For the rest, resolve-source each selector first. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.'
+      : 'Workflow: resolve-source each selector (hints above are best-effort — verify), then ranged read-real-file and str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
   )
   return out.join('\n')
 }

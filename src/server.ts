@@ -422,6 +422,12 @@ app.post('/api/live-edit/submit', async (req, res) => {
   }
 })
 
+app.post('/api/live-edit/agentation', async (req, res) => {
+  const { handleAgentationSubmit } = await import('./live-edit/agentationSubmit.js')
+  const { status, payload } = await handleAgentationSubmit(req.body || {})
+  res.status(status).json(payload)
+})
+
 // --- Annotation overlay script (injected into preview iframe / extension pages) ---
 app.get('/live-edit/overlay.js', (req, res) => {
   res.type('application/javascript')

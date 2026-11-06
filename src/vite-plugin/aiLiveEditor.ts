@@ -41,8 +41,8 @@ function resolveEnvFile(fsRoot: string, explicit?: string) {
 export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
   const apiBase = opts.apiBase ?? ''
   const chatFile = path.join(__dirname, 'client', 'chat-overlay.js')
-  const annotateFile = path.join(__dirname, 'client', 'annotate.js')
   const chatUi = path.resolve(__dirname, '../ui/chat-embed.tsx')
+  const agentationEntry = path.join(__dirname, 'client', 'agentation-entry.jsx')
 
   function loadClient(file: string) {
     return fs.readFileSync(file, 'utf-8').replaceAll('__LAUNCHER_URL__', JSON.stringify(apiBase))
@@ -62,11 +62,9 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
     },
     resolveId(id) {
       if (id === 'ai-live-editor/chat-overlay') return '\0' + id
-      if (id === 'ai-live-editor/annotate') return '\0' + id
     },
     load(id) {
       if (id === '\0ai-live-editor/chat-overlay') return loadClient(chatFile)
-      if (id === '\0ai-live-editor/annotate') return loadClient(annotateFile)
     },
     configureServer(server: ViteDevServer) {
       const publicUrl = () => {
@@ -140,6 +138,16 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
             attrs: { type: 'module', src: '/@ai-live-editor/page-bridge.js' },
             injectTo: 'body',
           },
+          {
+            tag: 'script',
+            children: `window.__AI_LIVE_LAUNCHER__ = ${JSON.stringify(apiBase)}`,
+            injectTo: 'body',
+          },
+          {
+            tag: 'script',
+            attrs: { type: 'module', src: `/@fs${agentationEntry}` },
+            injectTo: 'body',
+          },
         ]
       },
     },
@@ -152,16 +160,6 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
           type: 'custom-render',
           renderer: {
             importFrom: 'ai-live-editor/chat-overlay',
-            importName: 'default',
-          },
-        })
-        ctx.docks.register({
-          id: 'ai-live-editor:annotate',
-          title: 'Annotate',
-          icon: 'ph:cursor-click-duotone',
-          type: 'action',
-          action: {
-            importFrom: 'ai-live-editor/annotate',
             importName: 'default',
           },
         })

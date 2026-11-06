@@ -886,12 +886,26 @@ the project's own components, never replacing them.
 
 ### Todos
 
-- [ ] Rung 0 spike (timeboxed): heuristic selector→file join on
-  `projects/lumen`; measure hit rate on snapshot selectors. If
-  <~80%, spike the Vite-plugin JSX source tag. Record outcome here.
-- [ ] Rung 0 resolver tool `resolve-source` (`selector` →
-  file/component/range), used by annotate + sketch→source; test on
-  nested catalog components (Step 1) where grep alone is ambiguous.
+- [x] Rung 0 spike (timeboxed): heuristic selector→file join on
+  `projects/lumen` — landed 2026-11-06. File-level hit rate 8/8 on
+  simulated snapshot/overlay selectors (id/testid/class/text anchors +
+  structural tag fallback for bare `nth-of-type` chains). Verdict: the
+  heuristic survives; the Vite-plugin JSX source tag (`data-ai-loc`
+  stamp) is deferred until nested catalog components (Step 1) prove
+  systematically ambiguous. The resolver already honours an exact
+  `sourceLoc` stamp when the bridge supplies one, so the upgrade is
+  additive. Caveat: lumen is a single-component app, so file-level
+  precision is trivially high; component/range attribution is
+  best-effort (enclosing `App` + anchor line).
+- [x] Rung 0 resolver tool `resolve-source` (`selector` →
+  file/component/range), used by annotate + sketch→source; fixture
+  tests in `src/sourceMap/resolveSource.test.ts`. Nested-catalog
+  ambiguity test still open (no catalog components exist yet — revisit
+  after Step 1). Index skips dotfiles/`dist`/`node_modules` (a stale
+  `projects/lumen/.App.jsx` backup shadowed the real file in the
+  first probe). Sketch Accept translates text/class ops via
+  `str-replace`, fail-closed; style/attr/html/insert/move/remove are
+  reported untranslatable, never guessed.
 - [ ] P2 stack-aware edits on the resolver: Tailwind-class edit
   (preserve variants/responsive prefixes), add-import-for-component,
   add/change-prop threaded to callers. Each is a `str-replace`

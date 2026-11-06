@@ -357,9 +357,11 @@ app.post('/api/live-edit/submit', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'No annotations or page notes submitted' })
     }
     const { summarizeAnnotations, buildLiveEditPrompt } = await import('./live-edit/annotationAnalysis.js')
+    const { resolveAnnotationSelectors } = await import('./mastra/tools/resolveSourceTool.js')
     const summary = summarizeAnnotations(notes)
     const pageUrl = typeof url === 'string' ? url : ''
-    const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl })
+    const resolutions = resolveAnnotationSelectors(notes)
+    const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl, resolutions })
     const { getSketchMode } = await import('./sketchSession.js')
     const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')

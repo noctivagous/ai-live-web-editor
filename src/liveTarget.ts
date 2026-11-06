@@ -46,7 +46,7 @@ export async function runPoolOp(op: 'inspect' | 'patch' | 'eval' | 'open' | 'sna
   return localPool(op, payload)
 }
 
-async function localPool(op: 'inspect' | 'patch' | 'eval' | 'open', payload: Record<string, unknown>) {
+async function localPool(op: 'inspect' | 'patch' | 'eval' | 'open' | 'snapshot', payload: Record<string, unknown>) {
   try {
     const { inspectDOM, patchDOM, evalJS, getPage, snapshotPage } = await import('./browserPool.js')
     const url = typeof payload.url === 'string' ? payload.url : undefined

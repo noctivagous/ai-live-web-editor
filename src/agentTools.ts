@@ -14,6 +14,7 @@ export const FILE_ACTIVE_TOOLS = [
   'layout-svg',
   'pool-open',
   'run-project-check',
+  'resolve-source',
 ] as const
 
 export const SKETCH_ACTIVE_TOOLS = [

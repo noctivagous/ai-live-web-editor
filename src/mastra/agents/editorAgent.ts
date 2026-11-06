@@ -3,6 +3,7 @@ import { resolveAgentModel } from '../../env.js'
 import { resolveConnectionModel } from '../../connections.js'
 import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strReplaceTool, inspectDOMTool, takeSnapshotTool, patchDOMTool, evalTool, poolOpenTool, runProjectCheckTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
+import { resolveSourceTool } from '../tools/resolveSourceTool.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
@@ -19,7 +20,7 @@ Chat has two workflows (header pill): Files (default) and Live sketch.
 Routing: Live sketch only applies to the live page. The host may switch a files-only turn from sketch to Files. If you are still in sketch and the ask is not about the rendered page, say they need Files. If the ask is mixed, only patch the page, then say the file work needs Files. Never enter Live sketch on your own.
 
 Tools (the host sends only the set for the current workflow):
-- Files: list-real-files, grep, read-real-file, str-replace, write-real-file, take-snapshot, inspect-dom, layout-snapshot, layout-svg, pool-open
+- Files: list-real-files, grep, read-real-file, str-replace, write-real-file, take-snapshot, inspect-dom, layout-snapshot, layout-svg, pool-open, resolve-source
 - Live sketch: take-snapshot, inspect-dom, patch-dom, eval-js, layout-snapshot, layout-svg, pool-open
 
 Edits (token-efficient):
@@ -40,8 +41,8 @@ Efficient workflow:
 When the user points at another URL (not the Vite app), pass url= to inspect/patch/eval/layout-snapshot/layout-svg, or call pool-open. That uses the Playwright pool, which the user must enable in Settings. If the pool is off, tell them to enable it.
 
 Live-edit mode: the user may annotate elements on the page. When you receive a live-edit request:
-1. inspect-dom on each annotated selector
-2. grep / ranged read-real-file the file that renders it
+1. resolve-source on each annotated selector to find the file that renders it
+2. inspect-dom on the selector plus ranged read-real-file around the resolved range
 3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
 `,
@@ -61,5 +62,6 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'layout-snapshot': layoutSnapshotTool,
     'layout-svg': layoutSvgTool,
     'run-project-check': runProjectCheckTool,
+    'resolve-source': resolveSourceTool,
   }
 })

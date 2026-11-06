@@ -166,7 +166,7 @@ export async function snapshotPage(payload: Record<string, unknown> = {}, url?: 
   const t0 = Date.now()
   const result = await page.evaluate(`(arg) => (${SNAPSHOT_PAGE_SCRIPT})(arg)`, { payload }) as Record<string, unknown>
   const out = { ...result, elapsedMs: Date.now() - t0 }
-  recordActivity('snapshot', `${Number(out.count || 0)} nodes ${out.elapsedMs}ms`)
+  recordActivity('snapshot', `${Number((result as Record<string, unknown>).count || 0)} nodes ${out.elapsedMs}ms`)
   return out
 }
 

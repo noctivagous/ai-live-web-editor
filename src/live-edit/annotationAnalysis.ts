@@ -64,18 +64,36 @@ export function summarizeAnnotations(annotations: PageAnnotation[]): AnnotationS
   return { insights, prioritizedIds, moveLinks, styleHints }
 }
 
+export interface AnnotationResolution {
+  selector?: string
+  file?: string
+  component?: string
+  startLine?: number
+  endLine?: number
+  confidence?: string
+}
+
 /** Build the agent prompt for a submit: annotations first, verification last. */
 export function buildLiveEditPrompt(input: {
   annotations: PageAnnotation[]
   summary: AnnotationSummary
   pageNotes: string
   pageUrl: string
+  resolutions?: AnnotationResolution[]
 }): string {
-  const { annotations, summary, pageNotes, pageUrl } = input
+  const { annotations, summary, pageNotes, pageUrl, resolutions } = input
+  const resolvedBySelector = new Map<string, AnnotationResolution>()
+  for (const r of resolutions || []) {
+    if (r.selector) resolvedBySelector.set(r.selector, r)
+  }
   const lines = annotations.map((a, i) => {
     const intent = summary.insights[i]?.intent ?? 'note'
     const target = a.targetSelector ? ` -> move target ${a.targetSelector}` : ''
-    return `${i + 1}. [${intent}] ${a.selector}${target}: ${a.text}`
+    const r = resolvedBySelector.get(String(a.selector || ''))
+    const where = r?.file
+      ? ` (≈ ${r.file}${r.component ? ` ${r.component}` : ''}${r.startLine ? `:${r.startLine}${r.endLine && r.endLine !== r.startLine ? `-${r.endLine}` : ''}` : ''})`
+      : ' (≈ source unresolved — call resolve-source first)'
+    return `${i + 1}. [${intent}] ${a.selector}${target}${where}: ${a.text}`
   })
   const hints = summary.styleHints.map(h => `- ${h.selector}: ${JSON.stringify(h.properties)}`)
   const out = [
@@ -88,7 +106,7 @@ export function buildLiveEditPrompt(input: {
   for (const m of summary.moveLinks) out.push(`Move: relocate ${m.sourceSelector} before ${m.targetSelector} (${m.text})`)
   if (hints.length) out.push('Style hints parsed from the notes (verify before applying):', ...hints)
   out.push(
-    'Workflow: grep / ranged read-real-file the file that renders each selector, then str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
+    'Workflow: resolve-source each selector (hints above are best-effort — verify), then ranged read-real-file and str-replace the fix. write-real-file only if the file is new. Never placeholder-full-write on a replace miss.',
   )
   return out.join('\n')
 }

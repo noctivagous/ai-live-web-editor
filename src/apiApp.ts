@@ -202,9 +202,11 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
         return res.status(400).json({ ok: false, error: 'No annotations or page notes submitted' })
       }
       const { summarizeAnnotations, buildLiveEditPrompt } = await import('./live-edit/annotationAnalysis.js')
+      const { resolveAnnotationSelectors } = await import('./mastra/tools/resolveSourceTool.js')
       const summary = summarizeAnnotations(notes)
       const resolvedUrl = typeof pageUrl === 'string' ? pageUrl : ''
-      const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl })
+      const resolutions = resolveAnnotationSelectors(notes)
+      const prompt = buildLiveEditPrompt({ annotations: notes, summary, pageNotes: String(pageNotes || ''), pageUrl: resolvedUrl, resolutions })
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
       const result = await agent.generate([{ role: 'user', content: prompt }], {

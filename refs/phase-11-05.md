@@ -433,6 +433,21 @@ port for moves, and submit to `/api/live-edit/submit`;
 draggable wireframe controls, and annotate is disabled on the live
 `:5173` preview path.
 
+**Tight-loop gap found on review (2026-11-05):** Live sketch's loop
+is genuinely tighter than write-file → HMR for *iteration* —
+`patch-dom` mutates the user's real DOM in-page (no write, watcher,
+HMR, or reload, so page state survives), with before-state capture
+and restore on Undo/Discard via the same engine. But the loop does
+not yet *close*: Accept only marks the session accepted and keeps
+the DOM (`workflowApi.ts` `accept` → `acceptSketch()`; Chat labels
+it "Accept (keep on page)"). No patch is translated back to source,
+so an accepted sketch is lost on reload/HMR/project switch
+(`sketchSession.ts`: "Vite restart wipes the DOM"). Until
+sketch→source conversion exists, sketch is a superior *exploration*
+loop and an incomplete *delivery* loop; Cursor's slower
+file-write loop still wins on durability. Closing this is part of
+this step's work (see Todos).
+
 ### Web research (2026-11-05)
 
 - [Agentation](https://www.agentation.com/features) is the reference
@@ -469,6 +484,12 @@ draggable wireframe controls, and annotate is disabled on the live
 
 ### Todos
 
+- [ ] Close the sketch loop: on Accept, convert the patch log to
+  source — resolve each selector to its rendering file (grep /
+  Step 8 map), apply the equivalent `str-replace` edits in Files
+  mode, then verify with `layout-snapshot` after HMR and report any
+  patch that could not be translated. Acceptance: accept a sketch,
+  reload the page, the change is still there.
 - [ ] Overlay: drag-rectangle region capture (with Esc-cancel and
   note prompt on release); store as `region` notes.
 - [ ] `annotationAnalysis.ts`: classify region notes (issue vs
@@ -539,6 +560,20 @@ channel today and exposes no console/network surface to tools.
   rewrite. (Step 11 uses the server half.)
 
 ### Plan — two tiers, cheapest first
+
+**Routing correction (2026-11-05 review):** the Vite bridge stays
+the default for the Vite app; Playwright does **not** become the
+default. The bridge targets the exact page the user sees (top tab or
+preview iframe, `pickPageResult` prefers the iframe), needs no
+browser launch, and Live sketch is hard-routed to it
+(`liveTarget.ts`: `sketchOnVite` bypasses the pool) because
+Undo/Discard must restore what the user sees. The pool remains for
+foreign origins, `LIVE_TARGET=pool`, and deterministic runs. Both
+paths already share the same patch/snapshot engines
+(`browserPool.ts` inlines `patchEngine.js` / `pageSnapshot.js`), so
+the choice is transport/location, not capability. DevTools depth
+arrives via Tier 1 capture on both paths and the optional Tier 2
+MCP client — never by swapping the default target.
 
 **Tier 1 (native, no new dependency):** the page bridge and the
 Playwright pool already sit inside a real page. Capture what the

@@ -1,0 +1,1 @@
+{"dependencies":{"lit":"^3.1.0","react":"^18.3.0","react-dom":"^18.3.0"},"devDependencies":{"@vitejs/devtools":"0.8.2","@vitejs/devtools-kit":"0.8.2","@vitejs/plugin-react":"6.2.1","vite":"8.3.5"},"name":"appkit-pilot","scripts":{"build":"vite build","dev":"vite --port 5173"},"type":"module"}

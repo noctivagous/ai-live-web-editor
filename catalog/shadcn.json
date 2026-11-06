@@ -1,0 +1,288 @@
+{
+  "version": 1,
+  "generatedFrom": "shadcn-ui/ui@42f3bb6 (new-york-v4), vendored at catalog/stock/shadcn — regenerate with scripts/extract-shadcn.ts",
+  "components": [
+    {
+      "tag": "Button",
+      "category": "ui",
+      "description": "Clickable button in several visual variants and sizes; asChild applies the button styling to a child element such as a link. Renders a native <button> and accepts its standard props.",
+      "props": [
+        {
+          "name": "variant",
+          "type": "'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'",
+          "description": "Default 'default'."
+        },
+        {
+          "name": "size",
+          "type": "'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg'",
+          "description": "Default 'default'."
+        },
+        {
+          "name": "asChild",
+          "type": "boolean"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "class-variance-authority",
+        "cn",
+        "radix-ui"
+      ],
+      "exports": [
+        "Button"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/button.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Card",
+      "category": "ui",
+      "description": "Card container for grouped content, with header, title, description, content, action and footer parts. Renders a native <div> and accepts its standard props.",
+      "props": [
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn"
+      ],
+      "exports": [
+        "Card",
+        "CardHeader",
+        "CardFooter",
+        "CardTitle",
+        "CardAction",
+        "CardDescription",
+        "CardContent"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/card.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Checkbox",
+      "category": "ui",
+      "description": "Checkbox input with a checked state, built on the Radix checkbox primitive. Accepts the CheckboxPrimitive.Root primitive's props.",
+      "props": [
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn",
+        "lucide-react",
+        "radix-ui"
+      ],
+      "exports": [
+        "Checkbox"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/checkbox.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Dialog",
+      "category": "ui",
+      "description": "Modal dialog on the Radix dialog primitive: overlay, content panel, title, description and close, composed from the exported parts. Accepts the DialogPrimitive.Root primitive's props.",
+      "props": [],
+      "slots": [
+        "children"
+      ],
+      "emits": [],
+      "dependencies": [
+        "cn",
+        "lucide-react",
+        "radix-ui",
+        "button"
+      ],
+      "exports": [
+        "Dialog",
+        "DialogClose",
+        "DialogContent",
+        "DialogDescription",
+        "DialogFooter",
+        "DialogHeader",
+        "DialogOverlay",
+        "DialogPortal",
+        "DialogTitle",
+        "DialogTrigger"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/dialog.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Input",
+      "category": "ui",
+      "description": "Single-line text input with the stock styling. Renders a native <input> and accepts its standard props.",
+      "props": [
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "type"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn"
+      ],
+      "exports": [
+        "Input"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/input.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Label",
+      "category": "ui",
+      "description": "Form label on the Radix label primitive; associates with a control through htmlFor. Accepts the LabelPrimitive.Root primitive's props.",
+      "props": [
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ],
+      "exports": [
+        "Label"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/label.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Separator",
+      "category": "ui",
+      "description": "Horizontal or vertical separator line (Radix separator), decorative or semantic. Accepts the SeparatorPrimitive.Root primitive's props.",
+      "props": [
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "orientation"
+        },
+        {
+          "name": "decorative"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ],
+      "exports": [
+        "Separator"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/separator.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Switch",
+      "category": "ui",
+      "description": "On/off switch toggle on the Radix switch primitive, in two sizes. Accepts the SwitchPrimitive.Root primitive's props.",
+      "props": [
+        {
+          "name": "size",
+          "type": "\"sm\" | \"default\""
+        },
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ],
+      "exports": [
+        "Switch"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/switch.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Tabs",
+      "category": "ui",
+      "description": "Tabbed interface on the Radix tabs primitive: a list of triggers switching content panes. Accepts the TabsPrimitive.Root primitive's props.",
+      "props": [
+        {
+          "name": "variant",
+          "type": "'default' | 'line'",
+          "description": "Default 'default'."
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "orientation"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "class-variance-authority",
+        "cn",
+        "radix-ui"
+      ],
+      "exports": [
+        "Tabs",
+        "TabsList",
+        "TabsTrigger",
+        "TabsContent"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/tabs.tsx",
+      "origin": "shadcn-stock"
+    },
+    {
+      "tag": "Textarea",
+      "category": "ui",
+      "description": "Multi-line text input with the stock styling. Renders a native <textarea> and accepts its standard props.",
+      "props": [
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ],
+      "slots": [],
+      "emits": [],
+      "dependencies": [
+        "cn"
+      ],
+      "exports": [
+        "Textarea"
+      ],
+      "runtime": "react",
+      "sourceFile": "catalog/stock/shadcn/ui/textarea.tsx",
+      "origin": "shadcn-stock"
+    }
+  ]
+}

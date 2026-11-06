@@ -5,6 +5,8 @@ import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strRe
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
 import { getConsoleTool, getNetworkFailuresTool } from '../tools/verifyTools.js'
 import { resolveSourceTool } from '../tools/resolveSourceTool.js'
+import { findComponentTool } from '../tools/catalogTools.js'
+import { fetchPageTool, researchTool, webSearchTool } from '../tools/webTools.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
@@ -23,6 +25,8 @@ Routing: Live sketch only applies to the live page. The host may switch a files-
 Tools (the host sends only the set for the current workflow):
 - Files: list-real-files, grep, read-real-file, str-replace, write-real-file, take-snapshot, inspect-dom, layout-snapshot, layout-svg, pool-open, resolve-source
 - Live sketch: take-snapshot, inspect-dom, patch-dom, eval-js, layout-snapshot, layout-svg, pool-open
+
+Web research (Files only): web-search for quick current facts (API shapes, versions, docs), fetch-page to read one page, and research for anything that needs several sources reconciled — plan 3-6 sub-queries when you call it, and prefer building from its cited brief over building from memory. When the user will keep building from a brief, save it with saveTo under ai-research/.
 
 Edits (token-efficient):
 - Default to str-replace on existing files. old_string must match EXACTLY once (whitespace included). If it is missing or not unique, the file is left unchanged — widen the hunk or set replace_all. Do not follow a miss with write-real-file of placeholders like "[original content]".
@@ -65,6 +69,10 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'layout-svg': layoutSvgTool,
     'run-project-check': runProjectCheckTool,
     'resolve-source': resolveSourceTool,
+    'find-component': findComponentTool,
+    'web-search': webSearchTool,
+    'fetch-page': fetchPageTool,
+    'research': researchTool,
     'get-console': getConsoleTool,
     'get-network-failures': getNetworkFailuresTool,
   }

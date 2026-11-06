@@ -15,6 +15,10 @@ export const FILE_ACTIVE_TOOLS = [
   'pool-open',
   'run-project-check',
   'resolve-source',
+  'find-component',
+  'web-search',
+  'fetch-page',
+  'research',
   'get-console',
   'get-network-failures',
 ] as const

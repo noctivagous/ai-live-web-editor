@@ -1,0 +1,250 @@
+/* Theme Tokens - NoctCode Pro App GUI
+ * Consolidated design tokens from Rectangular Dark styleguide
+ * Use these variables in all components via var(--token-name, fallback)
+ */
+
+:root {
+  /* ========== BACKGROUND ========== */
+  --bg-base: #2b2b2b;
+  --bg-raised: #3a3a3a;
+  --bg-input: #1f1f1f;
+  --bg-pressed: #222222;
+  --bg-hover: #404040;
+  --bg-selected: #0d3656;
+  --bg-header: #323232;
+  --bg-base-alt: #2a2a2a;      /* Alternative base background */
+  --bg-input-alt: #1e1e1e;       /* Panel/modal background */
+  --bg-surface: #282828;           /* Surface variant */
+  --bg-darkest: #000000;          /* Darkest background (video player) */
+
+  /* ========== BEVEL (3D Effect) ========== */
+  --bevel-highlight: #4a4a4a;
+  --bevel-shadow: #1a1a1a;
+  --bevel-highlight-subtle: #424242;
+  --bevel-highlight-alt: #3a3a3a;
+
+  /* ========== TEXT ========== */
+  --text-primary: #d0d0d0;
+  --text-secondary: #999999;
+  --text-disabled: #606060;
+  --text-label: #b8b8b8;
+  --text-bright: #e0e0e0;          /* Bright text */
+  --text-light: #cccccc;             /* Light text */
+  --text-tertiary: #888888;         /* Tertiary text */
+  --text-muted: #555555;            /* Muted text */
+  --text-on-accent: #ffffff;         /* Text on accent backgrounds */
+  --text-code: #d4d4d4;            /* Code/registry text */
+  --text-vscode: #cccccc;          /* VS Code style text */
+
+  /* ========== ACCENT ========== */
+  --accent: #2f7dd2;
+  --accent-pressed: #2462a3;
+  --accent-glow: rgba(47, 125, 210, 0.3);
+  --accent-purple: #7c4dff;         /* Primary purple */
+  --accent-purple-light: #bb86fc;   /* Light purple */
+  --accent-purple-dark: #6a3dff;    /* Dark purple */
+  --accent-blue: #007acc;           /* VS Code blue */
+  --accent-blue-light: #569cd6;     /* Syntax blue */
+  --accent-green: #6a9955;          /* Syntax green */
+  --accent-cyan: #9cdcfe;          /* Syntax light blue */
+
+  /* ========== BORDERS ========== */
+  --border-color: #1a1a1a;
+  --border-medium: #333333;          /* Medium gray */
+  --border-dark: #444444;           /* Dark gray */
+  --border-grid: #202020;
+  --border-separator: #242424;
+  --border-vscode: #3c3c3c;        /* VS Code style border */
+  --border-vscode-alt: #252526;     /* VS Code style background */
+  --accent-border: #1a4d7a;        /* Accent border */
+  --recording-border: #8b1a1a;     /* Recording border */
+  --success-border: #2e7d32;        /* Success border */
+  --warning-border: #e65100;        /* Warning border */
+  --error-border: #c62828;          /* Error border */
+
+  /* ========== STATUS COLORS ========== */
+  --success: #4caf50;
+  --warning: #ff9800;
+  --error: #f44336;
+  --error-alt: #ff5252;             /* Alternative error */
+  --recording: #d32f2f;
+  --error-material: #cf6679;         /* Material error */
+
+  /* ========== SPACING (4px base unit) ========== */
+  --unit: 4px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* ========== TYPOGRAPHY ========== */
+  --font-base: 13px;
+  --font-sm: 11px;
+  --font-lg: 15px;
+  --font-size-h1: 20px;
+  --font-size-h2: 16px;
+  --font-size-label: 12px;
+  --font-size-code: 12px;
+  --font-size-timecode: 20px;
+  --line-height: 1.4;
+  --line-height-heading: 1.2;
+  --letter-spacing-label: 0.5px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Courier New", Courier, monospace;
+
+  /* ========== TYPE SCALE (print baseline grid) ==========
+   * Every line-height is a multiple of --baseline (4px) so text rows
+   * sit on the grid. Sizes stay desktop-compact; only metrics grow here.
+   */
+  --baseline: 4px;
+  --font-micro: 10px;
+  --line-micro: 16px;
+  --font-label: 11px;
+  --line-label: 16px;
+  --line-sm: 16px;
+  --line-base: 20px;
+  --line-lg: 20px;
+  --font-h2: 16px;
+  --line-h2: 24px;
+  --font-h1: 20px;
+  --line-h1: 28px;
+  --font-display: 24px;
+  --line-display: 32px;
+  --letter-spacing-micro: 0.5px;
+  --letter-spacing-title: 0.25px;
+  /* Technical mono: system stack with tabular figures for timecode,
+   * meters, tables, and editor surfaces. No downloaded fonts. */
+  --font-mono-tech: ui-monospace, "SF Mono", "Cascadia Code", "Cascadia Mono", Consolas, "Roboto Mono", Menlo, monospace;
+  --font-feature-numeric: "tnum" 1;
+
+  /* ========== COMPONENT SIZES ========== */
+  --height-button: 24px;
+  --height-input: 24px;
+  --height-menubar: 28px;
+  --height-toolbar: 36px;
+  --height-transport: 48px;
+  --height-statusbar: 24px;
+  --width-sidebar: 240px;
+  --width-form-label: 120px;
+  --min-width-timecode: 160px;
+  --icon-size: 12px;
+  --icon-size-sm: 12px;
+  --icon-size-md: 16px;
+  --control-size: 14px;              /* Checkbox/radio */
+  --scrollbar-size: 16px;
+
+  /* ========== Z-INDEX ========== */
+  --z-base: 1;
+  --z-window: 100;
+  --z-modal: 1000;
+  --z-toast: 2000;
+  --z-tab-selected: 1;
+
+  /* ========== OPACITY ========== */
+  --opacity-disabled: 0.5;
+  --opacity-hover-row: 0.02;       /* rgba(255,255,255,0.02) */
+  --opacity-selected-border: 0.1;  /* rgba(255,255,255,0.1) */
+
+  /* ========== BORDER RADIUS ========== */
+  --radius: 0;                     /* Rectangular design - no rounded corners */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --border-width: 1px;
+  --border-width-thick: 2px;
+
+  /* ========== BOX SHADOWS (3D Beveled Effect) ========== */
+  --shadow-bevel: inset 1px 1px 0 var(--bevel-highlight), inset -1px -1px 0 var(--bevel-shadow);
+  --shadow-bevel-subtle: inset 1px 1px 0 var(--bevel-highlight-subtle);
+  --shadow-bevel-inverse: inset -1px -1px 0 var(--bevel-highlight), inset 1px 1px 0 var(--bevel-shadow);
+  --shadow-bevel-pressed: inset -1px -1px 0 var(--bevel-highlight), inset 1px 1px 0 var(--bevel-shadow);
+  --shadow-panel: 4px 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ========== APP MODE: RESPONSIVE ========== */
+[data-app-mode="responsive"] {
+  --font-base: 14px;
+  --space-sm: 10px;
+  --space-md: 14px;
+  --space-lg: 18px;
+}
+
+@media (max-width: 768px) {
+  [data-app-mode="responsive"] {
+    --font-base: 16px;
+    --font-size-h1: 18px;
+    --width-form-label: 80px;
+  }
+}
+
+/* ========== APP MODE: MOBILE (Touch Targets) ========== */
+[data-app-mode="mobile"] {
+  --font-base: 16px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --height-button: 44px;          /* 44px touch target */
+  --height-input: 44px;
+}
+
+/* ========== APP MODE: DESKTOP (Default - No Adjustments) ========== */
+[data-app-mode="desktop"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ========== DENSITY: COMPACT ==========
+ * Pro density for word-processing / video / audio layouts: type metrics
+ * stay on the baseline grid, chrome heights tighten to grid multiples.
+ * Opt-in only; normal density is byte-identical without this attribute.
+ */
+[data-density="compact"] {
+  --font-base: 11px;
+  --space-xs: 2px;
+  --space-sm: 4px;
+  --space-md: 8px;
+  --space-lg: 12px;
+  --height-button: 20px;
+  --height-input: 20px;
+  --height-menubar: 24px;
+  --height-toolbar: 32px;
+  --height-statusbar: 20px;
+  --line-micro: 16px;
+  --line-label: 16px;
+  --line-sm: 16px;
+  --line-base: 20px;
+  --line-lg: 20px;
+  --line-h2: 24px;
+  --line-h1: 28px;
+  --line-display: 32px;
+}
+
+/* ========== DENSITY: COMFORTABLE ========== */
+[data-density="comfortable"] {
+  --font-base: 15px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+  --height-button: 28px;
+  --height-input: 28px;
+}
+
+/* ========== REDUCED MOTION ========== */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ========== HIGH CONTRAST ========== */
+@media (prefers-contrast: high) {
+  :root {
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --border-color: #666666;
+    --bevel-highlight: #666666;
+    --bevel-shadow: #000000;
+  }
+}

@@ -18,6 +18,8 @@ import {
   type SketchPatch,
 } from './sketchSession.js'
 import { getDeviceTarget, parseDeviceTarget, setDeviceTarget } from './deviceSession.js'
+import { getAppkitEnabled, setAppkitEnabled } from './catalog/catalogSession.js'
+import { getSelfCheck, isSelfWorkspace } from './selfMode.js'
 
 function restoreFailed(result: unknown): string | null {
   if (!result || typeof result !== 'object') return 'restore returned nothing'
@@ -96,7 +98,15 @@ async function restoreOnPage(patch: SketchPatch) {
 }
 
 function workflowSnapshot() {
-  return { ...snapshotPublic(getSketchState()), deviceTarget: getDeviceTarget() }
+  return {
+    ...snapshotPublic(getSketchState()),
+    deviceTarget: getDeviceTarget(),
+    appkitCatalog: getAppkitEnabled(),
+    // Self mode (§L): badge + last self-check result, present
+    // only while the editor itself is the workspace.
+    selfMode: isSelfWorkspace(),
+    selfCheck: getSelfCheck(),
+  }
 }
 
 export function mountWorkflowApi(app: Express) {
@@ -111,6 +121,7 @@ export function mountWorkflowApi(app: Express) {
       if (mode) setSketchMode(mode)
       const device = parseDeviceTarget(body.deviceTarget)
       if (device) setDeviceTarget(device)
+      if (typeof body.appkitCatalog === 'boolean') setAppkitEnabled(body.appkitCatalog)
       const action = body.action
       if (action === 'undo') {
         const { undone } = undoLastSketch()

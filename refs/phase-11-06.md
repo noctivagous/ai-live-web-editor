@@ -279,6 +279,170 @@ already proves the detail half; this gives conversations a home
 that isn't a single scrolling chat. (It also dogfoods §J: our
 own UI on the base layout we ship.)
 
+## L. Self mode — the editor works on itself (new, 2026-11-06)
+
+A mode for developing the editor *with* the editor, to remove
+the build from the development loop. Two halves:
+
+1. **No builds.** The launcher UI (`src/ui/`) is served from
+   source through Vite dev middleware (HMR) instead of the
+   `ui:build` bundle. An edit to the UI lands in the running UI
+   in under a second.
+2. **The repo is the workspace.** The editor opens its own repo
+   root as the project; the agent's file tools point at the
+   tree that is currently running.
+
+The consequence that shapes the design: **the chat surface is
+inside the blast radius.** A chat session can change — or
+break — the very UI in the same viewport it is being driven
+from. The mode is designed for that failure, not around it:
+
+- **Recovery lives outside the editable surface.** A minimal
+  static recovery page is served by the server itself (never a
+  file the agent can edit in this mode): editor status, the
+  snapshot list, revert buttons, a link back. Under it, git is
+  the real net: self mode snapshots the tree before every edit
+  turn (`git stash create` semantics — a commit object, no
+  working-tree disturbance), so "undo everything that turn did"
+  is always available.
+- **Reloads are routine, not fatal.** HMR can remount the chat
+  UI mid-turn. Session state stays server-side (the workflow
+  snapshot already works this way); the client reattaches on
+  remount and the turn's outcome lands regardless.
+- **Scope is UI-only by default.** Writes are confined to
+  `src/ui/**`. Server code (`src/server.ts`, the agent, the
+  tools) is a second tier behind an explicit unlock, because
+  editing it needs a server watch-restart (slice 2), which
+  drops the in-flight stream.
+- **The gate matters more here.** An edit can break the tools
+  themselves, so after each self-mode turn the editor runs
+  tsc + the test suite automatically and surfaces the result
+  beside a revert affordance.
+- **The mode is loud.** A persistent SELF badge in the chat
+  header, driven by the workflow snapshot. Nobody should be in
+  self mode by accident — and the annotation overlay pointing
+  at *this* button, the one in front of you, is the dogfooding
+  payoff.
+
+Why it is worth it: the editor's UI is just a Vite + React app.
+If self mode works, the same flow works for any such project;
+and every papercut in the editor becomes fixable in the moment
+it is felt, which is the acceleration compounding. Packaged /
+normal runs keep `ui:build`; self mode is a dev flag
+(`npm run dev:self` → `AI_LIVE_SELF=1`).
+
+**Slice 1 (building 2026-11-06):** the SELF flag + Vite dev
+middleware serving `src/ui`; the repo root selectable as the
+workspace with its own `project.ai.json`; the write-scope guard
+(`src/ui/**`); pre-turn git snapshots + the recovery page with
+revert; the SELF badge via the workflow snapshot; auto
+tsc + tests after self-mode turns.
+**Slice 2 (later):** server watch-restart for the unlocked
+tier; preview/annotation aimed at the launcher UI itself (the
+preview pane showing the app that contains it — recursion to
+handle deliberately, not by accident). §M is the query half of
+that: the launcher UI ships probes, so the agent asks the UI
+it is editing what its state is instead of snapshotting it.
+
+## M. The in-page probe layer — editor-only components that report status (new, 2026-11-06)
+
+The catalog gives the agent static metadata: what a component
+*can* do. This is the live counterpart: what the page on screen
+*is doing right now*, reported by the page itself.
+
+The editor can insert React components into the apps it works
+on that exist **only for the editor** — mounted through the
+Vite plugin's injection channel (the one that already provides
+`window.__AI_LIVE_LAUNCHER__` and the chat embed), never part
+of a production build. Pieces:
+
+- **`<AiScope name>`** — wraps a region and registers it:
+  { name, what lives inside, its element }. Scopes nest. The
+  agent works *in* a scope; queries default to the active one
+  instead of the whole page.
+- **`useAiProbe(id, digest)`** — a component publishes a
+  compact, agent-shaped state digest: the values that matter
+  (validity, counts, current selection, pending state), not
+  raw props or a DOM dump. Updated as state changes.
+- **The page-side registry** (`window.__AI_LIVE_PROBE__`):
+  list scopes, get a digest by id, find by name/role. The agent
+  reaches it through a `query-page` tool on the existing
+  liveTarget channel, next to snapshot/patch/eval.
+- **Markers** — named anchors the agent drops in an area and
+  refers back to across turns ("the marker at the checkout
+  total"), resolving to element + scope + digest without
+  re-describing the page each time.
+
+**The token argument** is the point: a full-page accessibility
+snapshot costs thousands of tokens and is mostly noise; a
+scoped digest costs tens and is pre-digested by the only party
+that knows what matters — the page itself. The agent stops
+reading the room and starts asking questions.
+
+Discipline ties to the catalog contract: a digest follows the
+NoctComponentMeta habit (name, purpose, typed fields). The
+catalog says what a component can do; the probe says what it
+is doing. For Lit/AppKit pages, `noct-registry` is the same
+idea in that world — one query tool should span both.
+
+Fallbacks stay: un-instrumented pages keep take-snapshot /
+inspect-dom / eval-js. Probes are an accelerator the agent
+adds as it works — an `AiScope` wrapper is just a component in
+the tree during editing — and **self mode (§L) is the flagship
+case**: the launcher UI ships probes natively (dev-only), so
+the agent editing the editor queries the editor's own live
+state through the same tool.
+
+**First slice (sketch):** the plugin-injected registry +
+bridge query; the `query-page` tool (list scopes, get digest);
+`AiScope` + `useAiProbe` as a small editor-only package a
+project imports during editing; lumen as the proving project,
+then launcher-UI adoption for self mode.
+
+## N. Web research — the self-building mode's first tool (new, 2026-11-06)
+
+Self mode (§L) means building the app with the app, and much
+of that building starts as research: API shapes, library
+choices, prior art. So the mode's first tool is not an editor
+feature but a **research capability, native to the editor** —
+the agent searches the web itself instead of building from
+memory or asking the user to look things up.
+
+Two layers, wired to the **Brave Search API** (independent
+index, simple REST, a key the user supplies — BYOK like the
+model connections; `BRAVE_API_KEY` in `.env`, with a Settings
+surface added the same day: one Brave card (`SearchSetup`)
+shared by Settings → Search and a Search slide in the setup
+wizard — status/save/test/remove over `/api/research/*`,
+key written via the `.env` upsert and applied live, never
+returned to the client beyond its last4):
+
+- **`web-search`** — one Brave web search, compact results
+  (title, url, snippet). `fetch-page` beside it: one URL in,
+  readable text out. These are the quick-lookup tier.
+- **`research`** — the compiler. The calling agent plans the
+  fan-out (it passes the sub-queries); the tool runs the
+  searches in parallel, dedupes by URL, fetches the top pages,
+  and makes ONE synthesis call through the active model
+  connection over the compiled evidence. What comes back is a
+  **brief**: an answer with conclusions, disagreements and
+  uncertainty flagged, key findings cited `[n]` against a
+  source list — a thing the user can read and the agent can
+  then build from. With `saveTo`, the brief lands as a
+  markdown file in the project (briefs are documents, not
+  code: `.md` only, outside the §L write scope by design).
+  If synthesis is unavailable (no model configured), the tool
+  returns the evidence pack with a note instead of failing.
+
+Bounds are deliberate: ≤6 searches, ≤8 pages fetched, per-page
+and total-evidence caps, per-fetch timeouts, loopback/private
+hosts refused in `fetch-page`. Search without a key fails with
+the remedy in the message, never a stack trace.
+
+Available in Files mode generally (research helps every
+project), and essential in self mode, where the brief often
+*is* the spec for what gets built next.
+
 ## Integration points (where each piece hooks into the code, 2026-11-06)
 
 Found before building, per the goals discussion. The pattern to
@@ -333,6 +497,118 @@ not new subsystems.
   data, not Agentation's. Rung 2 as written in phase-11-05
   Step 5 is superseded by that decision; reconcile there before
   building §C.
+
+- **AppKit pilot, part 1 BUILT 2026-11-06** (branch
+  `feat/appkit-catalog`, local): the catalog infrastructure.
+  `catalog/components.json` seeded from the AppKit inventory —
+  all 63 components with tag/category/description in the
+  NoctComponentMeta shape (`src/catalog/catalog.ts`: loader,
+  term-ranked `findComponents`, `catalogSummary`);
+  `src/catalog/extract.ts` generates full entries (props, slots,
+  emits, dependencies) from component sources exporting
+  `*Meta` objects — fixture-tested, since the appkit source is
+  an external companion checkout that is NOT in NCTGraphite
+  (that repo holds only the inventory + plan docs) and not on
+  GitHub. Agent wiring: `find-component` tool (Files mode),
+  registered on the editor agent, plus the catalog line in the
+  project brief. Acceptance (mechanism level): a tool-driving
+  mock asked for a settings page called find-component and got
+  noct-app-settings back. **Remaining for the pilot:** the
+  appkit source itself (user to supply the noct-code-appkit
+  folder or a repo) → run the extractor for full metadata,
+  vendor the subset (layout primitives + noct-app-settings +
+  noct-theme) copy-own into one starter, and the copy step of
+  the install path.
+
+- **shadcn stock ingested; AppKit off by default 2026-11-06**
+  (branch `feat/appkit-catalog`, local): the catalog is now two
+  stocks behind the one find-component tool. The shadcn stock
+  (10 components: Button, Card, Checkbox, Dialog, Input, Label,
+  Separator, Switch, Tabs, Textarea) is vendored copy-own at
+  `catalog/stock/shadcn/` (byte-exact from shadcn-ui/ui
+  42f3bb6, new-york-v4; see its PROVENANCE.md) and extracted
+  into `catalog/shadcn.json` by `src/catalog/extractReact.ts`
+  (cva variants, inline prop types, exports per file — the
+  registry unit is the file), regenerated by
+  `scripts/extract-shadcn.ts`. Total catalog: 73 entries.
+  **Decision (user): shadcn is the default stock; the Noct
+  AppKit stock is OFF by default.** `findComponents` and
+  `catalogSummary` serve only enabled entries
+  (`src/catalog/catalogSession.ts` holds the session flag,
+  adopted from the manifest on project select like the device
+  target, carried on the workflow snapshot as `appkitCatalog`);
+  a project opts in with `"appkit": true` in project.ai.json, or
+  a single search passes `includeAppkit`. Exact-tag lookup is
+  deliberately unfiltered — naming a component is an explicit
+  request. Proof: `projects/shadcn-pilot/` (Tailwind v4 +
+  @tailwindcss/vite, the stock copied into src/components/ui/)
+  builds clean and a Playwright check opens its Radix dialog
+  from the built bundle. One dependency gotcha: the stock
+  imports `cn` from the `cn` package — that is shadcn's own
+  class-merging utility at current versions (^0.5.2); the
+  ancient 0.1.x line under the same name is an unrelated jokes
+  CLI that drags in `request` and breaks browser builds, so
+  never pin cn to 0.1.x.
+- §L SLICE 1 BUILT 2026-11-06 (branch feat/self-mode, local,
+  unpushed): self mode — `npm run dev:self` (AI_LIVE_SELF=1)
+  boots the launcher straight into the editor-as-workspace:
+  the repo root is a reserved project (`self`, listed only
+  while the flag is on; launcher.ts EDITOR_ROOT/SELF_PROJECT_ID;
+  no project Vite is spawned for it — the launcher is the live
+  app), and src/ui is served from source through Vite dev
+  middleware in server.ts (inline config, no ui:build; the
+  built-bundle path is untouched when the flag is off).
+  `src/selfMode.ts` carries the rest: the write-scope guard in
+  the agent's str-replace/write tools (writes confined to
+  src/ui/** while the editor is the workspace;
+  AI_LIVE_SELF_UNLOCK=1 lifts it — the slice-2 tier), a git
+  snapshot before every Files chat turn (`git stash create`
+  semantics, recorded under .ai-live/, gitignored), a
+  scope-limited revert (tracked files restored, agent-created
+  files inside the scope removed, tooling caches skipped), the
+  server-rendered /self-recovery page (status, check tail,
+  snapshot revert buttons — registered before the Vite
+  middlewares, never a file in the write scope), post-turn
+  self-checks (tsc + full test suite, fire-and-forget) whose
+  result rides the workflow snapshot (selfMode/selfCheck) to a
+  loud SELF badge in the chat header on both surfaces. The
+  repo's own project.ai.json (gitignored) designates it
+  web-app. Verified end to end with the mock provider driving
+  real turns: an agent str-replace renamed the chat header and
+  the running UI updated via HMR with no reload; a second turn
+  aiming at src/server.ts was blocked by the guard (file
+  untouched); the post-turn check reported tsc ok + 211/211;
+  reverting to the pre-turn snapshot restored the file and the
+  UI followed. Suite: 211/211 (4 new selfMode tests), tsc +
+  ui:build clean. §M (in-page probe layer) recorded the same
+  day from the user's design note; not yet built — it is the
+  query half of §L slice 2.
+- §N BUILT 2026-11-06 (branch feat/web-research, local,
+  unpushed): web research, the self-building mode's first
+  tool. `src/research/brave.ts` (Brave Search API client;
+  BRAVE_API_KEY from `.env`, BRAVE_API_BASE overridable;
+  missing key returns the remedy text), `fetchPage.ts`
+  (readable-text extraction; loopback/private hosts refused),
+  `research.ts` (the compiler: parallel searches, URL dedupe,
+  top-page fetches with snippet fallback, ONE synthesis call
+  through the active model connection; synthesis unavailable →
+  a labelled evidence pack, never a fake conclusion). Tools in
+  `src/mastra/tools/webTools.ts` — web-search, fetch-page,
+  research (the calling agent plans the sub-queries; saveTo
+  writes the brief as `.md` only, briefs being documents, not
+  code) — registered on the editor agent and in
+  FILE_ACTIVE_TOOLS, with a research line in the brief when a
+  key is configured. Verified: 9 new unit tests; a direct
+  tool-level E2E against a stub Brave API (token header,
+  fan-out, real example.com fetches, JSON-model synthesis,
+  brief saved + read back); and an agent-turn E2E in self mode
+  where a chat turn invoked research and the brief landed in
+  the repo under ai-research/ (synthesis there degraded to the
+  evidence pack because the mock connection speaks SSE — with
+  a real provider it synthesizes, as the direct E2E proved).
+  One real bug found + fixed by the E2E: saveTo path joining
+  produced a hidden `.ai-research/` directory. Suite: 220/220,
+  tsc clean. Real-world use needs only a Brave key in `.env`.
 
 ## Order of work
 

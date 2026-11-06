@@ -1,0 +1,2942 @@
+{
+ "version": 1,
+ "generatedFrom": "extracted from noct-code-appkit src/lib (61 components) + inventory seeds for the rest",
+ "components": [
+  {
+   "tag": "noct-action",
+   "category": "logic",
+   "description": "Declarative event to action binding without JavaScript",
+   "props": [
+    {
+     "name": "trigger",
+     "type": "string",
+     "description": "Event trigger (e.g., \"#btn:click\", \"load\", \"#input:input\")"
+    },
+    {
+     "name": "call",
+     "type": "string",
+     "description": "Component method to call (e.g., \"#store.set('count', 1)\")"
+    },
+    {
+     "name": "with",
+     "type": "string",
+     "description": "Value to pass to the called method"
+    },
+    {
+     "name": "mutate",
+     "type": "string",
+     "description": "Store path to mutate (e.g., \"#store.count\")"
+    },
+    {
+     "name": "goto",
+     "type": "string",
+     "description": "URL to navigate to"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "action-triggered",
+    "action-error"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-action trigger=\"#btn:click\" call=\"#store.increment()\"></noct-action>",
+    "<noct-action trigger=\"#users:row-click\" call=\"#deleteUser\" with=\"event.detail.id\"></noct-action>"
+   ],
+   "sourceFile": "logic/noct-action.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-api",
+   "category": "logic",
+   "description": "API calls without writing fetch() - declarative HTTP requests",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for this API endpoint"
+    },
+    {
+     "name": "endpoint",
+     "type": "string",
+     "description": "API endpoint URL (supports :param placeholders)"
+    },
+    {
+     "name": "method",
+     "description": "HTTP method"
+    },
+    {
+     "name": "headers",
+     "type": "string",
+     "description": "JSON string of headers to include"
+    },
+    {
+     "name": "body",
+     "type": "string",
+     "description": "Request body (for POST/PUT/PATCH)"
+    },
+    {
+     "name": "bindTo",
+     "type": "string",
+     "description": "Store path to bind response to (e.g., \"#store.users\")"
+    },
+    {
+     "name": "onSuccess",
+     "type": "string",
+     "description": "Component method to call on success"
+    },
+    {
+     "name": "onError",
+     "type": "string",
+     "description": "Component method to call on error"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "request-start",
+    "request-success",
+    "request-error"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-api id=\"getUsers\" endpoint=\"/api/users\" method=\"GET\" bind-to=\"#usersStore.users\"></noct-api>",
+    "<noct-api id=\"deleteUser\" endpoint=\"/api/users/:id\" method=\"DELETE\"></noct-api>"
+   ],
+   "sourceFile": "logic/noct-api.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-app",
+   "category": "app",
+   "description": "Root application component that wraps the entire NoctCode app",
+   "props": [
+    {
+     "name": "theme",
+     "description": "Application theme"
+    },
+    {
+     "name": "debug",
+     "type": "boolean",
+     "description": "Enable debug mode for all components"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Application content"
+    }
+   ],
+   "emits": [
+    "app-ready",
+    "theme-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-app theme=\"dark\"><noct-toolbar>...</noct-toolbar></noct-app>"
+   ],
+   "sourceFile": "app/noct-app.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-app-settings",
+   "category": "app",
+   "description": "Application settings panel with organized sections",
+   "props": [
+    {
+     "name": "show",
+     "type": "boolean",
+     "description": "Show/hide settings panel"
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Settings panel title"
+    }
+   ],
+   "slots": [
+    {
+     "name": "general",
+     "description": "General settings section"
+    },
+    {
+     "name": "advanced",
+     "description": "Advanced settings section"
+    },
+    {
+     "name": "default",
+     "description": "Main settings content"
+    }
+   ],
+   "emits": [
+    "settings-change",
+    "close"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-app-settings show><noct-stack slot=\"general\">...</noct-stack></noct-app-settings>"
+   ],
+   "sourceFile": "app/noct-app-settings.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-auth-form",
+   "category": "app",
+   "description": "Login/signup form with email and password, bindable to an auth store",
+   "props": [
+    {
+     "name": "mode",
+     "description": "Form mode — login or signup"
+    },
+    {
+     "name": "store",
+     "type": "string",
+     "description": "Store ref to write auth state on success (e.g., \"#auth\")"
+    },
+    {
+     "name": "redirect",
+     "type": "string",
+     "description": "URL to navigate to on successful auth"
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Override heading text (defaults to \"Sign In\" / \"Create Account\")"
+    },
+    {
+     "name": "submitLabel",
+     "type": "string",
+     "description": "Override submit button text"
+    }
+   ],
+   "slots": [
+    {
+     "name": "footer"
+    },
+    {
+     "name": "provider",
+     "description": "Social/provider login buttons"
+    }
+   ],
+   "emits": [
+    "auth-submit",
+    "auth-success",
+    "auth-error",
+    "auth-mode-change"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-auth-form mode=\"login\" store=\"#auth\" redirect=\"/dashboard\"></noct-auth-form>",
+    "<noct-auth-form mode=\"signup\" store=\"#auth\"><div slot=\"footer\"><a href=\"/login\">Already have an account?</a></div></noct-auth-form>"
+   ],
+   "sourceFile": "app/noct-auth-form.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-case",
+   "category": "logic",
+   "description": "A case branch inside noct-switch. Renders content when value matches.",
+   "props": [
+    {
+     "name": "value",
+     "type": "string",
+     "description": "Value to match against noct-switch value"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content to render when this case matches"
+    }
+   ],
+   "emits": [],
+   "dependencies": [
+    "noct-switch"
+   ],
+   "examples": [
+    "<noct-case value=\"edit\"><editor-component></editor-component></noct-case>"
+   ],
+   "sourceFile": "logic/noct-case.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-chart",
+   "category": "data",
+   "description": "Chart component with bar, line, and pie chart types",
+   "props": [
+    {
+     "name": "data",
+     "type": "string",
+     "description": "Chart data as JSON string or store reference (e.g., #storeId.path)"
+    },
+    {
+     "name": "type",
+     "type": "string",
+     "description": "Chart type: bar, line, or pie"
+    },
+    {
+     "name": "labels",
+     "type": "string",
+     "description": "Labels as JSON array string or store reference"
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Chart title"
+    },
+    {
+     "name": "height",
+     "type": "number",
+     "description": "Chart height in pixels"
+    },
+    {
+     "name": "colors",
+     "type": "string",
+     "description": "Color palette as JSON array string"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "chart-click"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-chart data=\\",
+    "label",
+    "A",
+    "value",
+    "label",
+    "B",
+    "value"
+   ],
+   "sourceFile": "data/noct-chart.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-command",
+   "category": "logic",
+   "description": "Named command with optional keyboard shortcut, invocable programmatically or via command palette",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique command identifier"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Human-readable label for menus and command palette"
+    },
+    {
+     "name": "shortcut",
+     "type": "string",
+     "description": "Keyboard shortcut (e.g., \"Ctrl+S\", \"Cmd+K\", \"Shift+?\")"
+    },
+    {
+     "name": "call",
+     "type": "string",
+     "description": "Component method to call (e.g., \"#store.set('count', 1)\")"
+    },
+    {
+     "name": "mutate",
+     "type": "string",
+     "description": "Store path to mutate (e.g., \"#store.count\")"
+    },
+    {
+     "name": "goto",
+     "type": "string",
+     "description": "URL to navigate to"
+    },
+    {
+     "name": "dispatch",
+     "type": "string",
+     "description": "Event to dispatch on a target (e.g., \"#app:save\")"
+    },
+    {
+     "name": "run",
+     "type": "string",
+     "description": "JavaScript expression to execute (e.g., \"console.log('hello')\")"
+    },
+    {
+     "name": "with",
+     "type": "string",
+     "description": "Value to pass to the action"
+    },
+    {
+     "name": "when",
+     "type": "string",
+     "description": "Condition expression that gates whether the command is enabled"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "command-execute",
+    "command-error",
+    "command-registered"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-command id=\"save\" label=\"Save\" shortcut=\"Cmd+S\" call=\"#app.save()\"></noct-command>",
+    "<noct-command id=\"deleteItem\" label=\"Delete\" shortcut=\"Shift+?\" mutate=\"#store.selection\" when=\"#store.selection.length > 0\"></noct-command>",
+    "<noct-command id=\"toggleSidebar\" label=\"Toggle Sidebar\" shortcut=\"Cmd+B\" dispatch=\"#app:toggle-sidebar\"></noct-command>"
+   ],
+   "sourceFile": "logic/noct-command.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-computed",
+   "category": "logic",
+   "description": "Derived state that automatically updates when source changes",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for this computed value"
+    },
+    {
+     "name": "from",
+     "type": "string",
+     "description": "Store reference (e.g., \"#storeId\")"
+    },
+    {
+     "name": "compute",
+     "type": "string",
+     "description": "Function to compute derived value (e.g., \"state => state.items.filter(i => i.active)\")"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "computed-ready",
+    "computed-change"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-computed id=\"activeUsers\" from=\"#usersStore\" compute=\"state => state.users.filter(u => u.active)\"></noct-computed>"
+   ],
+   "sourceFile": "logic/noct-computed.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-custom",
+   "category": "logic",
+   "description": "Escape hatch for custom JavaScript. Drop to raw code when no component fits.",
+   "props": [
+    {
+     "name": "name",
+     "type": "string",
+     "description": "Register as a reusable custom element with this tag name"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Children passed through; <script> children are executed"
+    },
+    {
+     "name": "fallback",
+     "description": "Shown when no <script> is found"
+    }
+   ],
+   "emits": [
+    "custom-ready",
+    "custom-error",
+    "custom-exec"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-custom><script>console.log(\"ready\", this)</script><p>content</p></noct-custom>"
+   ],
+   "sourceFile": "logic/noct-custom.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-debounce",
+   "category": "logic",
+   "description": "Debounces rapid store changes, emitting the settled value after a quiet period",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for this debounce instance"
+    },
+    {
+     "name": "from",
+     "type": "string",
+     "description": "Store reference to watch (e.g., #store.input)"
+    },
+    {
+     "name": "wait",
+     "type": "number",
+     "description": "Debounce window in milliseconds"
+    },
+    {
+     "name": "immediate",
+     "type": "boolean",
+     "description": "Emit on the leading edge before debounce"
+    },
+    {
+     "name": "bindTo",
+     "type": "string",
+     "description": "Store path to write debounced value (e.g., #store.debouncedValue)"
+    },
+    {
+     "name": "maxWait",
+     "type": "number",
+     "description": "Maximum ms value can be delayed before forced emit (0 = no max)"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "debounce-change",
+    "debounce-flush"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-debounce id=\"search\" from=\"#store.query\" wait=\"400\" bind-to=\"#store.debouncedQuery\"></noct-debounce>"
+   ],
+   "sourceFile": "logic/noct-debounce.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-default",
+   "category": "logic",
+   "description": "Fallback branch inside noct-switch. Renders when no noct-case matches.",
+   "props": [],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Fallback content"
+    }
+   ],
+   "emits": [],
+   "dependencies": [
+    "noct-switch"
+   ],
+   "examples": [
+    "<noct-default><p>No match</p></noct-default>"
+   ],
+   "sourceFile": "logic/noct-default.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-defer",
+   "category": "logic",
+   "description": "Delays rendering of slot content until a condition is met, a timeout elapses, or the browser is idle",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for this defer instance"
+    },
+    {
+     "name": "until",
+     "type": "string",
+     "description": "Condition (store ref, expression, \"timeout\", or \"idle\")"
+    },
+    {
+     "name": "timeout",
+     "type": "number",
+     "description": "Milliseconds to wait when until=\"timeout\" (0 = next microtask)"
+    },
+    {
+     "name": "placeholder",
+     "type": "string",
+     "description": "Text shown while waiting"
+    },
+    {
+     "name": "reset",
+     "type": "boolean",
+     "description": "Re-hide content if condition becomes false after being true"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content to defer rendering of"
+    },
+    {
+     "name": "fallback",
+     "description": "Content shown while waiting (takes precedence over placeholder prop)"
+    }
+   ],
+   "emits": [
+    "defer-ready",
+    "defer-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-defer id=\"panel\" until=\"#store.ready\"><p>Renders when ready</p></noct-defer>",
+    "<noct-defer id=\"slow\" until=\"timeout\" timeout=\"2000\" placeholder=\"Loading...\"><p>Delayed content</p></noct-defer>",
+    "<noct-defer id=\"idle\" until=\"idle\"><p>Renders when browser is idle</p></noct-defer>"
+   ],
+   "sourceFile": "logic/noct-defer.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-define",
+   "category": "meta",
+   "description": "defines new components at runtime via HTML (a `<template>` plus optional module script).",
+   "props": [],
+   "slots": [],
+   "emits": [],
+   "dependencies": [],
+   "sourceFile": "meta/noct-define.ts",
+   "origin": "inventory-seed"
+  },
+  {
+   "tag": "noct-demo-page",
+   "category": "app",
+   "description": "Demo view chrome: title, description, content slot, and back navigation",
+   "props": [
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Demo page title"
+    },
+    {
+     "name": "description",
+     "type": "string",
+     "description": "One-line description under the title"
+    },
+    {
+     "name": "backHref",
+     "type": "string",
+     "description": "Back link target (hash route in the SPA, page URL standalone)"
+    },
+    {
+     "name": "backLabel",
+     "type": "string",
+     "description": "Back link label"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Demo content"
+    }
+   ],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-demo-page title=\"Modal Demo\" description=\"Overlays\"><p>Content</p></noct-demo-page>"
+   ],
+   "sourceFile": "app/noct-demo-page.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-display",
+   "category": "widgets",
+   "description": "Recessed right-aligned readout with an expression history line and a main value line",
+   "props": [
+    {
+     "name": "value",
+     "type": "string",
+     "description": "Main readout value"
+    },
+    {
+     "name": "expression",
+     "type": "string",
+     "description": "Small history line above the value (e.g. \"12 + 7\")"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Small caption shown above the recessed surface"
+    },
+    {
+     "name": "error",
+     "type": "boolean",
+     "description": "Show the value in the error color"
+    }
+   ],
+   "slots": [],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-display value=\"42\" expression=\"6 × 7\"></noct-display>"
+   ],
+   "sourceFile": "widgets/noct-display.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-effect",
+   "category": "logic",
+   "description": "Reactive side-effect that watches store values and executes a function when they change",
+   "props": [
+    {
+     "name": "watch",
+     "type": "string",
+     "description": "Store reference(s) to watch (e.g., \"#store.count\" or \"#store.count, #store.name\")"
+    },
+    {
+     "name": "run",
+     "type": "string",
+     "description": "Function to execute when watched values change (e.g., \"count => console.log(count)\")"
+    },
+    {
+     "name": "immediate",
+     "type": "boolean",
+     "description": "Run the effect immediately on connect (default: false)"
+    },
+    {
+     "name": "when",
+     "type": "string",
+     "description": "Condition expression to gate the effect (e.g., \"#store.isReady\")"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "effect-run",
+    "effect-cleanup",
+    "effect-error"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-effect watch=\"#store.count\" run=\"count => console.log(\\'Count:\\', count)\" immediate></noct-effect>",
+    "<noct-effect watch=\"#store.user\" run=\"user => document.title = user.name\"></noct-effect>"
+   ],
+   "sourceFile": "logic/noct-effect.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-flow",
+   "category": "flow",
+   "description": "Visual data-flow wiring editor canvas with nodes, ports, and SVG wires",
+   "props": [
+    {
+     "name": "nodes",
+     "type": "string",
+     "description": "JSON array of node definitions"
+    },
+    {
+     "name": "wires",
+     "type": "string",
+     "description": "JSON array of wire/connection definitions"
+    },
+    {
+     "name": "readonly",
+     "type": "boolean",
+     "description": "Disable editing (view-only mode)"
+    },
+    {
+     "name": "snapToGrid",
+     "type": "number",
+     "description": "Grid snap size in px (0 = disabled)"
+    },
+    {
+     "name": "showGrid",
+     "type": "boolean",
+     "description": "Show background grid"
+    },
+    {
+     "name": "zoom",
+     "type": "number",
+     "description": "Canvas zoom level"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Slotted noct-flow-node elements"
+    },
+    {
+     "name": "toolbar",
+     "description": "Custom toolbar content"
+    }
+   ],
+   "emits": [
+    "flow-change",
+    "flow-ready",
+    "wire-add",
+    "wire-remove",
+    "node-add",
+    "node-remove",
+    "node-move",
+    "binding-generate",
+    "port-connect-start",
+    "port-connect-end"
+   ],
+   "dependencies": [
+    "noct-flow-node"
+   ],
+   "examples": [
+    "<noct-flow style=\"width:800px;height:600px\"></noct-flow>"
+   ],
+   "sourceFile": "flow/noct-flow.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-flow-node",
+   "category": "flow",
+   "description": "A node in the visual data-flow wiring editor with input/output ports",
+   "props": [
+    {
+     "name": "nodeId",
+     "type": "string",
+     "description": "Unique node identifier"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Node display label"
+    },
+    {
+     "name": "kind",
+     "type": "string",
+     "description": "Node type (for styling: store, action, computed, api, custom)"
+    },
+    {
+     "name": "x",
+     "type": "number",
+     "description": "Node X position in the flow canvas"
+    },
+    {
+     "name": "y",
+     "type": "number",
+     "description": "Node Y position in the flow canvas"
+    },
+    {
+     "name": "inputs",
+     "type": "string",
+     "description": "JSON array of input port definitions"
+    },
+    {
+     "name": "outputs",
+     "type": "string",
+     "description": "JSON array of output port definitions"
+    },
+    {
+     "name": "color",
+     "type": "string",
+     "description": "Accent color for the node header"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Optional content rendered inside the node body"
+    }
+   ],
+   "emits": [
+    "node-move",
+    "node-drag-start",
+    "node-drag-end",
+    "port-pointer-down",
+    "port-pointer-up",
+    "node-select",
+    "node-delete"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-flow-node node-id=\"store1\" label=\"App Store\" node-type=\"store\"></noct-flow-node>"
+   ],
+   "sourceFile": "flow/noct-flow-node.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-for",
+   "category": "logic",
+   "description": "Iterate over an array and stamp a template for each item",
+   "props": [
+    {
+     "name": "each",
+     "type": "string",
+     "description": "Array to iterate — store reference (e.g., #store.items) or inline JSON"
+    },
+    {
+     "name": "as",
+     "type": "string",
+     "description": "Variable name for the current item in template expressions"
+    },
+    {
+     "name": "indexAs",
+     "type": "string",
+     "description": "Variable name for the current index in template expressions"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Place a <template> here with {{ item.prop }} placeholders"
+    }
+   ],
+   "emits": [
+    "for-update"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-for each=\"#store.users\" as=\"user\"><template><div>{{ user.name }}</div></template></noct-for>"
+   ],
+   "sourceFile": "logic/noct-for.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-form",
+   "category": "data",
+   "description": "Form component with schema-based field generation",
+   "props": [
+    {
+     "name": "schema",
+     "type": "string",
+     "description": "Form schema as JSON string"
+    },
+    {
+     "name": "data",
+     "type": "string",
+     "description": "Form data as JSON string or store reference"
+    },
+    {
+     "name": "submitText",
+     "type": "string",
+     "description": "Text for submit button"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Form content or fields"
+    },
+    {
+     "name": "form-actions",
+     "description": "Action buttons at bottom"
+    }
+   ],
+   "emits": [
+    "submit",
+    "change",
+    "validation-error"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-form schema=\\",
+    "fields",
+    "name",
+    "email",
+    "type",
+    "email"
+   ],
+   "sourceFile": "data/noct-form.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-grid",
+   "category": "layout",
+   "description": "CSS Grid layout with deterministic behavior for reliable AI composition",
+   "props": [
+    {
+     "name": "columns",
+     "type": "string",
+     "description": "Grid template columns (CSS grid-template-columns)"
+    },
+    {
+     "name": "rows",
+     "type": "string",
+     "description": "Grid template rows (CSS grid-template-rows)"
+    },
+    {
+     "name": "gap",
+     "type": "string",
+     "description": "Gap between grid items (CSS gap)"
+    },
+    {
+     "name": "template",
+     "type": "string",
+     "description": "Full grid-template shorthand"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Grid items to display"
+    }
+   ],
+   "emits": [
+    "layout-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-grid columns=\"1fr 1fr 1fr\" gap=\"16px\"><div>Item 1</div><div>Item 2</div></noct-grid>",
+    "<noct-grid template=\"repeat(3, 1fr) / auto\"></noct-grid>"
+   ],
+   "sourceFile": "layout/noct-grid.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-gui-canvas",
+   "category": "gui",
+   "description": "Drag-and-drop GUI builder canvas - the main workspace for NOCTGUI",
+   "props": [
+    {
+     "name": "snap",
+     "type": "number",
+     "description": "Snap-to-grid size in pixels (0 = disabled)"
+    },
+    {
+     "name": "showGrid",
+     "type": "boolean",
+     "description": "Show background grid"
+    },
+    {
+     "name": "zoom",
+     "type": "number",
+     "description": "Canvas zoom level"
+    },
+    {
+     "name": "readonly",
+     "type": "boolean",
+     "description": "Disable editing (view-only mode)"
+    },
+    {
+     "name": "selectedItemId",
+     "type": "string",
+     "description": "Currently selected item ID"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Pre-placed noct-gui-item elements"
+    },
+    {
+     "name": "toolbar",
+     "description": "Custom toolbar content"
+    }
+   ],
+   "emits": [
+    "gui-ready",
+    "gui-change",
+    "gui-item-add",
+    "gui-item-remove",
+    "gui-item-select",
+    "gui-item-move",
+    "gui-item-resize",
+    "gui-canvas-export"
+   ],
+   "dependencies": [
+    "noct-gui-item"
+   ],
+   "examples": [
+    "<noct-gui-canvas style=\"width:100%;height:600px;\"></noct-gui-canvas>"
+   ],
+   "sourceFile": "gui/noct-gui-canvas.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-gui-item",
+   "category": "gui",
+   "description": "A draggable, resizable wrapper for components placed on the GUI builder canvas",
+   "props": [
+    {
+     "name": "itemId",
+     "type": "string",
+     "description": "Unique item identifier"
+    },
+    {
+     "name": "tag",
+     "type": "string",
+     "description": "Component tag to wrap (e.g. noct-grid)"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Display label shown in the title bar"
+    },
+    {
+     "name": "x",
+     "type": "number",
+     "description": "X position on canvas (px)"
+    },
+    {
+     "name": "y",
+     "type": "number",
+     "description": "Y position on canvas (px)"
+    },
+    {
+     "name": "width",
+     "type": "number",
+     "description": "Item width (px)"
+    },
+    {
+     "name": "height",
+     "type": "number",
+     "description": "Item height (px)"
+    },
+    {
+     "name": "props",
+     "type": "string",
+     "description": "JSON object of component properties"
+    },
+    {
+     "name": "selected",
+     "type": "boolean",
+     "description": "Selection state"
+    },
+    {
+     "name": "resizable",
+     "type": "boolean",
+     "description": "Show resize handles"
+    },
+    {
+     "name": "minWidth",
+     "type": "number",
+     "description": "Minimum resize width"
+    },
+    {
+     "name": "minHeight",
+     "type": "number",
+     "description": "Minimum resize height"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Optional content placed inside the wrapped component"
+    }
+   ],
+   "emits": [
+    "gui-item-drag-start",
+    "gui-item-drag-end",
+    "gui-item-move",
+    "gui-item-resize",
+    "gui-item-select",
+    "gui-item-delete"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-gui-item item-id=\"g1\" tag=\"noct-grid\" x=\"40\" y=\"40\" width=\"300\" height=\"200\"></noct-gui-item>"
+   ],
+   "sourceFile": "gui/noct-gui-item.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-history",
+   "category": "logic",
+   "description": "Undo/redo history manager for tracking and reverting state changes",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for the history instance"
+    },
+    {
+     "name": "max",
+     "type": "number",
+     "description": "Maximum number of history entries to keep"
+    },
+    {
+     "name": "store",
+     "type": "string",
+     "description": "Optional noct-store selector to auto-track state snapshots"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "history-push",
+    "history-undo",
+    "history-redo",
+    "history-clear",
+    "history-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-history id=\"app-history\" max=\"20\"></noct-history>",
+    "<noct-history id=\"form-history\" store=\"#form-store\"></noct-history>"
+   ],
+   "sourceFile": "logic/noct-history.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-if",
+   "category": "logic",
+   "description": "Conditional rendering based on expression (removes from DOM)",
+   "props": [
+    {
+     "name": "condition",
+     "type": "string",
+     "description": "JavaScript expression to evaluate (e.g., \"#store.count > 0\")"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content to show when condition is true"
+    }
+   ],
+   "emits": [
+    "condition-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-if condition=\"#store.loggedIn\"><p>Welcome back!</p></noct-if>",
+    "<noct-if condition=\"#app.mode == \\'edit\\'\"><editor-component></editor-component></noct-if>"
+   ],
+   "sourceFile": "logic/noct-if.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-key",
+   "category": "widgets",
+   "description": "Beveled keypad key for calculators and pro-app key grids; emits key-press with its key value",
+   "props": [
+    {
+     "name": "key",
+     "type": "string",
+     "description": "Key value emitted in the key-press event (e.g. \"7\", \"+\", \"Enter\")"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Visible label (defaults to the key value)"
+    },
+    {
+     "name": "kind",
+     "type": "string",
+     "description": "Visual kind: digit | operator | equals | clear | utility"
+    },
+    {
+     "name": "disabled",
+     "type": "boolean",
+     "description": "Disable interaction"
+    },
+    {
+     "name": "span",
+     "type": "number",
+     "description": "Grid columns to span when placed in a noct-grid"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "key-press"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-key key=\"7\"></noct-key>",
+    "<noct-key key=\"+\" label=\"+\" kind=\"operator\"></noct-key>",
+    "<noct-key key=\"=\" label=\"=\" kind=\"equals\"></noct-key>"
+   ],
+   "sourceFile": "widgets/noct-key.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-listbox",
+   "category": "widgets",
+   "description": "Compact listbox for tracks, takes, layers, and document lists with full keyboard support",
+   "props": [
+    {
+     "name": "items",
+     "type": "string",
+     "description": "JSON array of options (e.g., '[{\"id\":\"t1\",\"label\":\"Take 1\"}]')"
+    },
+    {
+     "name": "value",
+     "type": "string",
+     "description": "ID of the selected option"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Accessible label for the listbox"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "listbox-select"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-listbox items=\\",
+    "id",
+    "t1",
+    "label",
+    "Take 1"
+   ],
+   "sourceFile": "widgets/noct-listbox.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-menubar",
+   "category": "app",
+   "description": "Desktop application menubar with keyboard-navigable dropdown menus",
+   "props": [
+    {
+     "name": "menus",
+     "type": "string",
+     "description": "JSON array of menus (e.g., '[{\"id\":\"file\",\"label\":\"File\",\"items\":[{\"id\":\"new\",\"label\":\"New\"}]}]')"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "menubar-select"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-menubar menus=\\",
+    "id",
+    "file",
+    "label",
+    "File",
+    "items",
+    "id",
+    "new",
+    "label",
+    "New"
+   ],
+   "sourceFile": "app/noct-menubar.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-meter",
+   "category": "widgets",
+   "description": "Compact level meter for audio peaks, render progress, and export status",
+   "props": [
+    {
+     "name": "min",
+     "type": "number",
+     "description": "Minimum value"
+    },
+    {
+     "name": "max",
+     "type": "number",
+     "description": "Maximum value"
+    },
+    {
+     "name": "value",
+     "type": "number",
+     "description": "Current value"
+    },
+    {
+     "name": "indeterminate",
+     "type": "boolean",
+     "description": "Show activity without a known value"
+    },
+    {
+     "name": "variant",
+     "description": "Meter color scheme"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Accessible label"
+    }
+   ],
+   "slots": [],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-meter min=\"0\" max=\"100\" value=\"72\" label=\"Master level\"></noct-meter>"
+   ],
+   "sourceFile": "widgets/noct-meter.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-modal",
+   "category": "app",
+   "description": "Modal dialog with focus trapping, animations, and store binding",
+   "props": [
+    {
+     "name": "open",
+     "type": "boolean",
+     "description": "Show/hide modal, or store reference (e.g., #store.path)"
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Modal title text"
+    },
+    {
+     "name": "size",
+     "description": "Modal size"
+    },
+    {
+     "name": "closable",
+     "type": "boolean",
+     "description": "Show close button"
+    },
+    {
+     "name": "backdropClosable",
+     "type": "boolean",
+     "description": "Close on backdrop click"
+    },
+    {
+     "name": "closeOnEsc",
+     "type": "boolean",
+     "description": "Close on Escape key"
+    }
+   ],
+   "slots": [
+    {
+     "name": "header",
+     "description": "Modal header content (replaces title prop if provided)"
+    },
+    {
+     "name": "default",
+     "description": "Modal body content"
+    },
+    {
+     "name": "footer",
+     "description": "Modal footer with actions"
+    }
+   ],
+   "emits": [
+    "open",
+    "close",
+    "confirm",
+    "cancel"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-modal open title=\"Hello\"><p>Content</p></noct-modal>",
+    "<noct-modal open=\"#ui.modalOpen\"><p>Store-bound visibility</p></noct-modal>"
+   ],
+   "sourceFile": "app/noct-modal.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-palette",
+   "category": "gui",
+   "description": "Component palette for the GUI builder - lists available components for drag-and-drop",
+   "props": [
+    {
+     "name": "filter",
+     "type": "string",
+     "description": "Filter by category (layout, data, logic, app, meta)"
+    },
+    {
+     "name": "search",
+     "type": "string",
+     "description": "Search text to filter components"
+    },
+    {
+     "name": "compact",
+     "type": "boolean",
+     "description": "Compact display mode"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "palette-drag-start"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-palette></noct-palette>",
+    "<noct-palette filter=\"layout\"></noct-palette>"
+   ],
+   "sourceFile": "gui/noct-palette.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-pane",
+   "category": "layout",
+   "description": "Headerless beveled container for control clusters, toolbar rows, and sidebar sections",
+   "props": [
+    {
+     "name": "pad",
+     "description": "Body padding: normal (16px), tight (8px), or none"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Pane content"
+    }
+   ],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-pane><button>2 Col</button><button>3 Col</button></noct-pane>",
+    "<noct-pane pad=\"none\"><noct-palette></noct-palette></noct-pane>"
+   ],
+   "sourceFile": "layout/noct-pane.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-panel",
+   "category": "layout",
+   "description": "Titled app panel: beveled container with a titlebar (title + optional subtitle and actions) and a body slot",
+   "props": [
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Panel title shown in the titlebar"
+    },
+    {
+     "name": "subtitle",
+     "type": "string",
+     "description": "Small secondary text next to the title"
+    },
+    {
+     "name": "collapsible",
+     "type": "boolean",
+     "description": "Show a collapse toggle in the titlebar"
+    },
+    {
+     "name": "collapsed",
+     "type": "boolean",
+     "description": "Collapse the panel body (only when collapsible)"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Panel body content"
+    },
+    {
+     "name": "actions",
+     "description": "Titlebar actions (right side)"
+    }
+   ],
+   "emits": [
+    "panel-toggle"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-panel title=\"Grid\"><p>Body</p></noct-panel>",
+    "<noct-panel title=\"Output\" subtitle=\"read-only\"><span slot=\"actions\"><button>Clear</button></span><pre>…</pre></noct-panel>"
+   ],
+   "sourceFile": "layout/noct-panel.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-player",
+   "category": "app",
+   "description": "Media player for audio and video with custom controls and playlist support",
+   "props": [
+    {
+     "name": "src",
+     "type": "string",
+     "description": "Media source URL, or comma-separated URLs for a playlist"
+    },
+    {
+     "name": "type",
+     "description": "Media type"
+    },
+    {
+     "name": "controls",
+     "type": "boolean",
+     "description": "Show custom player controls"
+    },
+    {
+     "name": "autoplay",
+     "type": "boolean",
+     "description": "Start playback automatically"
+    },
+    {
+     "name": "loop",
+     "type": "boolean",
+     "description": "Loop the current media"
+    },
+    {
+     "name": "muted",
+     "type": "boolean",
+     "description": "Start muted"
+    },
+    {
+     "name": "poster",
+     "type": "string",
+     "description": "Poster image URL (video only)"
+    },
+    {
+     "name": "volume",
+     "type": "number",
+     "description": "Initial volume (0–1)"
+    },
+    {
+     "name": "store",
+     "type": "string",
+     "description": "Store ref to sync player state (e.g., \"#player\")"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content shown below the player"
+    },
+    {
+     "name": "playlist-item"
+    }
+   ],
+   "emits": [
+    "play",
+    "pause",
+    "time-update",
+    "ended",
+    "loaded",
+    "next-track",
+    "prev-track"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-player src=\"https://example.com/video.mp4\" type=\"video\" poster=\"thumbnail.jpg\"></noct-player>",
+    "<noct-player src=\"track1.mp3, track2.mp3, track3.mp3\" type=\"audio\" controls></noct-player>",
+    "<noct-player src=\"/media/song.mp3\" type=\"audio\" store=\"#player\"></noct-player>"
+   ],
+   "sourceFile": "app/noct-player.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-properties",
+   "category": "gui",
+   "description": "Property editor panel for the GUI builder - shows and edits component properties",
+   "props": [],
+   "slots": [],
+   "emits": [
+    "property-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-properties></noct-properties>"
+   ],
+   "sourceFile": "gui/noct-properties.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-protected",
+   "category": "app",
+   "description": "Conditionally renders content based on authentication state from a store",
+   "props": [
+    {
+     "name": "store",
+     "type": "string",
+     "description": "Auth store ref to check authentication state"
+    },
+    {
+     "name": "fallback",
+     "type": "string",
+     "description": "CSS selector for a login element to show when not authenticated (replaces fallback slot)"
+    },
+    {
+     "name": "role",
+     "type": "string",
+     "description": "Required role for access (e.g., \"admin\", \"editor\")"
+    },
+    {
+     "name": "invert",
+     "type": "boolean",
+     "description": "When true, shows content only when NOT authenticated"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content shown to authenticated users"
+    },
+    {
+     "name": "fallback"
+    }
+   ],
+   "emits": [
+    "auth-check",
+    "auth-granted",
+    "auth-denied"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-protected store=\"#auth\"><dashboard-page></dashboard-page></noct-protected>",
+    "<noct-protected store=\"#auth\" role=\"admin\"><admin-panel></admin-panel></noct-protected>",
+    "<noct-protected store=\"#auth\" fallback=\"#loginForm\"><protected-content></protected-content></noct-protected>"
+   ],
+   "sourceFile": "app/noct-protected.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-query",
+   "category": "logic",
+   "description": "Declarative data query with cache, polling, and store binding",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for this query"
+    },
+    {
+     "name": "type",
+     "description": "Query type"
+    },
+    {
+     "name": "endpoint",
+     "type": "string",
+     "description": "API endpoint URL (for rest/graphql/jsonp)"
+    },
+    {
+     "name": "query",
+     "type": "string",
+     "description": "GraphQL query string (when type=graphql) or data source (when type=inline)"
+    },
+    {
+     "name": "variables",
+     "type": "string",
+     "description": "JSON variables/params for the query"
+    },
+    {
+     "name": "method",
+     "description": "HTTP method (rest only)"
+    },
+    {
+     "name": "headers",
+     "type": "string",
+     "description": "JSON object of request headers"
+    },
+    {
+     "name": "timeout",
+     "type": "number",
+     "description": "Request timeout in milliseconds"
+    },
+    {
+     "name": "cacheTtl",
+     "type": "number",
+     "description": "Cache TTL in ms (0 = no cache)"
+    },
+    {
+     "name": "pollInterval",
+     "type": "number",
+     "description": "Polling interval in ms (0 = no polling)"
+    },
+    {
+     "name": "autoLoad",
+     "type": "boolean",
+     "description": "Automatically execute on connect"
+    },
+    {
+     "name": "bindTo",
+     "type": "string",
+     "description": "Store path to bind response (e.g., \"#store.users\")"
+    },
+    {
+     "name": "transform",
+     "type": "string",
+     "description": "JS expression to transform response (e.g., \"data => data.results\")"
+    },
+    {
+     "name": "refetchOn",
+     "type": "string",
+     "description": "Event selector to trigger refetch (e.g., \"#btn:click\")"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "query-start",
+    "query-success",
+    "query-error",
+    "query-cache-hit",
+    "query-loading",
+    "query-refetch",
+    "query-abort"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-query id=\"getUsers\" endpoint=\"/api/users\" cache-ttl=\"60000\" bind-to=\"#store.users\"></noct-query>",
+    "<noct-query id=\"getUser\" type=\"graphql\" endpoint=\"/graphql\" query=\"{ user(id: $id) { name email } }\" variables=\"{id: 1}\"></noct-query>"
+   ],
+   "sourceFile": "logic/noct-query.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-registry",
+   "category": "meta",
+   "description": "component introspection for AI; lists registered components with their metadata, props, and descriptions.",
+   "props": [],
+   "slots": [],
+   "emits": [],
+   "dependencies": [],
+   "sourceFile": "meta/noct-registry.ts",
+   "origin": "inventory-seed"
+  },
+  {
+   "tag": "noct-router",
+   "category": "app",
+   "description": "SPA router with hash-based routing for NoctCode apps",
+   "props": [
+    {
+     "name": "mode",
+     "description": "Routing mode (hash uses #/path, history uses pushState)"
+    },
+    {
+     "name": "routes",
+     "type": "string",
+     "description": "JSON string of route definitions"
+    },
+    {
+     "name": "defaultRoute",
+     "type": "string",
+     "description": "Default route to show when no route matches"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Routed content appears here"
+    }
+   ],
+   "emits": [
+    "route-change",
+    "route-not-found"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-router routes=\\",
+    "path",
+    "/",
+    "component",
+    "home-page",
+    "path",
+    "/about",
+    "component",
+    "about-page"
+   ],
+   "sourceFile": "app/noct-router.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-scene",
+   "category": "layout",
+   "description": "GUI scene container with snap points and zoom/pan support",
+   "props": [
+    {
+     "name": "snap",
+     "description": "Snap behavior for child elements"
+    },
+    {
+     "name": "zoom",
+     "type": "boolean",
+     "description": "Enable zoom functionality"
+    },
+    {
+     "name": "pan",
+     "type": "boolean",
+     "description": "Enable pan functionality"
+    },
+    {
+     "name": "width",
+     "type": "string",
+     "description": "Scene width"
+    },
+    {
+     "name": "height",
+     "type": "string",
+     "description": "Scene height"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default"
+    }
+   ],
+   "emits": [
+    "scene-ready",
+    "zoom-change",
+    "pan-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-scene snap=\"corners\" width=\"800px\" height=\"600px\"></noct-scene>",
+    "<noct-scene zoom pan></noct-scene>"
+   ],
+   "sourceFile": "layout/noct-scene.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-segmented",
+   "category": "widgets",
+   "description": "Compact single-select segmented control for tool modes and snap units",
+   "props": [
+    {
+     "name": "items",
+     "type": "string",
+     "description": "JSON array of segments (e.g., '[{\"id\":\"bar\",\"label\":\"Bar\"}]')"
+    },
+    {
+     "name": "value",
+     "type": "string",
+     "description": "ID of the selected segment"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Accessible label for the group"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "segmented-select"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-segmented items=\\",
+    "id",
+    "cut",
+    "label",
+    "Cut",
+    "id",
+    "fade",
+    "label",
+    "Fade"
+   ],
+   "sourceFile": "widgets/noct-segmented.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-show",
+   "category": "logic",
+   "description": "Conditional rendering using hidden attribute (keeps in DOM)",
+   "props": [
+    {
+     "name": "when",
+     "type": "string",
+     "description": "Expression to evaluate (e.g., \"#store.count > 0\")"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content to show/hide"
+    }
+   ],
+   "emits": [
+    "visibility-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-show when=\"#store.selection.length > 0\"><p>Items selected</p></noct-show>"
+   ],
+   "sourceFile": "logic/noct-show.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-slider",
+   "category": "widgets",
+   "description": "Compact slider for timelines, volumes, and scrubbers with pointer and keyboard control",
+   "props": [
+    {
+     "name": "min",
+     "type": "number",
+     "description": "Minimum value"
+    },
+    {
+     "name": "max",
+     "type": "number",
+     "description": "Maximum value"
+    },
+    {
+     "name": "value",
+     "type": "number",
+     "description": "Current value"
+    },
+    {
+     "name": "step",
+     "type": "number",
+     "description": "Keyboard and snap step"
+    },
+    {
+     "name": "orientation",
+     "description": "Slider direction"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Accessible label"
+    },
+    {
+     "name": "disabled",
+     "type": "boolean",
+     "description": "Disable interaction"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "slider-input",
+    "slider-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-slider min=\"0\" max=\"100\" value=\"30\" label=\"Volume\"></noct-slider>"
+   ],
+   "sourceFile": "widgets/noct-slider.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-slot",
+   "category": "layout",
+   "description": "Named slot container for slot-based composition",
+   "props": [
+    {
+     "name": "name",
+     "type": "string",
+     "description": "Slot name (empty for default slot)"
+    },
+    {
+     "name": "fallback",
+     "type": "string",
+     "description": "Fallback content when slot is empty"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Content to place in this slot"
+    },
+    {
+     "name": "fallback",
+     "description": "Fallback content when no content provided"
+    }
+   ],
+   "emits": [
+    "slot-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-slot name=\"header\"><h1>Default Header</h1></noct-slot>",
+    "<noct-slot name=\"sidebar\"></noct-slot>"
+   ],
+   "sourceFile": "layout/noct-slot.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-splitter",
+   "category": "layout",
+   "description": "Resizable split panes with mouse-drag and keyboard-adjustable divider",
+   "props": [
+    {
+     "name": "direction",
+     "description": "Pane arrangement: side-by-side (horizontal) or stacked (vertical)"
+    },
+    {
+     "name": "position",
+     "type": "number",
+     "description": "Divider offset in pixels from the start edge"
+    },
+    {
+     "name": "min",
+     "type": "number",
+     "description": "Minimum pane size in pixels"
+    },
+    {
+     "name": "max",
+     "type": "number",
+     "description": "Maximum first-pane size in pixels"
+    }
+   ],
+   "slots": [
+    {
+     "name": "first",
+     "description": "First (start) pane content"
+    },
+    {
+     "name": "second",
+     "description": "Second (end) pane content"
+    },
+    {
+     "name": "default",
+     "description": "Pane content when named slots are unused (even children split)"
+    }
+   ],
+   "emits": [
+    "splitter-move"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-splitter position=\"240\"><div slot=\"first\">Sidebar</div><div slot=\"second\">Main</div></noct-splitter>"
+   ],
+   "sourceFile": "layout/noct-splitter.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-stack",
+   "category": "layout",
+   "description": "Flexbox stack layout for vertical or horizontal arrangement",
+   "props": [
+    {
+     "name": "direction",
+     "description": "Stack direction (flex-direction)"
+    },
+    {
+     "name": "gap",
+     "type": "string",
+     "description": "Gap between items (gap property)"
+    },
+    {
+     "name": "align",
+     "description": "Alignment on cross axis (align-items)"
+    },
+    {
+     "name": "justify",
+     "description": "Distribution on main axis (justify-content)"
+    },
+    {
+     "name": "wrap",
+     "type": "boolean",
+     "description": "Allow items to wrap (flex-wrap)"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Stack items"
+    }
+   ],
+   "emits": [
+    "layout-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-stack direction=\"row\" gap=\"16px\"><button>One</button><button>Two</button></noct-stack>",
+    "<noct-stack align=\"center\" justify=\"center\"></noct-stack>"
+   ],
+   "sourceFile": "layout/noct-stack.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-statusbar",
+   "category": "app",
+   "description": "Desktop application status bar with left, center, and right sections",
+   "props": [
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Accessible label for the status bar"
+    }
+   ],
+   "slots": [
+    {
+     "name": "left",
+     "description": "Status items aligned left"
+    },
+    {
+     "name": "center",
+     "description": "Status items centered"
+    },
+    {
+     "name": "right",
+     "description": "Status items aligned right"
+    },
+    {
+     "name": "default",
+     "description": "Status items (aligned left when named slots are unused)"
+    }
+   ],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-statusbar><span slot=\"left\">Ready</span><span slot=\"right\">UTF-8</span></noct-statusbar>"
+   ],
+   "sourceFile": "app/noct-statusbar.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-store",
+   "category": "data",
+   "description": "Reactive signal store for state management",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for the store"
+    },
+    {
+     "name": "initial",
+     "type": "string",
+     "description": "Initial state as JSON string"
+    },
+    {
+     "name": "persist",
+     "type": "boolean",
+     "description": "Persist state to localStorage"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "state-change",
+    "state-init"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-store id=\"app\" initial=\"{count: 0}\"></noct-store>",
+    "<noct-store id=\"user\" initial=\"{name: \\'Guest\\'}\"></noct-store>"
+   ],
+   "sourceFile": "data/noct-store.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-switch",
+   "category": "logic",
+   "description": "Multi-way conditional rendering — renders the first matching noct-case",
+   "props": [
+    {
+     "name": "value",
+     "type": "string",
+     "description": "Expression or store reference to match against noct-case values"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "One or more <noct-case> and optionally one <noct-default>"
+    }
+   ],
+   "emits": [
+    "switch-change"
+   ],
+   "dependencies": [
+    "noct-case"
+   ],
+   "examples": [
+    "#app.tool",
+    "select",
+    "rect"
+   ],
+   "sourceFile": "logic/noct-switch.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-table",
+   "category": "data",
+   "description": "Data table component with sorting, selection, and store binding",
+   "props": [
+    {
+     "name": "data",
+     "type": "string",
+     "description": "Table data as JSON string or store reference (e.g., #storeId.path)"
+    },
+    {
+     "name": "columns",
+     "type": "string",
+     "description": "Column definitions as JSON string or store reference (e.g., #storeId.columns)"
+    },
+    {
+     "name": "selectable",
+     "type": "boolean",
+     "description": "Enable row selection"
+    },
+    {
+     "name": "sortable",
+     "type": "boolean",
+     "description": "Enable column sorting"
+    },
+    {
+     "name": "pageSize",
+     "type": "number",
+     "description": "Rows per page (0 = no pagination)"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    },
+    {
+     "name": "cell-actions",
+     "description": "Custom cell actions slot"
+    }
+   ],
+   "emits": [
+    "row-click",
+    "row-select",
+    "sort-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-table data=\\",
+    "id",
+    "name",
+    "Test"
+   ],
+   "sourceFile": "data/noct-table.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-tabview",
+   "category": "layout",
+   "description": "Tab view with selectable tabs and associated content panels via named slots",
+   "props": [
+    {
+     "name": "items",
+     "type": "string",
+     "description": "JSON array of tab definitions (e.g., '[{\"id\":\"tab1\",\"label\":\"Tab 1\"}]')"
+    },
+    {
+     "name": "active",
+     "type": "string",
+     "description": "ID of the active tab"
+    },
+    {
+     "name": "orientation",
+     "description": "Tab bar position relative to content"
+    },
+    {
+     "name": "closable",
+     "type": "boolean",
+     "description": "Show close button on all tabs"
+    },
+    {
+     "name": "size",
+     "description": "Tab size"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default"
+    },
+    {
+     "name": "extra"
+    }
+   ],
+   "emits": [
+    "tab-change",
+    "tab-close"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-tabview items=\\",
+    "id",
+    "edit",
+    "label",
+    "Edit",
+    "id",
+    "view",
+    "label",
+    "View"
+   ],
+   "sourceFile": "layout/noct-tabview.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-tag",
+   "category": "layout",
+   "description": "Generic container element to replace div/header/span in NoctCode apps",
+   "props": [
+    {
+     "name": "as",
+     "description": "HTML element to render as (for semantic HTML); as=\"a\" forwards href"
+    },
+    {
+     "name": "role",
+     "type": "string",
+     "description": "ARIA role for accessibility"
+    },
+    {
+     "name": "inline",
+     "type": "boolean",
+     "description": "Render as inline element (span-like)"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Tag content"
+    }
+   ],
+   "emits": [
+    "tag-click"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-tag as=\"header\">Header content</noct-tag>",
+    "<noct-tag as=\"nav\" role=\"navigation\">Nav items</noct-tag>",
+    "<noct-tag inline>Inline text</noct-tag>"
+   ],
+   "sourceFile": "layout/noct-tag.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-theme",
+   "category": "app",
+   "description": "Theme provider - injects CSS design tokens and manages app modes",
+   "props": [
+    {
+     "name": "mode",
+     "description": "App mode - affects spacing, font sizes, touch targets"
+    },
+    {
+     "name": "density",
+     "description": "Density mode - compact for power users, comfortable for casual"
+    },
+    {
+     "name": "tokens",
+     "type": "string",
+     "description": "JSON object of token overrides (e.g., '{\"accent\": \"#ff0000\"}')"
+    },
+    {
+     "name": "src",
+     "type": "string",
+     "description": "URL or path to external theme CSS file"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "theme-change",
+    "theme-ready"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-theme mode=\"desktop\" density=\"normal\"></noct-theme>",
+    "<noct-theme tokens=\\'{\"accent\": \"#ff6b6b\"}\\'></noct-theme>"
+   ],
+   "sourceFile": "app/noct-theme.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-toast",
+   "category": "app",
+   "description": "Toast notification system with stackable messages and action callbacks",
+   "props": [
+    {
+     "name": "position",
+     "description": "Toast stack position on screen"
+    },
+    {
+     "name": "maxVisible",
+     "type": "number",
+     "description": "Maximum visible toasts at once"
+    },
+    {
+     "name": "defaultDuration",
+     "type": "number",
+     "description": "Default auto-dismiss duration in ms (0 = sticky)"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used — use show() or store binding to add toasts"
+    }
+   ],
+   "emits": [
+    "toast-show",
+    "toast-dismiss",
+    "toast-action"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-toast id=\"notifications\"></noct-toast>",
+    "<noct-action trigger=\"#btn:click\" call=\"#notifications.show(\\'Saved!\\', \\'success\\')\"></noct-action>"
+   ],
+   "sourceFile": "app/noct-toast.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-toggle",
+   "category": "widgets",
+   "description": "Compact switch for snap, solo, mute, and link toggles with keyboard support",
+   "props": [
+    {
+     "name": "checked",
+     "type": "boolean",
+     "description": "Toggle state"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Accessible label"
+    },
+    {
+     "name": "disabled",
+     "type": "boolean",
+     "description": "Disable interaction"
+    }
+   ],
+   "slots": [],
+   "emits": [
+    "toggle-change"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-toggle label=\"Snap to grid\"></noct-toggle>"
+   ],
+   "sourceFile": "widgets/noct-toggle.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-toolbar",
+   "category": "layout",
+   "description": "Toolbar for grouping icon buttons, toggles, and actions",
+   "props": [
+    {
+     "name": "items",
+     "type": "string",
+     "description": "JSON array of button definitions (e.g., '[{\"id\":\"bold\",\"icon\":\"B\",\"label\":\"Bold\"}]')"
+    },
+    {
+     "name": "orientation",
+     "description": "Toolbar orientation"
+    },
+    {
+     "name": "size",
+     "description": "Toolbar item size"
+    },
+    {
+     "name": "compact",
+     "type": "boolean",
+     "description": "Remove outer padding for tighter layouts"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Custom toolbar content (replaces items prop when provided)"
+    },
+    {
+     "name": "start"
+    },
+    {
+     "name": "end"
+    }
+   ],
+   "emits": [
+    "toolbar-click",
+    "toolbar-toggle"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-toolbar items=\\",
+    "id",
+    "undo",
+    "icon",
+    "↩",
+    "id",
+    "redo",
+    "icon",
+    "↪"
+   ],
+   "sourceFile": "layout/noct-toolbar.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-tooltip",
+   "category": "widgets",
+   "description": "Hover- and focus-triggered tooltip for icon buttons and meters, dismissible with Escape",
+   "props": [
+    {
+     "name": "text",
+     "type": "string",
+     "description": "Tooltip text"
+    },
+    {
+     "name": "placement",
+     "description": "Preferred side; flips when space is short"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default"
+    }
+   ],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-tooltip text=\"Quantize\"><button>Q</button></noct-tooltip>"
+   ],
+   "sourceFile": "widgets/noct-tooltip.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-upload",
+   "category": "app",
+   "description": "Drag-and-drop file upload with progress tracking, previews, and store binding",
+   "props": [
+    {
+     "name": "endpoint",
+     "type": "string",
+     "description": "Upload endpoint URL"
+    },
+    {
+     "name": "accept",
+     "type": "string",
+     "description": "Accepted file types (e.g., \"image/*,.pdf\")"
+    },
+    {
+     "name": "multiple",
+     "type": "boolean",
+     "description": "Allow multiple file selection"
+    },
+    {
+     "name": "maxSize",
+     "type": "number",
+     "description": "Maximum file size in bytes"
+    },
+    {
+     "name": "maxFiles",
+     "type": "number",
+     "description": "Maximum number of files (0 = unlimited)"
+    },
+    {
+     "name": "method",
+     "description": "Upload HTTP method"
+    },
+    {
+     "name": "headers",
+     "type": "string",
+     "description": "JSON string of custom headers"
+    },
+    {
+     "name": "fieldName",
+     "type": "string",
+     "description": "Form field name for the file"
+    },
+    {
+     "name": "store",
+     "type": "string",
+     "description": "Store ref to write upload results (e.g., \"#uploads\")"
+    },
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Drop zone label text"
+    },
+    {
+     "name": "autoUpload",
+     "type": "boolean",
+     "description": "Upload files immediately after selection"
+    }
+   ],
+   "slots": [
+    {
+     "name": "file-preview"
+    },
+    {
+     "name": "dropzone-content",
+     "description": "Custom content inside the drop zone"
+    }
+   ],
+   "emits": [
+    "files-selected",
+    "upload-start",
+    "upload-progress",
+    "upload-success",
+    "upload-error",
+    "upload-complete"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-upload endpoint=\"/api/upload\" accept=\"image/*\" multiple maxSize=\"5242880\"></noct-upload>",
+    "<noct-upload endpoint=\"/api/upload\" store=\"#uploads\" autoUpload></noct-upload>"
+   ],
+   "sourceFile": "app/noct-upload.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-user-menu",
+   "category": "app",
+   "description": "User avatar dropdown menu with name, email, and logout action",
+   "props": [
+    {
+     "name": "store",
+     "type": "string",
+     "description": "Auth store ref to read user info (e.g., \"#auth\")"
+    },
+    {
+     "name": "userId",
+     "type": "string",
+     "description": "User ID (fallback if not in store)"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "description": "Display name (fallback if not in store)"
+    },
+    {
+     "name": "email",
+     "type": "string",
+     "description": "Email (fallback if not in store)"
+    },
+    {
+     "name": "avatar",
+     "type": "string",
+     "description": "Avatar URL (fallback if not in store)"
+    },
+    {
+     "name": "placement",
+     "description": "Dropdown placement relative to the trigger"
+    }
+   ],
+   "slots": [
+    {
+     "name": "items",
+     "description": "Additional custom menu items rendered before logout"
+    }
+   ],
+   "emits": [
+    "menu-toggle",
+    "menu-open",
+    "menu-close",
+    "logout"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-user-menu store=\"#auth\"></noct-user-menu>",
+    "<noct-user-menu name=\"Jane Doe\" email=\"jane@example.com\" placement=\"bottom-left\"></noct-user-menu>"
+   ],
+   "sourceFile": "app/noct-user-menu.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-validate",
+   "category": "logic",
+   "description": "Validates store data against declarative rules with structured results",
+   "props": [
+    {
+     "name": "id",
+     "type": "string",
+     "description": "Unique identifier for this validator"
+    },
+    {
+     "name": "from",
+     "type": "string",
+     "description": "Store reference to the data to validate (e.g., #store.formData)"
+    },
+    {
+     "name": "rules",
+     "type": "string",
+     "description": "JSON array of validation rule objects"
+    },
+    {
+     "name": "bindTo",
+     "type": "string",
+     "description": "Store path to write validation result (e.g., #store.validation)"
+    },
+    {
+     "name": "validateOn",
+     "type": "string",
+     "description": "Event trigger for re-validation (e.g., \"#btn:click\")"
+    },
+    {
+     "name": "live",
+     "type": "boolean",
+     "description": "Auto-validate on every store change"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Not used"
+    }
+   ],
+   "emits": [
+    "validate-change",
+    "validate-success",
+    "validate-error",
+    "validate-start"
+   ],
+   "dependencies": [
+    "noct-store"
+   ],
+   "examples": [
+    "<noct-validate id=\"formValidate\" from=\"#store.formData\" rules=\\",
+    "field",
+    "email",
+    "required",
+    "pattern",
+    "^\\\\\\\\S+@\\\\\\\\S+\\\\\\\\.\\\\\\\\S+$",
+    "message",
+    "Invalid email"
+   ],
+   "sourceFile": "logic/noct-validate.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-well",
+   "category": "layout",
+   "description": "Recessed readout surface for outputs, logs, previews, and read-only values",
+   "props": [
+    {
+     "name": "label",
+     "type": "string",
+     "description": "Small caption shown above the recessed surface"
+    },
+    {
+     "name": "mono",
+     "type": "boolean",
+     "description": "Render content in the technical mono stack with tabular figures"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Well content"
+    }
+   ],
+   "emits": [],
+   "dependencies": [],
+   "examples": [
+    "<noct-well label=\"Output\"><pre>{…}</pre></noct-well>",
+    "<noct-well mono>selected: none</noct-well>"
+   ],
+   "sourceFile": "layout/noct-well.ts",
+   "origin": "extracted"
+  },
+  {
+   "tag": "noct-window",
+   "category": "app",
+   "description": "Floating, draggable, resizable window panel",
+   "props": [
+    {
+     "name": "x",
+     "type": "number",
+     "description": "Window X position (px)"
+    },
+    {
+     "name": "y",
+     "type": "number",
+     "description": "Window Y position (px)"
+    },
+    {
+     "name": "width",
+     "type": "number",
+     "description": "Window width (px)"
+    },
+    {
+     "name": "height",
+     "type": "number",
+     "description": "Window height (px)"
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "description": "Window title text"
+    },
+    {
+     "name": "closable",
+     "type": "boolean",
+     "description": "Show close button"
+    },
+    {
+     "name": "minimizable",
+     "type": "boolean",
+     "description": "Show minimize button"
+    },
+    {
+     "name": "maximizable",
+     "type": "boolean",
+     "description": "Show maximize/restore button"
+    },
+    {
+     "name": "resizable",
+     "type": "boolean",
+     "description": "Allow window resizing"
+    },
+    {
+     "name": "minimized",
+     "type": "boolean",
+     "description": "Window minimized state"
+    },
+    {
+     "name": "maximized",
+     "type": "boolean",
+     "description": "Window maximized state"
+    },
+    {
+     "name": "open",
+     "type": "boolean",
+     "description": "Window visibility"
+    },
+    {
+     "name": "zIndex",
+     "type": "number",
+     "description": "Window z-index"
+    },
+    {
+     "name": "minWidth",
+     "type": "number",
+     "description": "Minimum resize width"
+    },
+    {
+     "name": "minHeight",
+     "type": "number",
+     "description": "Minimum resize height"
+    }
+   ],
+   "slots": [
+    {
+     "name": "default",
+     "description": "Window body content"
+    },
+    {
+     "name": "actions",
+     "description": "Additional title bar actions (placed before close)"
+    }
+   ],
+   "emits": [
+    "window-move",
+    "window-resize",
+    "window-close",
+    "window-minimize",
+    "window-maximize",
+    "window-restore",
+    "window-focus",
+    "window-blur"
+   ],
+   "dependencies": [],
+   "examples": [
+    "<noct-window title=\"Explorer\" x=\"50\" y=\"50\" width=\"400\" height=\"300\"></noct-window>",
+    "<noct-window title=\"Logs\" closable minimizable maximizable resizable><p>Content</p></noct-window>"
+   ],
+   "sourceFile": "app/noct-window.ts",
+   "origin": "extracted"
+  }
+ ]
+}

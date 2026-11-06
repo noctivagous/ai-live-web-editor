@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const WORKSPACE_ROOT = path.resolve(__dirname, '../projects')
 export const UI_ROOT = path.resolve(__dirname, '../src/ui')
+/** The editor's own repo root — the self-mode workspace (phase-11-06 §L). */
+export const EDITOR_ROOT = path.resolve(__dirname, '..')
+/** Reserved project id for the editor itself; listed only in self mode. */
+export const SELF_PROJECT_ID = 'self'
+const SELF_ENABLED = process.env.AI_LIVE_SELF === '1'
 /** @deprecated workspace root — active app is getFsRoot() */
 export const FS_ROOT = WORKSPACE_ROOT
 
@@ -21,11 +26,17 @@ export function setFsRoot(dir: string) { fsRoot = path.resolve(dir) }
 export type ProjectInfo = { id: string, root: string }
 
 export function listProjects(): ProjectInfo[] {
-  if (!fs.existsSync(WORKSPACE_ROOT)) return []
-  return fs.readdirSync(WORKSPACE_ROOT, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP_DIR.has(d.name))
-    .filter((d) => fs.existsSync(path.join(WORKSPACE_ROOT, d.name, 'package.json')))
-    .map((d) => ({ id: d.name, root: path.join(WORKSPACE_ROOT, d.name) }))
+  const projects: ProjectInfo[] = []
+  // Self mode (§L): the editor's own repo is a selectable workspace.
+  // Only while the flag is on — a normal run must never offer it.
+  if (SELF_ENABLED) projects.push({ id: SELF_PROJECT_ID, root: EDITOR_ROOT })
+  if (!fs.existsSync(WORKSPACE_ROOT)) return projects
+  return projects.concat(
+    fs.readdirSync(WORKSPACE_ROOT, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP_DIR.has(d.name))
+      .filter((d) => fs.existsSync(path.join(WORKSPACE_ROOT, d.name, 'package.json')))
+      .map((d) => ({ id: d.name, root: path.join(WORKSPACE_ROOT, d.name) })),
+  )
 }
 
 export function readActiveId(): string {
@@ -69,6 +80,14 @@ export function startVite() {
   stopVite()
   try { execSync('sleep 0.4') } catch { /* ignore */ }
   const root = getFsRoot()
+  if (root === EDITOR_ROOT) {
+    // Self workspace: the "live app" is the launcher itself (served
+    // by this process, via Vite dev middleware in self mode) — there
+    // is no project Vite to spawn; `npm run dev` here would start a
+    // second launcher.
+    console.log('[vite] self workspace — the launcher is the live app, no project vite')
+    return
+  }
   if (!fs.existsSync(path.join(root, 'package.json'))) {
     console.log('[vite] skip, no package.json at', root)
     return
@@ -98,11 +117,27 @@ async function adoptProjectDevice(root: string) {
   } catch { /* manifest is optional local config */ }
 }
 
+/**
+ * Adopt the project's AppKit catalog opt-in (phase-11-06 §G): the
+ * Noct AppKit stock is off by default and turns on only for a
+ * project whose manifest sets `"appkit": true`. Unlike the device
+ * target this is set unconditionally — switching to a project
+ * without the flag turns the stock back off.
+ */
+async function adoptProjectAppkit(root: string) {
+  try {
+    const { readProjectConfig } = await import('./projectConfig.js')
+    const { setAppkitEnabled } = await import('./catalog/catalogSession.js')
+    setAppkitEnabled(readProjectConfig(root).appkit === true)
+  } catch { /* manifest is optional local config */ }
+}
+
 export function selectProject(id: string): ProjectInfo {
   const found = listProjects().find((p) => p.id === id)
   if (!found) throw new Error(`Unknown project: ${id}`)
   setFsRoot(found.root)
   void adoptProjectDevice(found.root)
+  void adoptProjectAppkit(found.root)
   writeActiveId(found.id)
   startVite()
   return found
@@ -304,10 +339,11 @@ export function ensureWorkspace() {
   fs.mkdirSync(WORKSPACE_ROOT, { recursive: true })
   if (!listProjects().length) seedProjectDir(path.join(WORKSPACE_ROOT, 'lumen'))
   const id = readActiveId()
-  const dest = path.join(WORKSPACE_ROOT, id)
-  if (!fs.existsSync(path.join(dest, 'package.json'))) seedProjectDir(dest)
+  const dest = listProjects().find((p) => p.id === id)?.root ?? path.join(WORKSPACE_ROOT, id)
+  if (dest !== EDITOR_ROOT && !fs.existsSync(path.join(dest, 'package.json'))) seedProjectDir(dest)
   setFsRoot(dest)
   void adoptProjectDevice(dest)
+  void adoptProjectAppkit(dest)
   writeActiveId(id)
   startVite()
   return getFsRoot()

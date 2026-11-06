@@ -17,6 +17,8 @@ import {
   parseDeviceTargets,
   type DeviceTarget,
 } from './deviceSession.js'
+import { catalogSummary } from './catalog/catalog.js'
+import { braveApiKey } from './env.js'
 
 export const PROJECT_CONFIG_FILE = 'project.ai.json'
 
@@ -42,6 +44,12 @@ export interface ProjectConfig {
   defaultDeviceTarget?: DeviceTarget
   styleSet?: string
   features?: string[]
+  /**
+   * Opt-in to the Noct AppKit catalog stock (§G). Off by default:
+   * the catalog serves the shadcn stock unless a project declares
+   * itself a Noct project here.
+   */
+  appkit?: boolean
 }
 
 /**
@@ -80,6 +88,7 @@ export function sanitizeProjectConfig(value: unknown): ProjectConfig {
   if (targets) out.deviceTargets = targets
   const def = parseDeviceTarget(v.defaultDeviceTarget)
   if (def) out.defaultDeviceTarget = def
+  if (v.appkit === true) out.appkit = true
   if (typeof v.styleSet === 'string' && v.styleSet.trim()) out.styleSet = v.styleSet.trim()
   if (Array.isArray(v.features)) {
     const features = v.features.filter((f): f is string => typeof f === 'string' && Boolean(f.trim()))
@@ -129,7 +138,13 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   } else if (format === 'page') {
     lines.push('Format: page (document flow) — the page scrolls and grows; content lives in sections. Add controls and sections in the flow; adapt across targets by reflowing (stack columns, scale type), not by pinning fixed regions.')
   }
+  if (config.appkit) lines.push('Component stock: this project opts into the Noct AppKit (Lit) catalog stock in addition to shadcn.')
   if (config.styleSet) lines.push(`Style set: ${config.styleSet} — use its tokens for new UI.`)
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)
+  const catalog = catalogSummary()
+  if (catalog) lines.push(catalog)
+  if (braveApiKey()) {
+    lines.push('Web research is available: web-search / fetch-page for quick lookups, research for multi-source briefs — build from cited briefs, not memory, when external facts matter.')
+  }
   return lines.join('\n')
 }

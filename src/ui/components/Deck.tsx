@@ -1,4 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  Camera, Crosshair, FilePlus2, FileSearch, FlaskConical, FolderOpen, Globe, Inspect,
+  LayoutGrid, PenLine, Search, Terminal, TerminalSquare, WandSparkles, WifiOff,
+} from 'lucide-react'
 import type { ToolStep } from '../lib/chatSession'
 import {
   TOOL_GROUP_LABEL, fmtCost, fmtTokens, formatElapsed, looksLikeKeyError, slideTurns, stepElapsed, turnCost, turnTitle,
@@ -13,6 +17,36 @@ import type { AnnotationDigest } from '../lib/annotationSync'
    intent / reasoning / tool / result cards, a turn strip, and the expanded
    horizontal Deck mode with timeline, overview, Live pill and keyboard nav.
    Data comes from lib/deck.ts grouping of the real chat log — no mock data. */
+
+/**
+ * Tool icon by family (artifact tool-pill language): read / write /
+ * page-observe / page-act / layout / verify / misc. Name text stays
+ * beside the icon — the glyph is a scanning aid, not a replacement.
+ */
+const TOOL_ICONS: Record<string, typeof Search> = {
+  'list-real-files': FolderOpen,
+  grep: Search,
+  'read-real-file': FileSearch,
+  'str-replace': PenLine,
+  'write-real-file': FilePlus2,
+  'take-snapshot': Camera,
+  'inspect-dom': Inspect,
+  'patch-dom': WandSparkles,
+  'eval-js': Terminal,
+  'layout-snapshot': LayoutGrid,
+  'layout-svg': LayoutGrid,
+  'get-console': TerminalSquare,
+  'get-network-failures': WifiOff,
+  'resolve-source': Crosshair,
+  'run-project-check': FlaskConical,
+  'pool-open': Globe,
+}
+
+function ToolIcon({ name }: { name: string }) {
+  const Icon = TOOL_ICONS[name]
+  if (!Icon) return null
+  return <Icon size={12} aria-hidden />
+}
 
 function StatusGlyph({ status }: { status: ToolStep['status'] | DeckTurn['status'] }) {
   if (status === 'done') return <span className="step-glyph done">✓</span>
@@ -34,7 +68,7 @@ function StepRow({ step }: { step: ToolStep }) {
         title={hasResult ? (open ? 'Hide result' : 'Show result') : step.detail}
       >
         <StatusGlyph status={step.status} />
-        <span className="tool-pill">{step.name}</span>
+        <span className="tool-pill"><ToolIcon name={step.name} />{step.name}</span>
         <span className="step-detail">{step.detail}</span>
         {elapsed && <span className="step-time">{elapsed}</span>}
         {hasResult && <span className="step-chev">{open ? '▾' : '▸'}</span>}

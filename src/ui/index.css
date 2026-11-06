@@ -84,6 +84,7 @@ select.pill:disabled{cursor:default; opacity:.7}
 .deck-btn.primary:hover{border-color:var(--blue)}
 .deck-btn.danger{border-color:rgba(239,68,68,.4); color:#fecaca}
 .deck-btn .kbd{font-family:var(--mono); font-size:10.5px; color:var(--faint)}
+.deck-btn svg, .tool-pill svg, .ws-chip svg{flex-shrink:0}
 
 .deck-input, .deck-select{
   width:100%; background:#0f0f12; border:1px solid var(--border);
@@ -246,7 +247,7 @@ select.pill:disabled{cursor:default; opacity:.7}
 .step-glyph.error{color:var(--red)}
 .step-glyph.running{color:var(--amber); animation:deck-pulse 2s infinite; border-radius:50%}
 .tool-pill{
-  display:inline-flex; align-items:center; flex-shrink:0;
+  display:inline-flex; align-items:center; gap:5px; flex-shrink:0;
   font-family:var(--mono); font-size:11px; padding:3px 7px; border-radius:7px;
   background:#0f172a; border:1px solid #1e293b; color:#93c5fd;
 }

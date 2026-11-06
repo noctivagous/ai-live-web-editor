@@ -1,4 +1,5 @@
 import React from 'react'
+import { MessageSquarePlus, MousePointerClick, SendHorizontal, Square } from 'lucide-react'
 import type { ChatWorkflow, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
@@ -89,20 +90,20 @@ export function ChatComposer({ input, sending, workflow, annot, inIframe, onInpu
           style={{ flex: 1 }}
         />
         {sending ? (
-          <button type="button" onClick={onStop} className="deck-btn danger" title="Stop this turn (Esc)">
-            Stop
+          <button type="button" onClick={onStop} className="deck-btn danger btn-icon" title="Stop this turn (Esc)">
+            <Square size={12} />Stop
           </button>
         ) : (
-          <button type="button" onClick={onSend} className="deck-btn">
-            Send
+          <button type="button" onClick={onSend} className="deck-btn btn-icon">
+            <SendHorizontal size={13} />Send
           </button>
         )}
       </div>
       <div className="ws-chips" title="Page annotations from the live page — click a chip to insert it">
         <span className="ws-label">Annotate</span>
         {inIframe && (
-          <button type="button" className="deck-btn" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={onPick} title="Pick an element on the live page">
-            Pick
+          <button type="button" className="deck-btn btn-icon" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={onPick} title="Pick an element on the live page">
+            <MousePointerClick size={12} />Pick
           </button>
         )}
         {annot.selection && (
@@ -136,8 +137,8 @@ export function ChatComposer({ input, sending, workflow, annot, inIframe, onInpu
           </span>
         )}
         {inIframe && (annot.selection || annot.annotations.length || annot.pageNote.present) && (
-          <button type="button" className="deck-btn primary" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={onSubmit} title="Send page notes to the AI">
-            Submit
+          <button type="button" className="deck-btn primary btn-icon" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={onSubmit} title="Send page notes to the AI">
+            <MessageSquarePlus size={12} />Submit
           </button>
         )}
       </div>

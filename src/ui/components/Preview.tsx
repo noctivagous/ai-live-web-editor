@@ -38,10 +38,12 @@ async function ensureOverlay(iframe: HTMLIFrameElement | null): Promise<boolean>
   } catch { return false }
 }
 
-export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult }: {
+export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse }: {
   hmrUrl?: string
   onChanged: () => void
   onResult: (text: string) => void
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }) {
   const liveUrl = hmrUrl || DEFAULT_HMR
   const [url, setUrl] = useState(liveUrl)
@@ -154,42 +156,50 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult }: {
     }
   }
 
+  const smallBtn = { padding: '2px 8px', fontSize: 11 } as const
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', borderRadius: '0 0 11px 11px', overflow: 'hidden' }}>
-      <div style={{ padding: '5px 10px', fontSize: 11, color: '#666', display: 'flex', gap: 8, alignItems: 'center', background: '#f5f5f5', borderBottom: '1px solid #ddd', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#141417', borderRadius: '0 0 11px 11px', overflow: 'hidden' }}>
+      <div style={{ padding: '5px 10px', fontSize: 11, color: '#a1a1aa', display: 'flex', gap: 8, alignItems: 'center', background: '#141417', borderBottom: '1px solid #1e1e23', flexShrink: 0 }}>
+        {onToggleCollapse && (
+          <button type="button" className="deck-btn" style={smallBtn} onClick={onToggleCollapse} title={collapsed ? 'Expand preview' : 'Collapse preview'}>
+            {collapsed ? '▸' : '▾'}
+          </button>
+        )}
         <span style={{ fontWeight: 600 }}>PREVIEW</span>
         <span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
         {onHmr && (
-          <span className={`pill ${hmr === 'up' ? 'good' : hmr === 'down' ? 'bad' : ''}`} style={{ background: '#fff' }} title="Vite HMR server reachability">
+          <span className={`pill ${hmr === 'up' ? 'good' : hmr === 'down' ? 'bad' : ''}`} title="Vite HMR server reachability">
             <span className="dot" />
             {checking ? 'checking…' : hmr === 'up' ? ':5173 up' : hmr === 'down' ? ':5173 unreachable' : ':5173?'}
           </span>
         )}
         {annotating && (
-          <span className="pill good" style={{ background: '#fff' }} title="Page annotations collected">
+          <span className="pill good" title="Page annotations collected">
             <span className="dot" />{noteCount} note{noteCount === 1 ? '' : 's'}
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          <button onClick={() => setKey(k => k + 1)} style={{ padding: '2px 8px', fontSize: 11 }}>Reload</button>
-          <button onClick={() => void switchUrl(STATIC_URL)} style={{ padding: '2px 8px', fontSize: 11 }}>Static</button>
-          <button onClick={() => void switchUrl(liveUrl)} style={{ padding: '2px 8px', fontSize: 11 }}>Live :5173</button>
+          <button type="button" className="deck-btn" style={smallBtn} onClick={() => setKey(k => k + 1)}>Reload</button>
+          <button type="button" className="deck-btn" style={smallBtn} onClick={() => void switchUrl(STATIC_URL)}>Static</button>
+          <button type="button" className="deck-btn" style={smallBtn} onClick={() => void switchUrl(liveUrl)}>Live :5173</button>
           <button
+            type="button"
+            className="deck-btn"
+            style={annotating ? { ...smallBtn, borderColor: 'rgba(34,197,94,.5)', color: '#bbf7d0' } : smallBtn}
             onClick={() => void toggleAnnotate()}
-            style={{ padding: '2px 8px', fontSize: 11, background: annotating ? '#16a34a' : undefined, color: annotating ? '#fff' : undefined, border: annotating ? 'none' : undefined, borderRadius: 4 }}
             title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
             disabled={onHmr}
           >
             {annotating ? 'Annotating…' : 'Annotate'}
           </button>
           {annotating && (
-            <button onClick={() => void submitNotes()} style={{ padding: '2px 8px', fontSize: 11 }} disabled={submitting} title="Send page notes to the AI">
+            <button type="button" className="deck-btn primary" style={smallBtn} onClick={() => void submitNotes()} disabled={submitting} title="Send page notes to the AI">
               {submitting ? 'Sending…' : 'Submit notes'}
             </button>
           )}
         </span>
       </div>
-      {showDown ? (
+      {!collapsed && (showDown ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Preview server not running</div>
@@ -206,7 +216,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult }: {
         </div>
       ) : (
         <iframe ref={frameRef} key={`${url}-${key}`} src={url} style={{ flex: 1, width: '100%', height: '100%', border: 'none', background: 'white', minHeight: 0 }} title="preview" />
-      )}
+      ))}
     </div>
   )
 }

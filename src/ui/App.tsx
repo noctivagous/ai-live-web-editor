@@ -8,6 +8,7 @@ import { SetupWizard } from './components/SetupWizard'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
+import { loadCollapse, saveCollapse } from './lib/collapse'
 import {
   listFiles, readFile, writeFile, getConfig, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
@@ -39,6 +40,17 @@ export default function App() {
   const [models, setModels] = useState<string[]>([])
   const [connPayload, setConnPayload] = useState<ConnectionsPayload | null>(null)
   const { leftW, setLeftW, rightW, setRightW, previewH, colDrag, rowDrag } = useSplitPanes()
+  // Editor / preview collapse persists (like the split sizes above) so the
+  // layout — relative positions and states — survives reloads.
+  const [collapse, setCollapse] = useState(loadCollapse)
+
+  function toggleCollapse(which: 'editor' | 'preview') {
+    setCollapse(prev => {
+      const next = { ...prev, [which]: !prev[which] }
+      saveCollapse(next)
+      return next
+    })
+  }
 
   async function loadFiles() {
     try {
@@ -306,17 +318,26 @@ export default function App() {
 
         <div className="panel" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <div className="panel-head">
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => toggleCollapse('editor')} title={collapse.editor ? 'Expand editor' : 'Collapse editor'}>
+              {collapse.editor ? '▸' : '▾'}
+            </button>
             <span className="mono" style={{ fontWeight: 500 }}>{activePath}</span>
             <span className="sub" style={{ marginLeft: 'auto' }}>Monaco • Real FS • Vite HMR</span>
           </div>
-          <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>
-            <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} />
-          </div>
-          <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
-          <div style={{ flex: `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid #1e1e23', display: 'flex', flexDirection: 'column' }}>
+          {!collapse.editor && (
+            <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>
+              <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} />
+            </div>
+          )}
+          {!collapse.editor && !collapse.preview && (
+            <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
+          )}
+          <div style={{ flex: collapse.preview ? '0 0 auto' : collapse.editor ? '1 1 0' : `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid #1e1e23', display: 'flex', flexDirection: 'column' }}>
             <Preview
               key={activeProject}
               hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
+              collapsed={collapse.preview}
+              onToggleCollapse={() => toggleCollapse('preview')}
               onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
               onResult={setNotice}
             />

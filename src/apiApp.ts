@@ -186,7 +186,8 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
     } catch (e: any) {
       console.error(e)
-      res.status(500).json({ ok: false, error: e.message })
+      const { describeUpstreamError } = await import('./chatStream.js')
+      res.status(500).json({ ok: false, error: describeUpstreamError(e) })
     }
   })
 
@@ -226,7 +227,8 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
       })
     } catch (e: any) {
       console.error(e)
-      res.status(500).json({ ok: false, error: e.message })
+      const { describeUpstreamError } = await import('./chatStream.js')
+      res.status(500).json({ ok: false, error: describeUpstreamError(e) })
     }
   })
 

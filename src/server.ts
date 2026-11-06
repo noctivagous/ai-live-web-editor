@@ -379,7 +379,8 @@ app.post('/api/chat', async (req, res) => {
     res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
   } catch (e: any) {
     console.error(e)
-    res.status(500).json({ ok: false, error: e.message })
+    const { describeUpstreamError } = await import('./chatStream.js')
+    res.status(500).json({ ok: false, error: describeUpstreamError(e) })
   }
 })
 
@@ -422,7 +423,8 @@ app.post('/api/live-edit/submit', async (req, res) => {
     })
   } catch (e: any) {
     console.error(e)
-    res.status(500).json({ ok: false, error: e.message })
+    const { describeUpstreamError } = await import('./chatStream.js')
+    res.status(500).json({ ok: false, error: describeUpstreamError(e) })
   }
 })
 

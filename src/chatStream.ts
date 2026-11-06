@@ -178,6 +178,90 @@ function errorMessage(value: unknown): string {
   return 'stream error'
 }
 
+function errorStatus(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null
+  const o = value as LooseRecord
+  for (const key of ['statusCode', 'status']) {
+    const n = o[key]
+    if (typeof n === 'number' && Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function errorHost(value: unknown): string {
+  if (!value || typeof value !== 'object') return ''
+  const url = firstString(value as LooseRecord, ['url'])
+  if (!url) return ''
+  try {
+    return new URL(url).host
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Provider response bodies (AI SDK `responseBody`, often a JSON string)
+ * carry the real reason — e.g. xAI's 403 "used all available credits".
+ * Prefer that detail over the bare HTTP status text ("Forbidden").
+ */
+function providerDetail(value: unknown): string {
+  if (!value || typeof value !== 'object') return ''
+  const body = (value as LooseRecord).responseBody ?? (value as LooseRecord).data
+  if (typeof body === 'string' && body) {
+    try {
+      const parsed = JSON.parse(body) as LooseRecord
+      const inner = firstString(parsed, ['error', 'message', 'detail'])
+      if (inner) return inner
+    } catch { /* not JSON — fall through to raw text */ }
+    return body.length <= 500 ? body : ''
+  }
+  if (body && typeof body === 'object') {
+    return firstString(body as LooseRecord, ['error', 'message', 'detail'])
+  }
+  return ''
+}
+
+/**
+ * Turn an upstream LLM failure into a chat-readable message: HTTP status,
+ * provider host, the provider's own reason, and what to do about it.
+ * Never returns a bare status text like "Forbidden".
+ */
+export function describeUpstreamError(err: unknown): string {
+  if (typeof err === 'string') return err || 'stream error'
+  if (!err || typeof err !== 'object') return 'stream error'
+  const base = err instanceof Error ? err.message : errorMessage(err)
+  const status = errorStatus(err)
+  const host = errorHost(err)
+  const detail = providerDetail(err)
+  const where = [status != null ? `HTTP ${status}` : '', host ? `from ${host}` : '']
+    .filter(Boolean).join(' ')
+  const haystack = `${base} ${detail}`.toLowerCase()
+  const quoted = detail ? ` — "${detail.length > 300 ? `${detail.slice(0, 299)}…` : detail}"` : ''
+
+  if (/used all available credits|spending limit|out of credits|insufficient.*credit|exceed.*quota|quota exceeded|billing/i.test(haystack)) {
+    return `AI provider refused the request${where ? ` (${where})` : ''}: the account is out of credits or hit its spending limit${quoted}. ` +
+      `Fix: buy more credits or raise the monthly spending limit in the provider console${host ? ` (${host})` : ''}, then retry.`
+  }
+  if (status === 401 || /invalid.*api.?key|incorrect api key|unauthorized/i.test(haystack)) {
+    return `AI provider rejected the API key${where ? ` (${where})` : ''}${quoted}. ` +
+      `Fix: open Review setup, paste a valid key with its matching base URL and model, then Save.`
+  }
+  if (status === 429 || /rate.?limit|too many requests/i.test(haystack)) {
+    return `AI provider rate-limited the request${where ? ` (${where})` : ''}${quoted}. Fix: wait a minute and retry.`
+  }
+  if ((status != null && status >= 500) || /bad gateway|service unavailable|gateway timeout|internal error/i.test(haystack)) {
+    return `AI provider errored${where ? ` (${where})` : ''}${quoted}. Fix: retry shortly — this is usually transient.`
+  }
+  if (status === 403) {
+    return `AI provider refused the request${where ? ` (${where})` : ''}${quoted || `: ${base || 'forbidden'}`}. ` +
+      `Fix: check the key's permissions and the account's spending limits, then retry.`
+  }
+  if (where || detail) {
+    return `AI request failed${where ? ` (${where})` : ''}${quoted || `: ${base || 'unknown error'}`}`
+  }
+  return base || 'stream error'
+}
+
 function chunkText(p: LooseRecord): string {
   return firstString(p, ['text', 'textDelta', 'delta', 'argsTextDelta'])
 }
@@ -270,7 +354,7 @@ export function mapMastraChunk(chunk: unknown): ChatStreamEvent | null {
     return { type: 'text-delta', text }
   }
   if (type === 'error') {
-    return { type: 'error', error: errorMessage(p.error ?? p.message) }
+    return { type: 'error', error: describeUpstreamError(p.error ?? p.message) }
   }
   return null
 }
@@ -438,9 +522,8 @@ export async function pipeAgentChatStream(
       try { res.end() } catch { /* closed */ }
       return
     }
-    const message = e instanceof Error ? e.message : String(e)
     console.error(e)
-    try { send({ type: 'error', error: message }) } catch { /* closed */ }
+    try { send({ type: 'error', error: describeUpstreamError(e) }) } catch { /* closed */ }
     res.end()
   }
 }

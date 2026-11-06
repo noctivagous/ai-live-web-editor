@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { abortSignalFromReq, beginChatSse, isAbortError, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult, toTurnUsage } from './chatStream.js'
+import { abortSignalFromReq, beginChatSse, describeUpstreamError, isAbortError, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult, toTurnUsage } from './chatStream.js'
 
 describe('mapMastraChunk', () => {
   it('maps Mastra payload.text text-delta', () => {
@@ -207,5 +207,44 @@ describe('toTurnUsage', () => {
     assert.equal(toTurnUsage(null), null)
     assert.equal(toTurnUsage({}), null)
     assert.equal(toTurnUsage({ model: 'x' }), null)
+  })
+})
+
+describe('describeUpstreamError', () => {
+  const creditsBody = '{"code":"permission-denied","error":"Your team 24841cc9 has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit."}'
+  const creditsErr = Object.assign(new Error('Forbidden'), {
+    statusCode: 403,
+    url: 'https://api.x.ai/v1/chat/completions',
+    responseBody: creditsBody,
+  })
+
+  it('surfaces the provider billing detail instead of bare Forbidden', () => {
+    const msg = describeUpstreamError(creditsErr)
+    assert.match(msg, /403/)
+    assert.match(msg, /credits/i)
+    assert.match(msg, /spending limit/i)
+    assert.match(msg, /api\.x\.ai/)
+    assert.doesNotMatch(msg, /^Forbidden$/)
+  })
+
+  it('maps streamed error chunks through the same detail', () => {
+    const ev = mapMastraChunk({ type: 'error', payload: { error: creditsErr } })
+    assert.equal(ev?.type, 'error')
+    assert.match((ev as { error: string }).error, /credits/i)
+  })
+
+  it('points 401 at the API key setup', () => {
+    const msg = describeUpstreamError(Object.assign(new Error('Unauthorized'), { statusCode: 401 }))
+    assert.match(msg, /API key/i)
+  })
+
+  it('labels 429 as rate-limited and 5xx as a provider outage', () => {
+    assert.match(describeUpstreamError(Object.assign(new Error('Too Many Requests'), { statusCode: 429 })), /rate-limit/i)
+    assert.match(describeUpstreamError(Object.assign(new Error('Bad Gateway'), { statusCode: 502 })), /provider/i)
+  })
+
+  it('passes plain errors and strings through', () => {
+    assert.equal(describeUpstreamError(new Error('boom')), 'boom')
+    assert.equal(describeUpstreamError('plain failure'), 'plain failure')
   })
 })

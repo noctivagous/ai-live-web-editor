@@ -195,6 +195,24 @@ export async function saveModalityDefaults(defaults: ConnectionsPayload['modalit
   return postJson<ConnectionsPayload>('/api/connections/modalities', { defaults })
 }
 
+export interface BraveStatus {
+  configured: boolean
+  keyLast4?: string
+}
+
+export async function getResearchConfig() {
+  const r = await fetch(`${API}/api/research/config`)
+  return r.json() as Promise<{ ok: boolean, brave: BraveStatus }>
+}
+
+export async function saveBraveKey(apiKey: string) {
+  return postJson<{ ok: boolean, brave: BraveStatus }>('/api/research/brave', { apiKey })
+}
+
+export async function testBraveKey(apiKey?: string) {
+  return postJson<{ ok: boolean, resultCount?: number, error?: string }>('/api/research/brave/test', { apiKey })
+}
+
 export async function setPlaywrightPool(enabled: boolean) {
   const r = await fetch(`${API}/api/config/pool`, {
     method: 'POST',
@@ -241,12 +259,24 @@ export type ChatWorkflow = 'files' | 'sketch'
 
 export type DeviceTarget = 'phone' | 'tablet' | 'desktop'
 
+export interface SelfCheck {
+  at: number
+  running: boolean
+  tscOk?: boolean
+  testsOk?: boolean
+  testsSummary?: string
+  tail?: string
+}
+
 export interface WorkflowSnapshot {
   ok: boolean
   mode: ChatWorkflow
   deviceTarget: DeviceTarget
   accepted: boolean
   patches: { id: string, selector: string, op: string, ok: boolean, detail: string }[]
+  /** Self mode (§L): true while the editor itself is the workspace. */
+  selfMode?: boolean
+  selfCheck?: SelfCheck | null
   error?: string
 }
 

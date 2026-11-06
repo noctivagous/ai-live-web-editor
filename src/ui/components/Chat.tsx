@@ -487,6 +487,8 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       <ChatHeader
         workflow={workflow}
         deviceTarget={sketch?.deviceTarget ?? 'desktop'}
+        selfMode={sketch?.selfMode}
+        selfCheck={sketch?.selfCheck}
         sending={sending}
         workingLabel={workingLabel}
         showDeckButton

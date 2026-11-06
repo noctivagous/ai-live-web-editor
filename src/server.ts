@@ -7,13 +7,15 @@ import { fileURLToPath } from 'url'
 import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool } from './env.js'
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
-import { createProject, deleteSyncFiles, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
+import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, SELF_PROJECT_ID, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
+import { getSelfCheck, isSelfMode, isSelfWorkspace, listSnapshotsAt, revertSelfSnapshot } from './selfMode.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
+import { mountResearchApi } from './research/researchApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
 import chokidar from 'chokidar'
@@ -56,9 +58,23 @@ mountPoolPage(app)
 mountWorkflowApi(app)
 mountProjectConfigApi(app)
 mountConnectionsApi(app)
+mountResearchApi(app)
 
 ensureWorkspace()
 markLauncherOwner()
+
+// Self mode (phase-11-06 §L): boot straight into the editor-as-
+// workspace. The UI serving half is mounted further down, where
+// the built bundle is normally served.
+if (isSelfMode()) {
+  try {
+    selectProject(SELF_PROJECT_ID)
+    console.log('[self] SELF MODE — workspace is the editor repo; src/ui is served from source (no ui:build)')
+    console.log('[self] recovery page: /self-recovery')
+  } catch (e) {
+    console.error('[self] could not select the self workspace:', e)
+  }
+}
 
 function safePath(p: string) {
   const root = getFsRoot()
@@ -442,19 +458,85 @@ app.get('/live-edit/overlay.js', (req, res) => {
 
 // --- Serve UI ---
 const uiDist = path.join(__dirname, 'ui-dist')
-app.get('/chat-embed', (req, res) => {
-  const embed = path.join(uiDist, 'chat-embed.html')
-  if (fs.existsSync(embed)) res.sendFile(embed)
-  else res.status(404).send('chat-embed not built — run npm run ui:build')
-})
-if (fs.existsSync(uiDist)) {
-  app.use(express.static(uiDist))
+if (isSelfMode()) {
+  // Self mode (§L): the recovery surface is registered BEFORE the
+  // Vite middlewares — it must stay reachable even when the UI
+  // source is broken, and it is plain server-rendered HTML, never
+  // a file inside the agent's write scope.
+  app.get('/api/self/status', (_req, res) => {
+    res.json({
+      selfMode: true,
+      selfWorkspace: isSelfWorkspace(),
+      fsRoot: getFsRoot(),
+      check: getSelfCheck(),
+      snapshots: listSnapshotsAt(EDITOR_ROOT),
+    })
+  })
+  app.post('/api/self/revert', async (req, res) => {
+    const hash = typeof req.body?.hash === 'string' ? req.body.hash : ''
+    const result = await revertSelfSnapshot(hash)
+    if (!result.ok) return res.status(400).json(result)
+    res.json(result)
+  })
+  app.get('/self-recovery', (_req, res) => {
+    const check = getSelfCheck()
+    const snapshots = listSnapshotsAt(EDITOR_ROOT)
+    const rows = snapshots.map(s => `
+      <li>
+        <code>${s.hash.slice(0, 10)}</code> — ${new Date(s.at).toLocaleString()} — ${s.label}
+        <button onclick="revertTo('${s.hash}')">Revert src/ui to this snapshot</button>
+      </li>`).join('')
+    res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><title>AI Live Editor — self recovery</title></head>
+<body style="font-family:system-ui;padding:24px;max-width:720px">
+<h1>Self recovery</h1>
+<p>Self mode is on. Workspace: <code>${getFsRoot()}</code> (editor itself: ${isSelfWorkspace()}).</p>
+<p>Last self-check: ${check ? (check.running ? 'running…' : `tsc ${check.tscOk ? 'ok' : 'FAILED'} · tests ${check.testsOk ? 'ok' : 'FAILED'} — ${new Date(check.at).toLocaleString()}`) : 'none yet'}</p>
+${check?.tail ? `<pre style="white-space:pre-wrap;background:#111;color:#eee;padding:12px">${check.tail.replace(/</g, '&lt;')}</pre>` : ''}
+<h2>Turn snapshots</h2>
+<p>Reverting restores tracked files under <code>src/ui</code> from the snapshot and removes files created inside it since. Nothing outside <code>src/ui</code> is touched.</p>
+<ul>${rows || '<li>No snapshots yet — one is taken before each chat turn.</li>'}</ul>
+<p><a href="/">← Back to the editor</a></p>
+<script>
+async function revertTo(hash) {
+  if (!confirm('Revert src/ui to snapshot ' + hash.slice(0, 10) + '?')) return
+  const r = await fetch('/api/self/revert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hash }) })
+  const body = await r.json()
+  alert(r.ok ? 'Reverted. Removed: ' + (body.removed.join(', ') || 'none') : 'Failed: ' + body.error)
+  location.reload()
+}
+</script>
+</body></html>`)
+  })
+  // The UI itself: src/ui served from source through Vite dev
+  // middleware (HMR) — no ui:build in the loop. Inline config,
+  // equivalent to vite.config.ts minus its build-only parts and
+  // its dev proxy (API routes are this server's own, above).
+  const { createServer: createViteServer } = await import('vite')
+  const reactPlugin = (await import('@vitejs/plugin-react')).default
+  const vite = await createViteServer({
+    root: path.join(EDITOR_ROOT, 'src/ui'),
+    plugins: [reactPlugin()],
+    appType: 'spa',
+    server: { middlewareMode: true },
+  })
+  app.use(vite.middlewares)
+} else {
+  app.get('/chat-embed', (req, res) => {
+    const embed = path.join(uiDist, 'chat-embed.html')
+    if (fs.existsSync(embed)) res.sendFile(embed)
+    else res.status(404).send('chat-embed not built — run npm run ui:build')
+  })
+  if (fs.existsSync(uiDist)) {
+    app.use(express.static(uiDist))
+  }
 }
 app.use('/projects', (req, res, next) => {
   express.static(getFsRoot())(req, res, next)
 })
 
-// Fallback to UI index
+// Fallback to UI index (in self mode the Vite middlewares above
+// answer first; this remains for the built bundle).
 app.get('*', (req, res) => {
   const index = path.join(uiDist, 'index.html')
   if (fs.existsSync(index)) res.sendFile(index)

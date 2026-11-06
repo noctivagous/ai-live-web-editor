@@ -7,6 +7,7 @@ import { getFsRoot } from '../../launcher.js'
 import { livePageOp, poolOpen } from '../../liveTarget.js'
 import { applyStrReplace, compileGrep, GREP_MAX_HITS, grepText, isPlaceholderWrite, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
 import { sketchWriteGuard } from '../../sketchSession.js'
+import { selfWriteGuard } from '../../selfMode.js'
 
 const SKIP_DIR = new Set(['node_modules', '.vite', '.chrome-data'])
 
@@ -107,6 +108,8 @@ export const strReplaceTool = createTool({
     const blocked = sketchWriteGuard()
     if (blocked) return blocked
     const full = safe(p)
+    const selfBlocked = selfWriteGuard(full)
+    if (selfBlocked) return selfBlocked
     if (!fs.existsSync(full)) return { error: 'Not found: ' + p, path: p }
     const before = fs.readFileSync(full, 'utf-8')
     const result = applyStrReplace(before, old_string, new_string, replace_all === true)
@@ -134,6 +137,8 @@ export const writeRealFileTool = createTool({
       return { error: 'Refusing placeholder write. Use str-replace with an exact hunk.', path: p }
     }
     const full = safe(p)
+    const selfBlocked = selfWriteGuard(full)
+    if (selfBlocked) return selfBlocked
     fs.mkdirSync(path.dirname(full), { recursive: true })
     fs.writeFileSync(full, content, 'utf-8')
     return { ok: true, path: p, bytes: content.length, mode: 'real-fs', elapsedMs: 1 }

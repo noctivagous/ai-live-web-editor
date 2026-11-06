@@ -34,6 +34,9 @@ function patchesEqual(
 export function workflowSnapshotsEqual(a: WorkflowSyncSnapshot, b: WorkflowSyncSnapshot): boolean {
   return a.mode === b.mode
     && a.deviceTarget === b.deviceTarget
+    && Boolean(a.selfMode) === Boolean(b.selfMode)
+    && (a.selfCheck?.at || 0) === (b.selfCheck?.at || 0)
+    && Boolean(a.selfCheck?.running) === Boolean(b.selfCheck?.running)
     && Boolean(a.accepted) === Boolean(b.accepted)
     && patchesEqual(a.patches || [], b.patches || [])
 }
@@ -52,10 +55,15 @@ export function parseWorkflowSnapshot(raw: unknown): WorkflowSyncSnapshot | null
   const row = raw as Record<string, unknown>
   const mode = parseMode(row.mode)
   if (!mode || !Array.isArray(row.patches)) return null
+  const selfCheck = (row.selfCheck && typeof row.selfCheck === 'object')
+    ? (row.selfCheck as WorkflowSnapshot['selfCheck'])
+    : null
   return {
     ok: row.ok !== false,
     mode,
     deviceTarget: parseDeviceTarget(row.deviceTarget),
+    selfMode: Boolean(row.selfMode),
+    selfCheck,
     accepted: Boolean(row.accepted),
     patches: row.patches.map((p) => {
       const patch = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>

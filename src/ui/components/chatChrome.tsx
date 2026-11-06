@@ -1,14 +1,17 @@
 import React from 'react'
 import { Coins, Eraser, Folder, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
-import type { ChatWorkflow, DeviceTarget, WorkflowSnapshot } from '../lib/api'
+import type { ChatWorkflow, DeviceTarget, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, deviceTarget, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onClear, onOpenDeck }: {
+export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onClear, onOpenDeck }: {
   workflow: ChatWorkflow
   deviceTarget: DeviceTarget
+  /** Self mode (§L): the workspace is this editor itself. */
+  selfMode?: boolean
+  selfCheck?: SelfCheck | null
   sending: boolean
   workingLabel: string
   showDeckButton: boolean
@@ -30,6 +33,16 @@ export function ChatHeader({ workflow, deviceTarget, sending, workingLabel, show
         <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('tablet')} title="Tablet (768px)"><Tablet size={13} /></button>
         <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('desktop')} title="Desktop (1280px)"><Monitor size={13} /></button>
       </div>
+      {selfMode && (
+        <span className="pill warn" title="Self mode: the workspace is this editor's own repo, served from source. Writes are confined to src/ui. Recovery: /self-recovery">
+          SELF — editing this editor
+          {selfCheck?.running
+            ? ' · checks…'
+            : selfCheck
+              ? ` · tsc ${selfCheck.tscOk ? '✓' : '✗'} tests ${selfCheck.testsOk ? '✓' : '✗'}`
+              : ''}
+        </span>
+      )}
       <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ marginLeft: 'auto' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
       <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>
       {showDeckButton && (

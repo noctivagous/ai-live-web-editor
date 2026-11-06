@@ -429,6 +429,8 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
       <ChatHeader
         workflow={workflow}
         deviceTarget={deviceTarget}
+        selfMode={sketch?.selfMode}
+        selfCheck={sketch?.selfCheck}
         sending={sending}
         workingLabel={workingLabel}
         showDeckButton={false}

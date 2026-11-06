@@ -409,6 +409,14 @@ export async function pipeAgentChatStream(
   // every agent turn knows what kind of project it is building.
   const { projectBrief } = await import('./projectConfig.js')
   payload = withSystemPreamble(projectBrief(), payload)
+  // Self mode (§L): snapshot the editor tree before a Files turn
+  // can touch it, so the turn is always revertible from the
+  // recovery page. Best-effort — a snapshot failure never breaks
+  // the turn.
+  if (mode === 'files') {
+    const { isSelfWorkspace, createSelfSnapshot } = await import('./selfMode.js')
+    if (isSelfWorkspace()) await createSelfSnapshot('chat turn')
+  }
   const { send } = beginChatSse(res, req)
   const abortSignal = abortSignalFromReq(req)
   if (routed.switched) send({ type: 'workflow', mode: routed.mode, reason: routed.reason })
@@ -517,6 +525,16 @@ export async function pipeAgentChatStream(
       if (!usage) console.warn('[chat] provider did not report token usage for this turn')
     } catch (e: unknown) {
       console.warn('[chat] usage lookup failed:', e instanceof Error ? e.message : String(e))
+    }
+    // Self mode (§L): a Files turn that wrote files gets tsc +
+    // tests run against the editor itself, fire-and-forget; the
+    // result rides the workflow snapshot beside the SELF badge.
+    if (mode === 'files' && toolTrace.some(t => t === 'str-replace' || t === 'write-real-file')) {
+      const { isSelfWorkspace, runSelfChecks } = await import('./selfMode.js')
+      if (isSelfWorkspace()) {
+        send({ type: 'status', text: 'self-checks running (tsc + tests)…' })
+        void runSelfChecks()
+      }
     }
     send({ type: 'done', usage, model, verification })
     res.end()

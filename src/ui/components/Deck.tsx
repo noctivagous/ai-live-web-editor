@@ -5,6 +5,7 @@ import {
   type DeckCard, type DeckTurn,
 } from '../lib/deck'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
+import { Markdown } from './Markdown'
 import type { ChatWorkflow, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 
@@ -64,7 +65,7 @@ export function DeckCardView({ card, onNeedSetup, embed }: {
             <span className="dcard-label" style={{ margin: 0 }}>Reasoning</span>
             <span className="step-chev">{open ? '▾' : '▸'}</span>
           </button>
-          {open && <pre className="dcard-pre">{card.text.slice(0, 4000)}</pre>}
+          {open && <div className="dcard-pre"><Markdown text={card.text.slice(0, 4000)} /></div>}
         </div>
       )
     case 'tools':
@@ -80,7 +81,7 @@ export function DeckCardView({ card, onNeedSetup, embed }: {
       return (
         <div className="dcard dcard-result">
           <div className="dcard-label">Result</div>
-          <pre className="dcard-pre plain">{card.text.slice(0, 8000)}</pre>
+          <div className="dcard-pre plain"><Markdown text={card.text.slice(0, 8000)} /></div>
         </div>
       )
     case 'error':

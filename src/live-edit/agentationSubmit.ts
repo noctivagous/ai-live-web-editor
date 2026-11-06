@@ -1,23 +1,23 @@
 /**
  * Shared handler for Agentation submits (Step 5, Rung 1): adapts the
- * toolbar's annotation payload onto the same live-edit pipeline the
- * overlay submit uses — summarize, resolve, build the prompt, run the
- * editor agent — so both server entry points (apiApp, standalone
- * launcher) behave identically, in Files mode and in Live sketch
- * mode alike (the mode-aware prompt and tool set come from the
- * session's current sketch mode, exactly as for overlay submits).
+ * toolbar's annotation payload onto the same live-edit prompt the
+ * overlay submit uses — summarize, resolve, build the prompt — and
+ * returns it so the caller can send it as a real AI-chat turn. The
+ * agent run itself happens in the chat (streaming, visible, with the
+ * chat's workflow routing), not in a hidden call here, so both server
+ * entry points (apiApp, standalone launcher) behave identically, in
+ * Files mode and in Live sketch mode alike.
  */
 import { agentationToAnnotations, buildLiveEditPrompt, summarizeAnnotations } from './annotationAnalysis.js'
-import { activeToolsForMode } from '../agentTools.js'
-import { getSketchMode, withSketchPreamble } from '../sketchSession.js'
+import { getSketchMode } from '../sketchSession.js'
 import { getFsRoot } from '../launcher.js'
 
-export interface AgentationSubmitResult {
+export interface AgentationPromptResult {
   status: number
   payload: Record<string, unknown>
 }
 
-export async function handleAgentationSubmit(body: any): Promise<AgentationSubmitResult> {
+export async function prepareAgentationPrompt(body: any): Promise<AgentationPromptResult> {
   try {
     const raw = Array.isArray(body?.annotations) ? body.annotations : []
     const annotations = agentationToAnnotations(raw, getFsRoot())
@@ -37,21 +37,11 @@ export async function handleAgentationSubmit(body: any): Promise<AgentationSubmi
       resolutions,
       mode,
     })
-    const { mastra } = await import('../mastra/index.js')
-    const agent = mastra.getAgent('editorAgent')
-    const messages = mode === 'sketch'
-      ? withSketchPreamble([{ role: 'user', content: prompt }])
-      : [{ role: 'user', content: prompt }]
-    const result = await agent.generate(messages as any, {
-      maxSteps: 12,
-      activeTools: activeToolsForMode(mode),
-    })
     return {
       status: 200,
       payload: {
         ok: true,
-        text: result.text,
-        toolCalls: result.toolCalls,
+        prompt,
         annotationCount: annotations.length,
         prioritizedIds: summary.prioritizedIds,
         mode,
@@ -59,6 +49,6 @@ export async function handleAgentationSubmit(body: any): Promise<AgentationSubmi
     }
   } catch (e: any) {
     console.error(e)
-    return { status: 500, payload: { ok: false, error: e?.message || 'Agent run failed' } }
+    return { status: 500, payload: { ok: false, error: e?.message || 'Prompt build failed' } }
   }
 }

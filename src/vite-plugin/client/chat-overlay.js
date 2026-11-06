@@ -273,6 +273,23 @@ export function mountChatOverlay() {
       if (window.__AI_LIVE_CHAT__) window.__AI_LIVE_CHAT__.width = size.w
     }
   })
+
+  // Agentation toolbar Send: the agentation entry posts the built prompt on
+  // the page window. Expand the chat, then forward it into the chat iframe,
+  // which sends it as a real user turn.
+  window.addEventListener('message', (ev) => {
+    const d = ev.data
+    if (!d || typeof d !== 'object' || d.ns !== 'ai-live-chat-send') return
+    if (typeof d.text !== 'string' || !d.text.trim()) return
+    try {
+      if (wrap.classList.contains('collapsed')) {
+        wrap.classList.remove('collapsed')
+        savePos(pos())
+      }
+      const target = new URL(chatFrameEl.src).origin
+      chatFrameEl.contentWindow.postMessage({ ns: 'ai-live-chat-send', text: d.text }, target)
+    } catch { /* chat iframe unreachable: turn is dropped, toolbar already cleared */ }
+  })
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   window.__AI_LIVE_CHAT__ = { mounted: true, width: size.w, popover: usePopover }
   // Annotation on the live page is Agentation (Step 5 Rung 1), mounted

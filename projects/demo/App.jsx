@@ -121,7 +121,7 @@ const styles = {
     padding: '14px 22px',
     borderRadius: 12,
     border: '1px solid rgba(255,255,255,0.12)',
-    background: 'rgba(255,255,255,0.04)',
+    background: '#fff',
     color: '#e8ecf4',
     fontWeight: 600,
     fontSize: 15,
@@ -139,7 +139,7 @@ const styles = {
     padding: '6px 10px',
     borderRadius: 8,
     border: '1px solid rgba(255,255,255,0.06)',
-    background: 'rgba(255,255,255,0.03)',
+    background: '#fff',
   },
   heroCard: {
     position: 'relative',

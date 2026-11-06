@@ -145,6 +145,9 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const scroller = useRef<HTMLDivElement>(null)
   const fingerprint = useRef('')
   const sendGuardRef = useRef(createSendGuard())
+  // Agentation toolbar Send (embed only): the live page forwards the built
+  // prompt here; it auto-sends as a real user turn once input lands.
+  const pendingSendRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   // Highest chat revision seen or published: receivers apply only newer revs,
   // and publishes that lose the compare-and-swap resync instead of clobbering.
@@ -352,8 +355,17 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       // Direct from the live page (reaches the embed iframe only): render the
       // chips here and relay to the sidebar. Sidebar relays arrive through
       // subscribeAnnotations above, never through window messages.
-      const data = ev.data as { ns?: unknown } | null
-      if (!data || typeof data !== 'object' || data.ns !== 'ai-live-annotations') return
+      const data = ev.data as { ns?: unknown; text?: unknown } | null
+      if (!data || typeof data !== 'object') return
+      if (data.ns === 'ai-live-chat-send') {
+        // Agentation toolbar Send: queue the prompt as our next turn.
+        if (!inIframe) return
+        if (typeof data.text !== 'string' || !data.text.trim()) return
+        pendingSendRef.current = data.text
+        setInput(data.text)
+        return
+      }
+      if (data.ns !== 'ai-live-annotations') return
       const parsed = parseAnnotationDigest(data)
       if (!parsed) return
       applyDigest(parsed)
@@ -368,6 +380,17 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       window.removeEventListener('message', onMessage)
     }
   }, [])
+
+  // Agentation auto-send: once the queued prompt lands in the input (and no
+  // turn is in flight), send it. Follows a finished turn too — the prompt
+  // waits as a follow-up rather than colliding.
+  useEffect(() => {
+    if (pendingSendRef.current !== null && input === pendingSendRef.current && !sending) {
+      pendingSendRef.current = null
+      void send()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, sending])
 
   // Keep the Files | Live sketch control in sync with the other Chat instance:
   // instant refresh on peer changes, plus a slow poll and focus refresh to

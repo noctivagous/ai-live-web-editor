@@ -423,8 +423,8 @@ app.post('/api/live-edit/submit', async (req, res) => {
 })
 
 app.post('/api/live-edit/agentation', async (req, res) => {
-  const { handleAgentationSubmit } = await import('./live-edit/agentationSubmit.js')
-  const { status, payload } = await handleAgentationSubmit(req.body || {})
+  const { prepareAgentationPrompt } = await import('./live-edit/agentationSubmit.js')
+  const { status, payload } = await prepareAgentationPrompt(req.body || {})
   res.status(status).json(payload)
 })
 

@@ -56,13 +56,22 @@ async function handleSubmit(output, annotations) {
     body: JSON.stringify({ annotations, output, url: location.href }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok || !data.ok) {
+  if (!res.ok || !data.ok || typeof data.prompt !== 'string' || !data.prompt) {
     showResult(false, data.error || `HTTP ${res.status}`)
     // Throwing keeps the annotations in the toolbar (Agentation treats
     // a rejected onSubmit as a failed delivery and retains feedback).
     throw new Error(data.error || `Send failed (${res.status})`)
   }
-  showResult(true, data.text || 'Done.')
+  // Hand the prompt to the AI chat overlay as a real user turn (streaming,
+  // visible, with workflow routing) instead of answering in a result box.
+  // The chat overlay listener (chat-overlay.js) expands the window and
+  // forwards this into the chat iframe, which sends it.
+  if (!document.getElementById('ai-live-chat-host')) {
+    showResult(false, 'AI chat overlay not found on this page — open the chat and paste your notes there.')
+    // Throwing keeps the annotations in the toolbar.
+    throw new Error('AI chat overlay not found')
+  }
+  window.postMessage({ ns: 'ai-live-chat-send', text: data.prompt }, '*')
 }
 
 if (!document.getElementById('ai-live-agentation')) {

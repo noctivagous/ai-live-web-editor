@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type WorkflowSnapshot } from '../lib/api'
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
@@ -28,7 +28,8 @@ import {
   subscribeAnnotations,
   type AnnotationDigest,
 } from '../lib/annotationSync'
-import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
+import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
+import { slideTurnsOrDefault } from '../lib/deck'
 
 function isWriteTool(name: string): boolean {
   return name === 'write-real-file' || name === 'str-replace' || name === 'writeRealFileTool'
@@ -57,6 +58,11 @@ function previewPartialArgs(name: string, raw: string): string {
   if (target) return `${n} ${target}`
   return `${n}…`
 }
+
+const defaultSystemText = (() => {
+  const first = DEFAULT_CHAT_LOG[0]
+  return first && 'text' in first ? first.text : ''
+})()
 
 function stampStep(step: ToolStep, prev?: ToolStep): ToolStep {
   const startedAt = prev?.startedAt ?? step.startedAt ?? (step.status === 'running' ? Date.now() : undefined)
@@ -107,10 +113,26 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     setAnnot(prev => (annotationDigestsEqual(prev, next) ? prev : next))
   }
 
-  function postChatCommand(cmd: 'pick' | 'submit' | 'notes') {
+  function postChatCommand(cmd: 'pick' | 'submit' | 'notes' | 'deck-open' | 'deck-close') {
     try {
       window.parent.postMessage({ ns: 'ai-live-chat-cmd', cmd }, '*')
     } catch { /* no live page above us (sidebar) */ }
+  }
+
+  function openDeck() {
+    setDeckOpen(true)
+    // In the overlay iframe the page expands the chat window to fit the deck.
+    if (inIframe) postChatCommand('deck-open')
+  }
+
+  function closeDeck() {
+    setDeckOpen(false)
+    if (inIframe) postChatCommand('deck-close')
+  }
+
+  function sendAndHint() {
+    void send()
+    void refreshKeyHint()
   }
 
   function insertToken(token: string) {
@@ -375,42 +397,28 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     setWorkingLabel('')
   }
 
-  const turns = groupTurns(log, { sending })
-  const slides = slideTurns(turns)
-  const touchedFiles = workingSet(log)
+  const turns = useMemo(() => groupTurns(log, { sending }), [log, sending])
+  const slides = useMemo(() => slideTurnsOrDefault(turns, defaultSystemText), [turns])
+  const touchedFiles = useMemo(() => workingSet(log), [log])
   const turnAnchor = (index: number) => `deck-turn-${projectId || 'default'}-${index}`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div style={{ padding: '9px 12px', borderBottom: '1px solid #1e1e23', fontSize: 12, fontWeight: 600, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        AI Chat <span style={{ fontWeight: 400, color: '#71717a' }}>· Mastra</span>
-        <div className="seg" role="group" aria-label="Chat workflow">
-          <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => void setWorkflowMode('files')}>Files</button>
-          <button type="button" className={workflow === 'sketch' ? 'on' : ''} disabled={sending} onClick={() => void setWorkflowMode('sketch')}>Live sketch</button>
-        </div>
-        <button type="button" className="deck-btn" disabled={sending} onClick={clearChat} title="Clear this chat" style={{ marginLeft: 'auto', padding: '4px 8px' }}>Clear</button>
-        {!embed && (
-          <button type="button" className="deck-btn" onClick={() => setDeckOpen(true)} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}>Deck ⤢</button>
-        )}
-        {sending && (
-          <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            <span className="dot" />{workingLabel || 'working'}
-          </span>
-        )}
-      </div>
-      {workflow === 'sketch' && (
-        <div className="sketch-panel">
-          <div className="sketch-banner">Disk writes paused. Patches stay on the page until Discard or HMR.</div>
-          {(sketch?.patches || []).map(p => (
-            <div key={p.id} className="sketch-patch">{p.detail || `${p.op} ${p.selector}`}</div>
-          ))}
-          <div className="sketch-actions">
-            <button type="button" className="deck-btn" disabled={!sketch?.patches?.length || sending} onClick={() => void sketchAction('undo')}>Undo last</button>
-            <button type="button" className="deck-btn" disabled={!sketch?.patches?.length || sending} onClick={() => void sketchAction('discard')}>Discard</button>
-            <button type="button" className="deck-btn primary" disabled={!sketch?.patches?.length || sending} onClick={() => void sketchAction('accept')}>Accept (keep on page)</button>
-          </div>
-        </div>
-      )}
+      <ChatHeader
+        workflow={workflow}
+        sending={sending}
+        workingLabel={workingLabel}
+        showDeckButton
+        onWorkflowMode={(mode) => void setWorkflowMode(mode)}
+        onClear={clearChat}
+        onOpenDeck={openDeck}
+      />
+      <SketchPanel
+        workflow={workflow}
+        sketch={sketch}
+        sending={sending}
+        onSketchAction={(action) => void sketchAction(action)}
+      />
       <TurnStrip turns={turns} onJump={(turn) => {
         document.getElementById(turnAnchor(turn.index))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
       }} />
@@ -423,83 +431,41 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         )}
       </div>
       <WorkingSet files={touchedFiles} onOpen={onOpenPath} />
-      <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #1e1e23' }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Escape' && sending) {
-              e.preventDefault()
-              stop()
-              return
-            }
-            if (e.key === 'Enter' && !sending) { void send(); void refreshKeyHint() }
-          }}
-          placeholder={workflow === 'sketch' ? 'Patch the live page…' : 'Ask AI to edit files...'}
-          className="deck-input"
-          style={{ flex: 1 }}
-        />
-        {sending ? (
-          <button type="button" onClick={stop} className="deck-btn danger" title="Stop this turn (Esc)">
-            Stop
-          </button>
-        ) : (
-          <button type="button" onClick={() => { void send(); void refreshKeyHint() }} className="deck-btn">
-            Send
-          </button>
-        )}
-      </div>
-      <div className="ws-chips" title="Page annotations from the live page — click a chip to insert it">
-        <span className="ws-label">Annotate</span>
-        {inIframe && (
-          <button type="button" className="deck-btn" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={() => postChatCommand('pick')} title="Pick an element on the live page">
-            Pick
-          </button>
-        )}
-        {annot.selection && (
-          <button
-            type="button"
-            className="ws-chip mono"
-            onClick={() => insertToken(elementToken(annot.selection || ''))}
-            title={`Insert ${annot.selection}`}
-          >@{abbreviateSelector(annot.selection)}</button>
-        )}
-        {annot.annotations.map(a => (
-          <button
-            type="button"
-            key={a.id || `${a.selector}-${a.text}`}
-            className="ws-chip"
-            onClick={() => insertToken(noteToken(a.text || a.selector))}
-            title={`${a.selector}${a.text ? ` — ${a.text}` : ''}`}
-          >{a.abbr || abbreviateSelector(a.selector)}</button>
-        ))}
-        {annot.pageNote.present && (
-          <button
-            type="button"
-            className="ws-chip"
-            onClick={() => insertToken(noteToken(annot.pageNote.abbr))}
-            title={`Page note (${annot.pageNote.len} chars) — inserts the visible summary`}
-          >note: {annot.pageNote.abbr || `${annot.pageNote.len} chars`}</button>
-        )}
-        {!annot.selection && !annot.annotations.length && !annot.pageNote.present && (
-          <span className="field-hint" style={{ marginTop: 0 }}>
-            {inIframe ? 'Pick an element on the live page to attach notes.' : 'Annotate on the live page — chips appear here.'}
-          </span>
-        )}
-        {inIframe && (annot.selection || annot.annotations.length || annot.pageNote.present) && (
-          <button type="button" className="deck-btn primary" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={() => postChatCommand('submit')} title="Send page notes to the AI">
-            Submit
-          </button>
-        )}
-      </div>
+      <ChatComposer
+        input={input}
+        sending={sending}
+        workflow={workflow}
+        annot={annot}
+        inIframe={inIframe}
+        onInput={setInput}
+        onSend={sendAndHint}
+        onStop={stop}
+        onPick={() => postChatCommand('pick')}
+        onSubmit={() => postChatCommand('submit')}
+        onInsertToken={insertToken}
+      />
       {deckOpen && (
         <DeckMode
           turns={slides}
           sending={sending}
           workingLabel={workingLabel}
-          onClose={() => setDeckOpen(false)}
+          onClose={closeDeck}
           onNeedSetup={onNeedSetup}
           onOpenPath={onOpenPath}
+          workflow={workflow}
+          onWorkflowMode={(mode) => void setWorkflowMode(mode)}
+          onClear={clearChat}
+          sketch={sketch}
+          onSketchAction={(action) => void sketchAction(action)}
+          input={input}
+          onInput={setInput}
+          onSend={sendAndHint}
+          onStop={stop}
+          annot={annot}
+          inIframe={inIframe}
+          onPick={() => postChatCommand('pick')}
+          onSubmit={() => postChatCommand('submit')}
+          onInsertToken={insertToken}
         />
       )}
     </div>

@@ -147,6 +147,42 @@ export function slideTurns(turns: DeckTurn[]): DeckTurn[] {
   return turns.filter(t => t.intent !== null || t.steps.length > 0 || t.cards.some(c => c.kind === 'result'))
 }
 
+/** Deck never opens empty: fall back to a default-message slide. */
+export function slideTurnsOrDefault(turns: DeckTurn[], defaultText: string): DeckTurn[] {
+  const slides = slideTurns(turns)
+  if (slides.length) return slides
+  return [{
+    index: 0,
+    intent: null,
+    cards: [{ kind: 'system', text: defaultText }],
+    steps: [],
+    status: 'pending',
+    progress: { done: 0, total: 0, pct: 0 },
+    files: [],
+  }]
+}
+
+/** Split card indices into slides that fit `capacity` px: as soon as an item
+ * would overflow, a new slide starts. An oversize single item keeps its own
+ * slide (the slide scrolls it internally as a fallback). */
+export function packHeights(heights: number[], capacity: number): number[][] {
+  const slides: number[][] = []
+  let cur: number[] = []
+  let used = 0
+  for (let i = 0; i < heights.length; i++) {
+    const h = Math.max(0, heights[i])
+    if (cur.length && used + h > capacity) {
+      slides.push(cur)
+      cur = []
+      used = 0
+    }
+    cur.push(i)
+    used += h
+  }
+  if (cur.length) slides.push(cur)
+  return slides
+}
+
 /** Short slide title: the ask, clipped; a fallback for intent-less turns. */
 export function turnTitle(turn: DeckTurn, max = 64): string {
   const text = (turn.intent || 'Session').replace(/\s+/g, ' ').trim()

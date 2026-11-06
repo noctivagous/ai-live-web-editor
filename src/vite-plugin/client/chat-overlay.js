@@ -247,6 +247,36 @@ export function mountChatOverlay() {
     clampWin()
     savePos(pos())
   })
+
+  // Deck mode needs the whole viewport: expand near-fullscreen on deck-open
+  // (stashing the current box) and restore on deck-close. Only the chat
+  // iframe may command this.
+  const chatFrameEl = wrap.querySelector('iframe[title="AI Chat"]')
+  let stashed = null
+  window.addEventListener('message', (ev) => {
+    const d = ev.data
+    if (!d || typeof d !== 'object' || d.ns !== 'ai-live-chat-cmd') return
+    try {
+      if (ev.source !== chatFrameEl.contentWindow) return
+    } catch { return }
+    if (d.cmd === 'deck-open' && !stashed) {
+      stashed = { ...size }
+      size.w = Math.max(MIN_WIDTH, window.innerWidth - 32)
+      size.h = Math.max(MIN_HEIGHT, window.innerHeight - 32)
+      clampWin()
+      savePos(pos())
+      if (window.__AI_LIVE_CHAT__) window.__AI_LIVE_CHAT__.width = size.w
+    } else if (d.cmd === 'deck-close' && stashed) {
+      size.w = stashed.w
+      size.h = stashed.h
+      stashed = null
+      clampWin()
+      savePos(pos())
+      if (window.__AI_LIVE_CHAT__) window.__AI_LIVE_CHAT__.width = size.w
+      const api = window.__AI_LIVE_EDIT__
+      if (api && typeof api.setToolbarOffset === 'function') api.setToolbarOffset(size.w + 32)
+    }
+  })
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   window.__AI_LIVE_CHAT__ = { mounted: true, width: size.w, popover: usePopover }
   void installAnnotateToolbar()

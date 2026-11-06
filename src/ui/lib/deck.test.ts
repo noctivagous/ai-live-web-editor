@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { classifyTool, filesFromSteps, formatElapsed, groupTurns, slideTurns, turnTitle, workingSet } from './deck.js'
+import { classifyTool, filesFromSteps, formatElapsed, groupTurns, packHeights, slideTurns, slideTurnsOrDefault, turnTitle, workingSet } from './deck.js'
 import type { LogItem } from './chatSession.js'
 
 const step = (id: string, name: string, status: 'running' | 'done' | 'error' = 'done', detail = name, result?: string) =>
@@ -83,5 +83,43 @@ describe('titles and elapsed', () => {
     assert.equal(formatElapsed(1500), '1.5s')
     assert.equal(formatElapsed(65_000), '1m 05s')
     assert.equal(formatElapsed(undefined), '')
+  })
+})
+
+describe('slideTurnsOrDefault', () => {
+  it('keeps real slides untouched', () => {
+    const turns = groupTurns([{ role: 'user', text: 'hi' }])
+    assert.deepEqual(slideTurnsOrDefault(turns, 'welcome'), slideTurns(turns))
+  })
+
+  it('builds a default slide when the chat is empty', () => {
+    const turns = groupTurns([{ role: 'system', text: 'welcome' }])
+    assert.equal(slideTurns(turns).length, 0)
+    const slides = slideTurnsOrDefault(turns, 'welcome')
+    assert.equal(slides.length, 1)
+    assert.equal(slides[0].cards.length, 1)
+    assert.equal(slides[0].cards[0].kind, 'system')
+    if (slides[0].cards[0].kind === 'system') {
+      assert.equal(slides[0].cards[0].text, 'welcome')
+    }
+  })
+})
+
+describe('packHeights', () => {
+  it('fits everything in one slide when it fits', () => {
+    assert.deepEqual(packHeights([100, 120, 80], 400), [[0, 1, 2]])
+  })
+
+  it('starts a new slide as soon as an item overflows', () => {
+    assert.deepEqual(packHeights([200, 150, 150], 400), [[0, 1], [2]])
+  })
+
+  it('keeps an oversize single item on its own slide', () => {
+    assert.deepEqual(packHeights([500, 100], 400), [[0], [1]])
+  })
+
+  it('handles empties and zero capacity', () => {
+    assert.deepEqual(packHeights([], 400), [])
+    assert.deepEqual(packHeights([100], 0), [[0]])
   })
 })

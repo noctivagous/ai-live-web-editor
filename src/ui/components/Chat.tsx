@@ -13,6 +13,12 @@ import {
   type LogItem,
   type ToolStep,
 } from '../lib/chatSession'
+import {
+  parseWorkflowSnapshot,
+  publishWorkflowChanged,
+  subscribeWorkflow,
+  workflowSnapshotsEqual,
+} from '../lib/workflowSync'
 
 function isWriteTool(name: string): boolean {
   return name === 'write-real-file' || name === 'str-replace' || name === 'writeRealFileTool'
@@ -85,29 +91,47 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const scroller = useRef<HTMLDivElement>(null)
   const fingerprint = useRef('')
   const abortRef = useRef<AbortController | null>(null)
+  // Last server snapshot: guards polling/peer refreshes so identical snapshots
+  // never reset state (which would re-render and yank the scroll position).
+  const sketchRef = useRef('')
+
+  // The launcher is the source of truth; both Chat instances (sidebar and the
+  // live-window /chat-embed) converge on it, so the Files | Live sketch
+  // control matches in all aspects: seg selection, sketch panel, patch list,
+  // action buttons, and input placeholder.
+  function applySnapshot(data: unknown): boolean {
+    const parsed = parseWorkflowSnapshot(data)
+    if (!parsed) return false
+    setSketch(prev => (prev && workflowSnapshotsEqual(prev, parsed) ? prev : parsed))
+    setWorkflow(prev => (prev === parsed.mode ? prev : parsed.mode))
+    const key = JSON.stringify({ mode: parsed.mode, accepted: parsed.accepted, patches: parsed.patches })
+    const changed = key !== sketchRef.current
+    sketchRef.current = key
+    return changed
+  }
 
   async function refreshWorkflow() {
     try {
       const data = await getWorkflow()
-      if (data?.mode) setWorkflow(data.mode)
-      setSketch(data)
+      applySnapshot(data)
     } catch { /* launcher down */ }
   }
 
   async function setWorkflowMode(mode: ChatWorkflow) {
-    if (mode === workflow) return
+    // No local early-return: the click declares intent to the server, and the
+    // server snapshot (broadcast to the other Chat) decides what sticks.
     try {
       const data = await postWorkflow({ mode })
-      setWorkflow(data.mode)
-      setSketch(data)
+      applySnapshot(data)
+      publishWorkflowChanged()
     } catch { /* ignore */ }
   }
 
   async function sketchAction(action: 'undo' | 'discard' | 'accept') {
     try {
       const data = await postWorkflow({ action })
-      setWorkflow(data.mode)
-      setSketch(data)
+      applySnapshot(data)
+      publishWorkflowChanged()
     } catch { /* ignore */ }
   }
 
@@ -147,7 +171,9 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       if (ev.type === 'status') {
         setWorkingLabel(ev.text)
       } else if (ev.type === 'workflow') {
-        setWorkflow(ev.mode)
+        // Server auto-routed this turn: pull the full snapshot (mode + patches)
+        // and tell the other Chat instance to do the same.
+        void refreshWorkflow().then(() => publishWorkflowChanged())
         if (ev.reason) setLog(l => [...l, { role: 'system', text: ev.reason }])
       } else if (ev.type === 'reasoning-delta') {
         thinkText += ev.text
@@ -193,7 +219,10 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       if (ctrl.signal.aborted) {
         setLog(withStopped)
       } else {
+        // The agent may have added sketch patches or triggered an auto-route;
+        // converge this instance and broadcast so the other Chat follows.
         await refreshWorkflow()
+        publishWorkflowChanged()
         if (wroteFiles) onAfterChat()
       }
     } catch (e: unknown) {
@@ -232,6 +261,24 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
 
   useEffect(() => {
     void refreshWorkflow()
+  }, [])
+
+  // Keep the Files | Live sketch control in sync with the other Chat instance:
+  // instant refresh on peer changes, plus a slow poll and focus refresh to
+  // catch server-side switches (auto-route, agent-added patches). Identical
+  // snapshots are dropped by applySnapshot, so this never disturbs the view.
+  useEffect(() => {
+    const off = subscribeWorkflow(() => { void refreshWorkflow() })
+    const timer = setInterval(() => { void refreshWorkflow() }, 3000)
+    const onFocus = () => { void refreshWorkflow() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      off()
+      clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
   }, [])
 
   useEffect(() => {

@@ -32,12 +32,94 @@
     menuX: 0,
     menuY: 0,
     menuSelector: null,
+    lastPick: null,
     pageNotes: '',
     notesVisible: false,
     notesCollapsed: false,
     notesPos: { x: 24, y: 24 },
     dragLink: null,
+    notifyAt: 0,
   };
+
+  // Chat bridge: the :4112 chat iframe is cross-origin, so state crosses via
+  // postMessage. The embed re-publishes to the sidebar; see annotationSync.
+  var CHAT_NS = 'ai-live-annotations';
+  var CHAT_CMD_NS = 'ai-live-chat-cmd';
+
+  function abbrSelector(selector) {
+    var s = String(selector || '').trim();
+    if (!s) return 'body';
+    var parts = s.split('>').map(function (p) { return p.trim(); }).filter(Boolean);
+    if (parts.length <= 2) return s;
+    return parts.slice(-2).map(function (p) { return p.replace(/:nth-of-type\(\d+\)/g, ''); }).join(' > ');
+  }
+
+  function abbrText(text, max) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (t.length <= max) return t;
+    return t.slice(0, max) + '…';
+  }
+
+  function buildDigest() {
+    return {
+      ns: CHAT_NS,
+      v: 1,
+      at: Date.now(),
+      selection: state.lastPick,
+      annotations: state.annotations.map(function (a) {
+        return { id: a.id, selector: a.selector, abbr: abbrSelector(a.selector), text: a.text || '' };
+      }),
+      pageNote: state.pageNotes
+        ? { present: true, len: state.pageNotes.length, abbr: abbrText(state.pageNotes, 24) }
+        : { present: false, len: 0, abbr: '' },
+    };
+  }
+
+  function chatFrame() {
+    try {
+      // The chat iframe lives in the overlay host's shadow DOM.
+      var host = document.getElementById('ai-live-chat-host');
+      var root = host && host.shadowRoot;
+      var frame = root
+        ? root.querySelector('iframe[title="AI Chat"]')
+        : document.querySelector('iframe[title="AI Chat"]');
+      return frame ? frame.contentWindow : null;
+    } catch (e) { return null; }
+  }
+
+  function notifyChat(force) {
+    var now = Date.now();
+    if (!force && now - state.notifyAt < 300) return;
+    state.notifyAt = now;
+    var digest = buildDigest();
+    try {
+      var frame = chatFrame();
+      if (frame) frame.postMessage(digest, '*');
+    } catch (e) { /* cross-origin post is allowed; ignore */ }
+  }
+
+  function handleChatCommand(ev) {
+    var data = ev && ev.data;
+    if (!data || typeof data !== 'object' || data.ns !== CHAT_CMD_NS) return;
+    var api = window.__AI_LIVE_EDIT__;
+    if (!api) return;
+    if (data.cmd === 'pick') api.enableSelectMode();
+    else if (data.cmd === 'submit') submitNotesToLauncher();
+    else if (data.cmd === 'notes') {
+      state.notesVisible = !state.notesVisible;
+      saveNotes();
+      scheduleRender();
+    }
+  }
+
+  function setStatus(text, isError) {
+    var root = document.getElementById('ai-live-edit-root');
+    var el = root ? root.querySelector('.ai-le-status') : null;
+    if (!el) return;
+    el.textContent = text || '';
+    if (isError) el.setAttribute('data-error', 'true');
+    else el.removeAttribute('data-error');
+  }
 
   function save() {
     try {
@@ -121,28 +203,39 @@
     var style = document.createElement('style');
     style.id = 'ai-live-edit-style';
     style.textContent = [
-      '#ai-live-edit-root .ai-le-toolbar, #ai-live-edit-root .ai-le-toolbar[popover] { position: fixed; inset: unset; right: 16px; bottom: 16px; margin: 0; width: max-content; height: fit-content; overflow: visible; display: flex; gap: 8px; padding: 8px 10px; border: none; border-radius: 10px; background: rgba(17,24,39,0.92); color: #f9fafb; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.25); }',
-      '#ai-live-edit-root .ai-le-toolbar button { background: #2563eb; border: none; color: white; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }',
-      '#ai-live-edit-root .ai-le-toolbar button[data-active="true"] { background: #16a34a; }',
-      '#ai-live-edit-root .ai-le-tag { position: absolute; max-width: 240px; background: rgba(255,255,255,0.95); color: #111827; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px 4px; font-size: 12px; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }',
+      '#ai-live-edit-root .ai-le-toolbar, #ai-live-edit-root .ai-le-toolbar[popover] { position: fixed; inset: unset; right: 16px; bottom: 16px; margin: 0; width: max-content; height: fit-content; overflow: visible; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #26262c; border-radius: 12px; background: #141417; color: #e4e4e7; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; pointer-events: auto; box-shadow: 0 12px 40px rgba(0,0,0,.45); }',
+      '#ai-live-edit-root .ai-le-toolbar button { background: #1a1a1e; border: 1px solid #26262c; color: #e4e4e7; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500; }',
+      '#ai-live-edit-root .ai-le-toolbar button:hover { background: #1f1f24; border-color: #34343e; }',
+      '#ai-live-edit-root .ai-le-toolbar button[data-active="true"] { background: rgba(34,197,94,.18); border-color: rgba(34,197,94,.5); color: #bbf7d0; }',
+      '#ai-live-edit-root .ai-le-toolbar button:disabled { opacity: .45; cursor: default; }',
+      '#ai-live-edit-root .ai-le-label { font-weight: 600; }',
+      '#ai-live-edit-root .ai-le-status { color: #a1a1aa; font-size: 11.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '#ai-live-edit-root .ai-le-status[data-error="true"] { color: #fca5a5; }',
+      '#ai-live-edit-root .ai-le-error { position: fixed; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 8px; max-width: 340px; padding: 8px 10px; background: #141417; color: #fecaca; border: 1px solid rgba(239,68,68,.4); border-radius: 12px; font-size: 12px; pointer-events: auto; box-shadow: 0 12px 40px rgba(0,0,0,.45); }',
+      '#ai-live-edit-root .ai-le-error button { background: #1a1a1e; border: 1px solid #26262c; color: #e4e4e7; padding: 4px 8px; border-radius: 8px; cursor: pointer; font-size: 11px; }',
+      '#ai-live-edit-root .ai-le-tag { position: absolute; max-width: 240px; background: #1a1a1e; color: #e4e4e7; border: 1px solid #26262c; border-radius: 10px; padding: 6px 8px 4px; font-size: 12px; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,.4); }',
       '#ai-live-edit-root .ai-le-tag-content { outline: none; min-height: 16px; white-space: pre-wrap; }',
-      '#ai-live-edit-root .ai-le-tag-footer { margin-top: 4px; font-size: 10px; color: #6b7280; border-top: 1px dashed #e5e7eb; padding-top: 3px; word-break: break-all; }',
-      '#ai-live-edit-root .ai-le-tag button { margin-left: 8px; border: none; background: transparent; cursor: pointer; color: #6b7280; }',
-      '#ai-live-edit-root .ai-le-tag[data-source="ai"] { border: 2px solid #2563eb; background: #eff6ff; }',
+      '#ai-live-edit-root .ai-le-tag-content:empty:before { content: attr(data-placeholder); color: #71717a; }',
+      '#ai-live-edit-root .ai-le-tag-footer { margin-top: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; color: #93c5fd; border-top: 1px dashed #26262c; padding-top: 3px; word-break: break-all; }',
+      '#ai-live-edit-root .ai-le-close { margin-left: 8px; border: 1px solid #26262c; background: #1a1a1e; border-radius: 6px; padding: 0 6px; line-height: 18px; cursor: pointer; color: #a1a1aa; font-weight: 700; }',
+      '#ai-live-edit-root .ai-le-close:hover { color: #fecaca; border-color: rgba(239,68,68,.4); }',
+      '#ai-live-edit-root .ai-le-tag[data-source="ai"] { border-color: #3b82f6; }',
       '#ai-live-edit-root .ai-le-highlight { position: fixed; border: 2px solid #3b82f6; border-radius: 6px; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); pointer-events: none; }',
-      '#ai-live-edit-root .ai-le-highlight-label { position: fixed; background: #1f2937; color: #f9fafb; padding: 2px 6px; font-size: 11px; border-radius: 6px; pointer-events: none; }',
-      '#ai-live-edit-root .ai-le-menu { position: fixed; background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px; min-width: 160px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); pointer-events: auto; display: none; }',
-      '#ai-live-edit-root .ai-le-menu button { display: block; width: 100%; text-align: left; background: transparent; border: none; padding: 6px 8px; cursor: pointer; font-size: 12px; }',
-      '#ai-live-edit-root .ai-le-menu button:hover { background: #f3f4f6; }',
-      '#ai-live-edit-root .ai-le-notes, #ai-live-edit-root .ai-le-notes[popover] { position: fixed; inset: unset; margin: 0; width: 280px; overflow: visible; background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 12px 24px rgba(0,0,0,0.2); pointer-events: auto; }',
-      '#ai-live-edit-root .ai-le-notes-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; font-size: 12px; font-weight: 600; cursor: move; background: #111827; color: #f9fafb; border-top-left-radius: 10px; border-top-right-radius: 10px; }',
-      '#ai-live-edit-root .ai-le-notes-titlebar button { background: #374151; border: none; color: #f9fafb; font-size: 11px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }',
+      '#ai-live-edit-root .ai-le-highlight-label { position: fixed; background: #141417; color: #bfdbfe; border: 1px solid rgba(59,130,246,.4); padding: 2px 6px; font-size: 11px; border-radius: 6px; pointer-events: none; font-family: ui-monospace, Menlo, Consolas, monospace; }',
+      '#ai-live-edit-root .ai-le-menu { position: fixed; background: #141417; color: #e4e4e7; border: 1px solid #26262c; border-radius: 10px; padding: 6px; min-width: 180px; box-shadow: 0 8px 20px rgba(0,0,0,.45); pointer-events: auto; display: none; }',
+      '#ai-live-edit-root .ai-le-menu button { display: block; width: 100%; text-align: left; background: transparent; border: none; padding: 6px 8px; cursor: pointer; font-size: 12px; color: #e4e4e7; border-radius: 6px; }',
+      '#ai-live-edit-root .ai-le-menu button:hover { background: #1f1f24; }',
+      '#ai-live-edit-root .ai-le-notes, #ai-live-edit-root .ai-le-notes[popover] { position: fixed; inset: unset; margin: 0; width: 280px; overflow: visible; background: #141417; color: #e4e4e7; border: 1px solid #26262c; border-radius: 12px; box-shadow: 0 12px 24px rgba(0,0,0,.45); pointer-events: auto; }',
+      '#ai-live-edit-root .ai-le-notes-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; font-size: 12px; font-weight: 600; cursor: move; background: #1a1a1e; color: #e4e4e7; border-bottom: 1px solid #1e1e23; border-top-left-radius: 12px; border-top-right-radius: 12px; }',
+      '#ai-live-edit-root .ai-le-notes-titlebar button { background: #1a1a1e; border: 1px solid #26262c; color: #e4e4e7; font-size: 11px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }',
+      '#ai-live-edit-root .ai-le-notes-titlebar button:hover { background: #1f1f24; }',
       '#ai-live-edit-root .ai-le-notes-body { padding: 8px; }',
-      '#ai-live-edit-root .ai-le-notes textarea { width: 100%; min-height: 140px; resize: vertical; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px; font-size: 12px; font-family: ui-sans-serif, system-ui, sans-serif; color: #111827; box-sizing: border-box; }',
+      '#ai-live-edit-root .ai-le-notes textarea { width: 100%; min-height: 140px; resize: vertical; background: #0f0f12; border: 1px solid #26262c; border-radius: 8px; padding: 6px; font-size: 12px; font-family: ui-sans-serif, system-ui, sans-serif; color: #e4e4e7; box-sizing: border-box; }',
+      '#ai-live-edit-root .ai-le-notes textarea:focus { outline: none; border-color: #3b82f6; }',
       '#ai-live-edit-root .ai-le-connector { position: fixed; inset: 0; pointer-events: none; }',
-      '#ai-live-edit-root .ai-le-port { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 999px; background: #111827; border: 2px solid #ef4444; margin-left: 8px; cursor: crosshair; }',
+      '#ai-live-edit-root .ai-le-port { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: 999px; background: #141417; border: 2px solid #ef4444; margin-left: 8px; cursor: crosshair; }',
       '#ai-live-edit-root .ai-le-port-inner { width: 4px; height: 4px; border-radius: 999px; background: #ef4444; }',
-      '#ai-live-edit-root .ai-le-outline { outline: 2px solid #f59e0b !important; outline-offset: 2px; }',
+      '#ai-live-edit-root .ai-le-outline { outline: 2px solid #3b82f6 !important; outline-offset: 2px; }',
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -256,10 +349,12 @@
         var content = document.createElement('div');
         content.className = 'ai-le-tag-content';
         content.contentEditable = 'true';
+        content.setAttribute('data-placeholder', 'Type a note…');
         content.textContent = annotation.text;
         content.addEventListener('input', function () {
           annotation.text = content.textContent || '';
           save();
+          notifyChat(false);
         });
         tag.appendChild(content);
         if (annotation.type === 'move') {
@@ -285,12 +380,16 @@
           tag.appendChild(port);
         }
         var close = document.createElement('button');
-        close.textContent = 'x';
+        close.className = 'ai-le-close';
+        close.textContent = '×';
+        close.title = 'Delete this annotation';
+        close.setAttribute('aria-label', 'Delete this annotation');
         close.addEventListener('click', function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
           state.annotations = state.annotations.filter(function (a) { return a.id !== annotation.id; });
           save();
+          notifyChat(true);
           scheduleRender();
         });
         tag.appendChild(close);
@@ -356,8 +455,9 @@
   }
 
   function pushAnnotation(type, text, selector, targetSelector) {
+    var id = 'ann_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
     state.annotations.push({
-      id: 'ann_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+      id: id,
       type: type,
       text: text,
       selector: selector,
@@ -367,6 +467,19 @@
       userNotes: '',
     });
     save();
+    notifyChat(true);
+    return id;
+  }
+
+  // Focus the inline editor of a freshly added tag (replaces window.prompt).
+  function focusTag(id) {
+    setTimeout(function () {
+      try {
+        var root = document.getElementById('ai-live-edit-root');
+        var content = root && root.querySelector('[data-annotation-id="' + id + '"] .ai-le-tag-content');
+        if (content) content.focus();
+      } catch (e) { /* ignore */ }
+    }, 60);
   }
 
   function renderMenu(root) {
@@ -398,16 +511,16 @@
         menu.appendChild(btn);
       }
       addButton('Add note', function () {
-        var text = window.prompt('Add annotation');
-        if (text && text.trim()) pushAnnotation('note', text.trim(), selector);
+        focusTag(pushAnnotation('note', '', selector));
       });
       addButton('Move this here', function () {
-        var text = window.prompt('Describe the move (then drag the red port onto the target)');
-        if (text && text.trim()) pushAnnotation('move', text.trim(), selector);
+        focusTag(pushAnnotation('move', '', selector));
+        setStatus('Drag the red port onto the move target');
       });
       addButton('Delete annotations for element', function () {
         state.annotations = state.annotations.filter(function (a) { return a.selector !== selector; });
         save();
+        notifyChat(true);
       });
       addButton('Exit picker', function () { toggleSelectMode(false); });
     })(state.menuSelector);
@@ -506,6 +619,7 @@
       textarea.addEventListener('input', function () {
         state.pageNotes = textarea.value;
         saveNotes();
+        notifyChat(false);
       });
       body.appendChild(textarea);
       titlebar.addEventListener('mousedown', function (ev) {
@@ -574,8 +688,11 @@
     if (!target) return;
     ev.preventDefault();
     ev.stopPropagation();
-    openMenu(buildSelector(target), ev.clientX, ev.clientY);
+    state.lastPick = buildSelector(target);
+    openMenu(state.lastPick, ev.clientX, ev.clientY);
     toggleSelectMode(false);
+    setStatus('Selected ' + abbrSelector(state.lastPick) + ' — pick an action');
+    notifyChat(true);
     scheduleRender();
   }
 
@@ -620,12 +737,20 @@
 
   function submitNotesToLauncher() {
     var base = window.__AI_LIVE_LAUNCHER__;
-    if (!base) return;
+    if (!base) {
+      setStatus('Submit needs the launcher URL', true);
+      return;
+    }
     var payload = {
-      annotations: state.annotations,
+      annotations: state.annotations.filter(function (a) { return (a.text || '').trim(); }),
       pageNotes: state.pageNotes || '',
       url: location.href,
     };
+    if (!payload.annotations.length && !payload.pageNotes) {
+      setStatus('No notes yet — pick an element first', true);
+      return;
+    }
+    setStatus('Sending…');
     fetch(String(base).replace(/\/$/, '') + '/api/live-edit/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -634,14 +759,17 @@
       if (data && data.ok) {
         state.annotations = [];
         state.pageNotes = '';
+        state.lastPick = null;
         save();
         saveNotes();
+        notifyChat(true);
+        setStatus('Sent ' + (data.annotationCount || 0) + ' note(s)');
         scheduleRender();
       } else {
-        window.alert((data && data.error) || 'Submit failed');
+        setStatus('Submit failed: ' + ((data && data.error) || 'unknown'), true);
       }
     }).catch(function (err) {
-      window.alert(err && err.message ? err.message : String(err));
+      setStatus('Submit failed: ' + (err && err.message ? err.message : String(err)), true);
     });
   }
 
@@ -652,7 +780,10 @@
     toolbar = document.createElement('div');
     toolbar.className = 'ai-le-toolbar';
     var label = document.createElement('div');
+    label.className = 'ai-le-label';
     label.textContent = 'Live editing';
+    var status = document.createElement('div');
+    status.className = 'ai-le-status';
     var btn = document.createElement('button');
     btn.id = 'ai-le-btn';
     btn.textContent = 'Add note';
@@ -670,9 +801,11 @@
       ev.stopPropagation();
       state.notesVisible = !state.notesVisible;
       saveNotes();
+      notifyChat(true);
       scheduleRender();
     });
     toolbar.appendChild(label);
+    toolbar.appendChild(status);
     toolbar.appendChild(btn);
     toolbar.appendChild(notesBtn);
     if (window.__AI_LIVE_LAUNCHER__) {
@@ -704,6 +837,15 @@
   window.addEventListener('click', handleSelect, true);
   window.addEventListener('contextmenu', handleContextMenu, true);
   window.addEventListener('keydown', handleKeydown, true);
+  window.addEventListener('message', handleChatCommand);
+  // Late-joining chat iframe asks; answer with the current digest.
+  window.addEventListener('message', function (ev) {
+    var data = ev && ev.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.ns === 'ai-live-chat-hello' && ev.source) {
+      try { ev.source.postMessage(buildDigest(), '*'); } catch (e) { /* ignore */ }
+    }
+  });
 
   window.__AI_LIVE_EDIT__ = {
     version: 1,
@@ -711,7 +853,7 @@
     popover: supportsPopover(),
     state: state,
     baselineWireframeJson: null,
-    enableSelectMode: function () { if (!state.selectMode) toggleSelectMode(); },
+    enableSelectMode: function () { if (!state.selectMode) toggleSelectMode(); notifyChat(true); },
     disableSelectMode: function () { toggleSelectMode(false); },
     setToolbarOffset: function (rightPx) {
       var toolbar = document.querySelector('#ai-live-edit-root .ai-le-toolbar');
@@ -745,6 +887,7 @@
     clearAnnotations: function () {
       state.annotations = [];
       save();
+      notifyChat(true);
       clearOutlines();
       scheduleRender();
     },
@@ -757,10 +900,12 @@
     clearAll: function () {
       state.annotations = [];
       state.pageNotes = '';
+      state.lastPick = null;
       state.notesVisible = false;
       state.notesCollapsed = false;
       save();
       saveNotes();
+      notifyChat(true);
       clearOutlines();
       scheduleRender();
     },

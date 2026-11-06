@@ -177,7 +177,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult }: {
           <button
             onClick={() => void toggleAnnotate()}
             style={{ padding: '2px 8px', fontSize: 11, background: annotating ? '#16a34a' : undefined, color: annotating ? '#fff' : undefined, border: annotating ? 'none' : undefined, borderRadius: 4 }}
-            title={onHmr ? 'On the live Vite app, use Annotate on the previewed page (DevTools action, next to the chat overlay)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
+            title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
             disabled={onHmr}
           >
             {annotating ? 'Annotating…' : 'Annotate'}

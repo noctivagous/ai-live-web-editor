@@ -19,6 +19,16 @@ import {
   subscribeWorkflow,
   workflowSnapshotsEqual,
 } from '../lib/workflowSync'
+import {
+  annotationDigestsEqual,
+  emptyAnnotationDigest,
+  loadAnnotationDigest,
+  parseAnnotationDigest,
+  publishAnnotations,
+  subscribeAnnotations,
+  type AnnotationDigest,
+} from '../lib/annotationSync'
+import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 
 function isWriteTool(name: string): boolean {
   return name === 'write-real-file' || name === 'str-replace' || name === 'writeRealFileTool'
@@ -88,6 +98,24 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const [workflow, setWorkflow] = useState<ChatWorkflow>('files')
   const [deckOpen, setDeckOpen] = useState(false)
   const [sketch, setSketch] = useState<WorkflowSnapshot | null>(null)
+  // Page annotations from the live page. Only the embed iframe hears the page
+  // directly (postMessage); it re-publishes so the sidebar shows the same chips.
+  const [annot, setAnnot] = useState<AnnotationDigest>(() => loadAnnotationDigest() || emptyAnnotationDigest())
+  const inIframe = typeof window !== 'undefined' && window.parent !== window
+
+  function applyDigest(next: AnnotationDigest) {
+    setAnnot(prev => (annotationDigestsEqual(prev, next) ? prev : next))
+  }
+
+  function postChatCommand(cmd: 'pick' | 'submit' | 'notes') {
+    try {
+      window.parent.postMessage({ ns: 'ai-live-chat-cmd', cmd }, '*')
+    } catch { /* no live page above us (sidebar) */ }
+  }
+
+  function insertToken(token: string) {
+    setInput(v => (v && !v.endsWith(' ') ? `${v} ${token}` : `${v}${token}`))
+  }
   const scroller = useRef<HTMLDivElement>(null)
   const fingerprint = useRef('')
   const abortRef = useRef<AbortController | null>(null)
@@ -263,6 +291,33 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     void refreshWorkflow()
   }, [])
 
+  // Annotation bridge: hear the live page (embed only), relay to the sidebar,
+  // and pick up the relayed digest (sidebar). Late joiners read the stored one.
+  useEffect(() => {
+    const stored = loadAnnotationDigest()
+    if (stored) applyDigest(stored)
+    const off = subscribeAnnotations((digest) => { applyDigest(digest) })
+    const onMessage = (ev: MessageEvent) => {
+      // Direct from the live page (reaches the embed iframe only): render the
+      // chips here and relay to the sidebar. Sidebar relays arrive through
+      // subscribeAnnotations above, never through window messages.
+      const data = ev.data as { ns?: unknown } | null
+      if (!data || typeof data !== 'object' || data.ns !== 'ai-live-annotations') return
+      const parsed = parseAnnotationDigest(data)
+      if (!parsed) return
+      applyDigest(parsed)
+      publishAnnotations(parsed)
+    }
+    window.addEventListener('message', onMessage)
+    try {
+      window.parent.postMessage({ ns: 'ai-live-chat-hello' }, '*')
+    } catch { /* top-level window */ }
+    return () => {
+      off()
+      window.removeEventListener('message', onMessage)
+    }
+  }, [])
+
   // Keep the Files | Live sketch control in sync with the other Chat instance:
   // instant refresh on peer changes, plus a slow poll and focus refresh to
   // catch server-side switches (auto-route, agent-added patches). Identical
@@ -391,6 +446,49 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         ) : (
           <button type="button" onClick={() => { void send(); void refreshKeyHint() }} className="deck-btn">
             Send
+          </button>
+        )}
+      </div>
+      <div className="ws-chips" title="Page annotations from the live page — click a chip to insert it">
+        <span className="ws-label">Annotate</span>
+        {inIframe && (
+          <button type="button" className="deck-btn" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={() => postChatCommand('pick')} title="Pick an element on the live page">
+            Pick
+          </button>
+        )}
+        {annot.selection && (
+          <button
+            type="button"
+            className="ws-chip mono"
+            onClick={() => insertToken(elementToken(annot.selection || ''))}
+            title={`Insert ${annot.selection}`}
+          >@{abbreviateSelector(annot.selection)}</button>
+        )}
+        {annot.annotations.map(a => (
+          <button
+            type="button"
+            key={a.id || `${a.selector}-${a.text}`}
+            className="ws-chip"
+            onClick={() => insertToken(noteToken(a.text || a.selector))}
+            title={`${a.selector}${a.text ? ` — ${a.text}` : ''}`}
+          >{a.abbr || abbreviateSelector(a.selector)}</button>
+        ))}
+        {annot.pageNote.present && (
+          <button
+            type="button"
+            className="ws-chip"
+            onClick={() => insertToken(noteToken(annot.pageNote.abbr))}
+            title={`Page note (${annot.pageNote.len} chars) — inserts the visible summary`}
+          >note: {annot.pageNote.abbr || `${annot.pageNote.len} chars`}</button>
+        )}
+        {!annot.selection && !annot.annotations.length && !annot.pageNote.present && (
+          <span className="field-hint" style={{ marginTop: 0 }}>
+            {inIframe ? 'Pick an element on the live page to attach notes.' : 'Annotate on the live page — chips appear here.'}
+          </span>
+        )}
+        {inIframe && (annot.selection || annot.annotations.length || annot.pageNote.present) && (
+          <button type="button" className="deck-btn primary" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={() => postChatCommand('submit')} title="Send page notes to the AI">
+            Submit
           </button>
         )}
       </div>

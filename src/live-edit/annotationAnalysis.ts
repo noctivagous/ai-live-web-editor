@@ -10,6 +10,7 @@ export interface PageAnnotation {
   text?: string
   selector?: string
   targetSelector?: string
+  component?: string
   source?: string
   /** Agentation fields (optional; overlay notes leave them unset). */
   kind?: 'feedback' | 'placement' | 'rearrange'
@@ -18,7 +19,8 @@ export interface PageAnnotation {
   sourceFile?: string
   boundingBox?: { x: number, y: number, width: number, height: number }
   computedStyles?: string
-  placement?: { componentType: string, width: number, height: number, text?: string }
+  placement?: { componentType: string, width: number, height: number, text?: string, kind?: string, x?: number, y?: number, viewportWidth?: number, viewportHeight?: number }
+  intersects?: string[]
   rearrange?: { selector: string, label: string, originalRect: { x: number, y: number, width: number, height: number }, currentRect: { x: number, y: number, width: number, height: number } }
   intentTag?: string
 }
@@ -109,7 +111,15 @@ export function buildLiveEditPrompt(input: {
     const where = r?.file
       ? ` (≈ ${r.file}${r.component ? ` ${r.component}` : ''}${r.startLine ? `:${r.startLine}${r.endLine && r.endLine !== r.startLine ? `-${r.endLine}` : ''}` : ''})`
       : a.sourceFile ? '' : ' (≈ source unresolved — call resolve-source first)'
-    const parts = [`${i + 1}. [${intent}] ${a.selector}${target}${where}: ${a.text}`]
+    const component = a.component ? ` <${a.component}>` : ''
+    const parts = [`${i + 1}. [${intent}] ${a.selector}${target}${where}${component}: ${a.text}`]
+    if (a.type === 'placement' && a.placement) {
+      const p = a.placement
+      const at = (typeof p.x === 'number' && typeof p.y === 'number') ? ` at page (${p.x}, ${p.y})` : ''
+      const nearby = a.intersects && a.intersects.length ? ` Intersects: ${a.intersects.slice(0, 8).join(', ')}.` : ''
+      const specifics = a.text ? ` Specifics: ${a.text}` : ''
+      parts.push(`   Place a generic ${p.componentType} here: approx ${p.width}×${p.height}px${at}.${nearby} Style it to match the page — do not copy any reference styling, adapt to this UI.${specifics}`)
+    }
     if (a.element) parts.push(`   Element: ${a.element}`)
     if (a.selectedText) parts.push(`   Selected text: "${a.selectedText}"`)
     if (a.sourceFile) parts.push(sketch

@@ -117,9 +117,9 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     setAnnot(prev => (annotationDigestsEqual(prev, next) ? prev : next))
   }
 
-  function postChatCommand(cmd: 'pick' | 'submit' | 'notes' | 'deck-open' | 'deck-close') {
+  function postChatCommand(cmd: 'pick' | 'submit' | 'notes' | 'highlight' | 'unhighlight' | 'deck-open' | 'deck-close', args?: { selector?: string }) {
     try {
-      window.parent.postMessage({ ns: 'ai-live-chat-cmd', cmd }, '*')
+      window.parent.postMessage({ ns: 'ai-live-chat-cmd', cmd, ...args }, '*')
     } catch { /* no live page above us (sidebar) */ }
   }
 
@@ -352,8 +352,19 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       // Direct from the live page (reaches the embed iframe only): render the
       // chips here and relay to the sidebar. Sidebar relays arrive through
       // subscribeAnnotations above, never through window messages.
-      const data = ev.data as { ns?: unknown } | null
-      if (!data || typeof data !== 'object' || data.ns !== 'ai-live-annotations') return
+      const data = ev.data as { ns?: unknown; text?: unknown; selector?: unknown } | null
+      if (!data || typeof data !== 'object') return
+      if (data.ns === 'ai-live-chat-insert') {
+        // Overlay Ref button: drop a reference token straight into the input
+        // so the user can type about it — no menu selection needed.
+        if (!inIframe) return
+        const text = typeof data.text === 'string' ? data.text : ''
+        const selector = typeof data.selector === 'string' ? data.selector : ''
+        const token = text ? `note: "${text}"` : selector ? `@${selector}` : ''
+        if (token) setInput(token)
+        return
+      }
+      if (data.ns !== 'ai-live-annotations') return
       const parsed = parseAnnotationDigest(data)
       if (!parsed) return
       applyDigest(parsed)
@@ -492,6 +503,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         onPick={() => postChatCommand('pick')}
         onSubmit={() => postChatCommand('submit')}
         onInsertToken={insertToken}
+        onHighlightChip={(selector) => postChatCommand(selector ? 'highlight' : 'unhighlight', selector ? { selector } : undefined)}
       />
       {deckOpen && (
         <DeckMode

@@ -8,7 +8,7 @@
  * design; only committed chips sync.
  */
 
-export type AnnotationDigestItem = { id: string, selector: string, abbr: string, text: string }
+export type AnnotationDigestItem = { id: string, selector: string, abbr: string, text: string, component?: string }
 export type AnnotationDigestNote = { present: boolean, len: number, abbr: string }
 
 export type AnnotationDigest = {
@@ -38,12 +38,14 @@ export function parseAnnotationDigest(raw: unknown): AnnotationDigest | null {
     annotations: row.annotations.map((a) => {
       const item = (a && typeof a === 'object' ? a : {}) as Record<string, unknown>
       const selector = typeof item.selector === 'string' ? item.selector : 'body'
-      return {
+      const parsed: AnnotationDigestItem = {
         id: typeof item.id === 'string' ? item.id : '',
         selector,
         abbr: typeof item.abbr === 'string' && item.abbr ? item.abbr : selector,
         text: typeof item.text === 'string' ? item.text : '',
       }
+      if (typeof item.component === 'string' && item.component) parsed.component = item.component
+      return parsed
     }),
     pageNote: {
       present: Boolean(note.present),
@@ -59,7 +61,7 @@ export function annotationDigestsEqual(a: AnnotationDigest, b: AnnotationDigest)
   for (let i = 0; i < a.annotations.length; i++) {
     const x = a.annotations[i]
     const y = b.annotations[i]
-    if (x.id !== y.id || x.selector !== y.selector || x.abbr !== y.abbr || x.text !== y.text) return false
+    if (x.id !== y.id || x.selector !== y.selector || x.abbr !== y.abbr || x.text !== y.text || (x.component || '') !== (y.component || '')) return false
   }
   return a.pageNote.present === b.pageNote.present
     && a.pageNote.len === b.pageNote.len

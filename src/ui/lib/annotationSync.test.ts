@@ -23,6 +23,19 @@ describe('annotationSync digest', () => {
     assert.equal(parseAnnotationDigest({ nope: true }), null)
   })
 
+  it('keeps the optional React component tag and compares it', () => {
+    const withComp = {
+      ...emptyAnnotationDigest(),
+      annotations: [{ id: 'a1', selector: 'h1', abbr: 'h1', text: 'blue', component: 'Hero' }],
+    }
+    const parsed = parseAnnotationDigest(JSON.parse(JSON.stringify(withComp)))
+    assert.equal(parsed?.annotations[0].component, 'Hero')
+    assert.equal(annotationDigestsEqual(withComp, emptyAnnotationDigest()), false)
+    assert.equal(annotationDigestsEqual(withComp, { ...withComp }), true)
+    const dropped = parseAnnotationDigest({ v: 1, at: 0, selection: null, annotations: [{ id: 'a1', selector: 'h1', abbr: 'h1', text: 'blue', component: 42 }], pageNote: { present: false, len: 0, abbr: '' } })
+    assert.equal(dropped?.annotations[0].component, undefined)
+  })
+
   it('notices selection, annotation, and note changes', () => {
     const a = emptyAnnotationDigest()
     assert.equal(annotationDigestsEqual(a, emptyAnnotationDigest()), true)

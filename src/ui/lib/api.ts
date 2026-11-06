@@ -95,6 +95,102 @@ export async function probeModels(input: { key?: string, baseUrl?: string } = {}
   return data
 }
 
+/* ── Provider connections (BYOK) ─────────────────────────────────────── */
+
+export interface TaggedModel {
+  id: string
+  modalities: ('text' | 'image' | 'video' | 'audio')[]
+}
+
+export interface ConnectionInfo {
+  id: string
+  presetId: string
+  name: string
+  baseUrl: string
+  model: string
+  keyLast4: string
+  verifiedModels: TaggedModel[]
+  status: 'verified' | 'configured' | 'failed'
+  updatedAt: number
+  hasKey: boolean
+  active: boolean
+}
+
+export interface ModalityDefault {
+  connectionId: string
+  model: string
+}
+
+export interface ConnectionsPayload {
+  ok: boolean
+  connections: ConnectionInfo[]
+  activeId: string | null
+  modalityDefaults: Partial<Record<'text' | 'image' | 'video' | 'audio', ModalityDefault>>
+}
+
+export type ProbeErrorKind = 'invalid_key' | 'no_credit' | 'unreachable' | 'no_models' | 'unknown'
+
+export interface ConnectionProbe {
+  ok: boolean
+  provider?: string
+  providerName?: string
+  baseUrl?: string
+  models?: string[]
+  tagged?: TaggedModel[]
+  suggested?: string
+  errorKind?: ProbeErrorKind
+  error?: string
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(`${API}${url}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json() as T & { error?: string }
+  if (!r.ok) throw new Error((data as { error?: string }).error || `Request failed (${r.status})`)
+  return data
+}
+
+export async function getConnections() {
+  const r = await fetch(`${API}/api/connections`)
+  return r.json() as Promise<ConnectionsPayload>
+}
+
+export async function probeConnection(input: { key?: string, baseUrl?: string, presetId?: string, connectionId?: string }) {
+  // Probe failures are data, not exceptions: the card renders them by kind.
+  const r = await fetch(`${API}/api/connections/probe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return r.json() as Promise<ConnectionProbe>
+}
+
+export async function saveConnection(input: {
+  id?: string, presetId: string, name?: string, baseUrl?: string,
+  model: string, key?: string, verifiedModels?: TaggedModel[],
+}) {
+  return postJson<ConnectionsPayload & { saved: string }>('/api/connections', input)
+}
+
+export async function deleteConnection(id: string) {
+  return postJson<ConnectionsPayload>('/api/connections/delete', { id })
+}
+
+export async function activateConnection(id: string) {
+  return postJson<ConnectionsPayload>('/api/connections/activate', { id })
+}
+
+export async function testConnection(id: string) {
+  return postJson<ConnectionsPayload & { probe: { ok: boolean, errorKind?: ProbeErrorKind, error?: string } }>('/api/connections/test', { id })
+}
+
+export async function saveModalityDefaults(defaults: ConnectionsPayload['modalityDefaults']) {
+  return postJson<ConnectionsPayload>('/api/connections/modalities', { defaults })
+}
+
 export async function setPlaywrightPool(enabled: boolean) {
   const r = await fetch(`${API}/api/config/pool`, {
     method: 'POST',

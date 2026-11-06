@@ -9,24 +9,28 @@ import { getFsRoot } from './launcher.js'
 import { mountPageBridge } from './pageBridge.js'
 import { mountPoolPage } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
+import { mountConnectionsApi } from './connectionsApi.js'
+import { activePublic, syncFromLegacy } from './connections.js'
 import { activeToolsForMode } from './agentTools.js'
 import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard } from './sketchSession.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function publicConfig(publicUrl: string) {
-  const hasKey = hasAiKey()
+  const active = activePublic()
+  const hasKey = active ? active.hasKey : hasAiKey()
   const provider = publicProvider()
+  const modelName = active?.model || openaiModelName()
   return {
     ok: true,
     hasApiKey: hasKey,
     hasOpenAiKey: hasKey,
-    model: openaiModelName(),
-    modelName: openaiModelName(),
-    modelId: currentModelId(),
-    providerId: provider?.id || null,
-    providerName: provider?.name || null,
-    baseUrl: openaiBaseUrl(),
+    model: modelName,
+    modelName,
+    modelId: `openai/${modelName}`,
+    providerId: active?.providerId || provider?.id || null,
+    providerName: active?.providerName || provider?.name || null,
+    baseUrl: active?.baseUrl ?? openaiBaseUrl(),
     launcherUrl: publicUrl,
     previewStaticUrl: '/',
     previewHmrUrl: publicUrl,
@@ -55,6 +59,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountPageBridge(app)
   mountPoolPage(app)
   mountWorkflowApi(app)
+  mountConnectionsApi(app)
 
   app.get('/api/fs/health', (_req, res) => {
     const root = getFsRoot()
@@ -73,6 +78,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
         baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl : undefined,
         model: typeof body.model === 'string' ? body.model : undefined,
       })
+      syncFromLegacy()
       res.json({ ...publicConfig(url()), saved: true })
     } catch (e: any) {
       res.status(400).json({ ok: false, error: e.message })

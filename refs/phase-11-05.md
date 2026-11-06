@@ -429,12 +429,18 @@ them, and there is no wireframe *input* format — SVG is output only.
   last file edit, before the final message.
 - [ ] Preview Layout toggle: render `/api/layout/svg` output beside
   the iframe; width presets 375/768/1280 re-request or re-scale.
-- [ ] P0-b automatic gate, layout half: host runs `layout-snapshot`
-  after a Files turn that edited layout-bearing files (before the
-  final chat message is allowed to claim done), at the preview
-  width plus 375/1280 checks; findings enter the turn as a tool
-  result the agent must address or explicitly waive. Skill wording
-  (Step 2) is the fallback, not the mechanism.
+- [x] P0-b automatic gate, layout half — landed 2026-11-06 in
+  `pipeAgentChatStream` + `src/verify/` (gate/runGate/checkFrames).
+  Revision from discussion: deterministic widths come from hidden
+  same-origin check-iframes (`#ai-check-375/1280`, excluded from
+  normal dispatch) on the bridge path; pool `setViewportSize` is the
+  fallback for non-Vite pages. Pre-edit baseline captured pre-stream
+  on Files turns; only new-since-baseline findings are reported.
+  Trigger is any `str-replace`/`write-real-file` in the tool trace
+  (layout-bearing detection deferred — both signals run). Findings
+  enter via a bounded follow-up agent pass (maxSteps 4), fix-or-waive;
+  `done.verification` carries the outcome. Dogfood (broken column
+  caught at 375) still open — needs a running browser.
 - [ ] Cap SVG/box payload size for the agent (top-N boxes by area,
   note truncation in the result) — layout dumps must not recreate
   the whole-file token problem in a new format.
@@ -642,24 +648,32 @@ network + traces cover the "make code and check it" intent.
 
 ### Todos
 
-- [ ] Tier 1 console capture: ring buffer in page bridge
+- [x] Tier 1 console capture: ring buffer in page bridge
   (`src/vite-plugin/client/page-bridge.js`) and pool
-  (`src/browserPool.ts`); cap (e.g. 200 entries), include level,
-  text, timestamp, stack first line for errors.
-- [ ] `get-console` Mastra tool (wraps bridge/pool by live target);
-  add to both active-tool sets; test with a page that logs + throws.
-- [ ] Tier 1 network failures: pool request/response capture +
-  bridge resource-timing fallback; `get-network-failures` tool;
-  test with a page fetching a 404.
+  (`src/browserPool.ts`) — landed 2026-11-06. Cap 200 entries, level /
+  text / timestamp / first stack line. Bridge tested via vm harness
+  against the real file (`src/verify/bridgeConsole.test.ts`); pool
+  listeners attach in `getPage` (no live-browser run in this env).
+- [x] `get-console` Mastra tool (wraps bridge/pool by live target);
+  added to both active-tool sets. Live dogfood (page that logs +
+  throws) still open — needs a running browser.
+- [x] Tier 1 network failures: pool request/response capture;
+  `get-network-failures` tool. Bridge has no HTTP status, so it
+  returns an honest timing-level-only note instead of a fake
+  resource list (deviation from the plan's resource-timing fallback,
+  recorded here).
 - [ ] Skill update (`checking-the-page`): console check is mandatory
-  before "done" on behaviour changes. Acceptance: introduce a
-  runtime error via chat edit; agent spots it in console output
-  without being told.
-- [ ] P0-b automatic gate, console half: host polls the bridge/pool
+  before "done" on behaviour changes. Skills don't exist yet —
+  interim: agent instructions gained the check-console-before-done
+  line; port the wording into the skill when Step 2 lands.
+- [x] P0-b automatic gate, console half: host polls the bridge/pool
   console buffer after HMR settles on behaviour edits and injects
   new errors into the turn (same gate as Step 4's layout half —
-  one verification gate, two signals). No console tool call by the
-  model is required for the gate to fire.
+  one verification gate, two signals). Landed in
+  `pipeAgentChatStream` + `src/verify/runGate.ts`; kill-switch
+  `AI_LIVE_VERIFY=0`. Live dogfood still open (no browser in this
+  env): introduce a runtime error via chat edit and confirm the
+  gate reports it.
 - [ ] Tier 2 spike (timeboxed): `@mastra/mcp` + chrome-devtools-mcp
   behind a Settings flag; document attach mode vs launched-Chrome
   behaviour on this machine; keep or drop based on the spike notes

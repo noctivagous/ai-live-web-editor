@@ -3,6 +3,7 @@ import { resolveAgentModel } from '../../env.js'
 import { resolveConnectionModel } from '../../connections.js'
 import { listRealFilesTool, readRealFileTool, writeRealFileTool, grepTool, strReplaceTool, inspectDOMTool, takeSnapshotTool, patchDOMTool, evalTool, poolOpenTool, runProjectCheckTool } from '../tools/realFsTools.js'
 import { layoutSnapshotTool, layoutSvgTool } from '../tools/layoutTools.js'
+import { getConsoleTool, getNetworkFailuresTool } from '../tools/verifyTools.js'
 import { resolveSourceTool } from '../tools/resolveSourceTool.js'
 
 export const editorAgent = new Agent({
@@ -37,6 +38,7 @@ Efficient workflow:
 3. str-replace for lasting source changes (HMR updates the page)
 4. In Live sketch, patch-dom (insert/move/text/style/class/attr/remove) using selectors from take-snapshot
 5. eval-js only in Live sketch to run JS in the Vite page
+6. After behaviour or layout edits, check get-console (and layout-snapshot after layout edits) before claiming done. A host verification gate also re-checks automatically — address or explicitly waive anything it reports.
 
 When the user points at another URL (not the Vite app), pass url= to inspect/patch/eval/layout-snapshot/layout-svg, or call pool-open. That uses the Playwright pool, which the user must enable in Settings. If the pool is off, tell them to enable it.
 
@@ -63,5 +65,7 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'layout-svg': layoutSvgTool,
     'run-project-check': runProjectCheckTool,
     'resolve-source': resolveSourceTool,
+    'get-console': getConsoleTool,
+    'get-network-failures': getNetworkFailuresTool,
   }
 })

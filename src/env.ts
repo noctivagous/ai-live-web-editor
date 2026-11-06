@@ -102,6 +102,13 @@ export function playwrightPoolEnabled(): boolean {
   return false
 }
 
+/** Host verification gate. AI_LIVE_VERIFY=0 disables the automatic post-edit gate. */
+export function verifyGateEnabled(): boolean {
+  const v = (process.env.AI_LIVE_VERIFY || '').trim().toLowerCase()
+  if (v === '0' || v === 'off' || v === 'false' || v === 'no') return false
+  return true
+}
+
 export function setPlaywrightPool(enabled: boolean) {
   process.env.PLAYWRIGHT_POOL = enabled ? '1' : '0'
   upsertEnvVar('PLAYWRIGHT_POOL', enabled ? '1' : '0')

@@ -6,6 +6,16 @@ export interface TurnUsage {
   total: number
 }
 
+export type VerifySummary = {
+  ran: boolean
+  clean?: boolean
+  newLayout?: number
+  newConsole?: number
+  unverified?: string[]
+  followUp?: boolean
+  skipped?: string
+}
+
 export type ChatStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'workflow'; mode: 'files' | 'sketch'; reason?: string }
@@ -15,7 +25,7 @@ export type ChatStreamEvent =
   | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
   | { type: 'text-delta'; text: string }
   | { type: 'error'; error: string }
-  | { type: 'done'; usage?: TurnUsage | null; model?: string }
+  | { type: 'done'; usage?: TurnUsage | null; model?: string; verification?: VerifySummary }
 
 type LooseRecord = Record<string, unknown>
 
@@ -319,21 +329,93 @@ export async function pipeAgentChatStream(
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
     const { activeToolsForMode } = await import('./agentTools.js')
+    const { verifyGateEnabled } = await import('./env.js')
+    const { captureBaseline, runVerifyGate, gatePrompt } = await import('./verify/runGate.js')
+    const { shouldTriggerGate } = await import('./verify/gate.js')
+    // P0-b pre-edit baseline on Files turns (post-edit diff needs it).
+    // Never breaks the turn: failure means the gate reports "unverified".
+    let baseline: import('./verify/runGate.js').GateBaseline | null = null
+    if (mode === 'files' && verifyGateEnabled()) {
+      try {
+        baseline = await captureBaseline()
+      } catch {
+        baseline = null
+      }
+    }
+    const streamChunks = async (stream: AsyncIterable<unknown>) => {
+      for await (const chunk of stream) {
+        if (req?.aborted || abortSignal.aborted) break
+        const c = chunk as { type?: string; payload?: unknown } | null
+        if (c && typeof c === 'object' && (c.type === 'start' || c.type === 'step-start')) {
+          const p = asRecord(c.payload ?? chunk)
+          model = firstString(p, ['modelId', 'model']) || model
+        }
+        const mapped = mapMastraChunk(chunk)
+        if (mapped) {
+          if (mapped.type === 'tool-call') toolTrace.push(mapped.name)
+          send(mapped)
+        }
+      }
+    }
     const result = await agent.stream(payload as never, {
       maxSteps: 12,
       abortSignal,
       activeTools: activeToolsForMode(mode),
     })
     let model: string | undefined
-    for await (const chunk of result.fullStream) {
-      if (req?.aborted || abortSignal.aborted) break
-      const c = chunk as { type?: string; payload?: unknown } | null
-      if (c && typeof c === 'object' && (c.type === 'start' || c.type === 'step-start')) {
-        const p = asRecord(c.payload ?? chunk)
-        model = firstString(p, ['modelId', 'model']) || model
+    const toolTrace: string[] = []
+    await streamChunks(result.fullStream)
+    // P0-b host gate: Files turns that wrote files get re-checked here.
+    let verification: VerifySummary = { ran: false }
+    if (
+      mode === 'files' &&
+      verifyGateEnabled() &&
+      baseline &&
+      shouldTriggerGate(mode, toolTrace) &&
+      !req?.aborted &&
+      !abortSignal.aborted
+    ) {
+      send({ type: 'status', text: 'verifying layout + console…' })
+      let gate: import('./verify/runGate.js').GateResult
+      try {
+        gate = await runVerifyGate(baseline)
+      } catch (e: unknown) {
+        gate = { ran: true, layout: [], console: [], unverified: [e instanceof Error ? e.message : String(e)] }
       }
-      const mapped = mapMastraChunk(chunk)
-      if (mapped) send(mapped)
+      const prompt = gatePrompt(gate)
+      if (prompt && !req?.aborted && !abortSignal.aborted) {
+        const followPayload = Array.isArray(messages)
+          ? [
+            ...messages,
+            { role: 'assistant', content: 'Edits applied. Running automatic verification…' },
+            { role: 'user', content: prompt },
+          ]
+          : [{ role: 'user', content: prompt }]
+        const follow = await agent.stream(followPayload as never, {
+          maxSteps: 4,
+          abortSignal,
+          activeTools: activeToolsForMode(mode),
+        })
+        await streamChunks(follow.fullStream)
+        verification = {
+          ran: true,
+          newLayout: gate.layout.length,
+          newConsole: gate.console.length,
+          unverified: gate.unverified,
+          followUp: true,
+        }
+      } else {
+        verification = {
+          ran: true,
+          clean: !gate.layout.length && !gate.console.length && !gate.unverified.length,
+          newLayout: gate.layout.length,
+          newConsole: gate.console.length,
+          unverified: gate.unverified,
+          followUp: false,
+        }
+      }
+    } else if (mode === 'files' && !verifyGateEnabled()) {
+      verification = { ran: false, skipped: 'AI_LIVE_VERIFY=0' }
     }
     // Usage lives outside the chunk mapping: some gateways omit it, so a
     // missing value is "not reported", never 0.
@@ -348,7 +430,7 @@ export async function pipeAgentChatStream(
     } catch (e: unknown) {
       console.warn('[chat] usage lookup failed:', e instanceof Error ? e.message : String(e))
     }
-    send({ type: 'done', usage, model })
+    send({ type: 'done', usage, model, verification })
     res.end()
   } catch (e: unknown) {
     if (req?.aborted || abortSignal.aborted || isAbortError(e)) {

@@ -71,9 +71,12 @@ export async function livePageOp(op: PageOp, payload: Record<string, unknown> = 
   let result: unknown
   if (usePlaywrightLive(url) && !sketchOnVite) {
     if (op === 'layout-snapshot') return liveLayoutSnapshot(payload, url)
+    if (op === 'console') return liveConsole(payload, url)
     result = await runPoolOp(op, payload)
   } else if (op === 'layout-snapshot') {
     result = await liveLayoutSnapshot(payload, url)
+  } else if (op === 'console') {
+    result = await liveConsole(payload, url)
   } else {
     const raw = await pageCommand(op, payload)
     result = raw && typeof raw === 'object' ? { via: 'vite-page', ...(raw as object) } : raw
@@ -84,6 +87,40 @@ export async function livePageOp(op: PageOp, payload: Record<string, unknown> = 
 
 export async function poolOpen(url: string) {
   return runPoolOp('open', { url })
+}
+
+/** P0-b console signal: bridge ring buffer, or pool page listeners. */
+export async function liveConsole(params: Record<string, unknown> = {}, url?: string) {
+  if (usePlaywrightLive(url)) {
+    const denied = requirePlaywrightPool()
+    if (denied) return denied
+    const { getPage, readPoolConsole } = await import('./browserPool.js')
+    const page = await getPage(typeof params.url === 'string' ? params.url : url)
+    return { via: 'playwright', ...readPoolConsole(page, params as any) }
+  }
+  const raw = await pageCommand('console', params) as any
+  if (raw?.error || raw?.ok === false) return raw
+  return { via: 'vite-page', ...raw }
+}
+
+/**
+ * P0-b network signal: pool returns request-level failures; the bridge can
+ * only list resource timing (no status), labelled honestly.
+ */
+export async function liveNetworkFailures(params: Record<string, unknown> = {}, url?: string) {
+  if (usePlaywrightLive(url)) {
+    const denied = requirePlaywrightPool()
+    if (denied) return denied
+    const { getPage, readPoolNetwork } = await import('./browserPool.js')
+    const page = await getPage(typeof params.url === 'string' ? params.url : url)
+    return { via: 'playwright', ...readPoolNetwork(page, params as any) }
+  }
+  return {
+    via: 'vite-page',
+    ok: true,
+    failures: [],
+    note: 'bridge resource timing has no HTTP status — timing-level list only; request-level failures need the pool',
+  }
 }
 
 export async function liveLayoutSnapshot(params: Record<string, unknown> = {}, url?: string) {

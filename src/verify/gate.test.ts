@@ -1,0 +1,89 @@
+import assert from 'node:assert/strict'
+import { describe, it } from 'node:test'
+import {
+  consoleFindings,
+  diffFindings,
+  findingKey,
+  formatGatePrompt,
+  shouldTriggerGate,
+  toLayoutFindings,
+} from './gate.js'
+
+describe('shouldTriggerGate', () => {
+  it('fires on Files turns that wrote files', () => {
+    assert.equal(shouldTriggerGate('files', ['grep', 'str-replace']), true)
+    assert.equal(shouldTriggerGate('files', ['write-real-file']), true)
+  })
+
+  it('stays quiet otherwise', () => {
+    assert.equal(shouldTriggerGate('files', ['grep', 'take-snapshot']), false)
+    assert.equal(shouldTriggerGate('files', []), false)
+    assert.equal(shouldTriggerGate('sketch', ['str-replace']), false)
+  })
+})
+
+describe('findingKey', () => {
+  it('keys overlaps independent of pair order', () => {
+    const a = findingKey({ a: 'id:x', b: 'id:y' }, 375)
+    const b = findingKey({ b: 'id:y', a: 'id:x' }, 375)
+    assert.equal(a, b)
+    assert.ok(a.includes('@375'))
+  })
+
+  it('keys clipping and overflow distinctly', () => {
+    assert.ok(findingKey({ target: 'id:a', clippedBy: 'id:p' }).startsWith('clip:'))
+    assert.ok(findingKey({ stableId: 'id:o', axis: 'x' }).startsWith('overflow:'))
+  })
+})
+
+describe('toLayoutFindings + diffFindings', () => {
+  const before = toLayoutFindings({ overlaps: [{ a: 'id:x', b: 'id:y' }] }, 375)
+  const after = toLayoutFindings({
+    overlaps: [{ a: 'id:x', b: 'id:y' }, { a: 'id:m', b: 'id:n' }],
+    clippings: [{ target: 'id:c', clippedBy: 'id:p' }],
+  }, 375)
+
+  it('keeps only new findings', () => {
+    const diff = diffFindings(before, after)
+    assert.equal(diff.length, 2)
+    assert.ok(diff.every((f) => f.width === 375))
+  })
+
+  it('returns empty when nothing changed', () => {
+    assert.deepEqual(diffFindings(before, before), [])
+  })
+
+  it('tolerates missing analysis', () => {
+    assert.deepEqual(toLayoutFindings(null), [])
+    assert.deepEqual(toLayoutFindings(undefined), [])
+  })
+})
+
+describe('consoleFindings', () => {
+  it('keeps only new error-ish entries', () => {
+    const entries = [
+      { seq: 1, level: 'log', text: 'old' },
+      { seq: 5, level: 'log', text: 'fine' },
+      { seq: 6, level: 'error', text: 'boom' },
+      { seq: 7, level: 'pageerror', text: 'crash' },
+      { seq: 8, level: 'warn', text: 'hmm' },
+      { seq: 9, level: 'info', text: 'info' },
+    ]
+    const found = consoleFindings(entries, 5)
+    assert.deepEqual(found.map((e) => e.seq), [6, 7, 8])
+  })
+})
+
+describe('formatGatePrompt', () => {
+  it('renders both signals and unverified notes', () => {
+    const prompt = formatGatePrompt({
+      layout: [{ key: 'k', kind: 'overlap', detail: '{"a":"x"}', width: 375 }],
+      console: [{ seq: 2, level: 'error', text: 'boom' }],
+      unverified: ['1280px: no live page'],
+    })
+    assert.ok(prompt.includes('@375px'))
+    assert.ok(prompt.includes('[error] boom'))
+    assert.ok(prompt.includes('Could not verify'))
+    assert.ok(prompt.includes('waive'))
+  })
+})

@@ -10,11 +10,56 @@ if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-e
 
 function startPageBridge() {
   const top = window === window.top ? '1' : '0'
+  // Check frames (hidden verification iframes) identify themselves so the
+  // host can exclude them from normal dispatch and address them directly.
+  // The marker travels in the page URL hash, e.g. #ai-check-375.
+  const checkMatch = /#ai-check-([\w-]+)/.exec(location.hash || '')
+  const check = checkMatch ? checkMatch[1] : ''
   let es
+
+  // Console ring buffer (P0-b console signal): records console.* calls and
+  // uncaught errors with sequence numbers so the host can poll "since seq".
+  const consoleBuffer = []
+  let consoleSeq = 0
+  const CONSOLE_CAP = 200
+  function pushConsole(level, text, stack) {
+    consoleSeq += 1
+    consoleBuffer.push({ seq: consoleSeq, level, text: String(text).slice(0, 2000), stack: stack ? String(stack).slice(0, 1000) : undefined, url: location.href, ts: Date.now() })
+    if (consoleBuffer.length > CONSOLE_CAP) consoleBuffer.splice(0, consoleBuffer.length - CONSOLE_CAP)
+  }
+  function hookConsole() {
+    try {
+      for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+        const orig = console[level]
+        if (typeof orig !== 'function' || orig.__aiLiveHooked) continue
+        const fn = function (...args) {
+          try {
+            pushConsole(level, args.map((a) => {
+              if (typeof a === 'string') return a
+              try { return JSON.stringify(a) } catch { return String(a) }
+            }).join(' '))
+          } catch { /* ignore */ }
+          return orig.apply(this, args)
+        }
+        fn.__aiLiveHooked = true
+        console[level] = fn
+      }
+      if (!window.__aiLiveErrorHooked) {
+        window.__aiLiveErrorHooked = true
+        window.addEventListener('error', (ev) => {
+          try { pushConsole('pageerror', ev.message || String(ev.error || 'unknown error'), ev.error && ev.error.stack) } catch { /* ignore */ }
+        })
+        window.addEventListener('unhandledrejection', (ev) => {
+          try { pushConsole('pageerror', 'unhandled rejection: ' + String(ev.reason), ev.reason && ev.reason.stack) } catch { /* ignore */ }
+        })
+      }
+    } catch { /* ignore */ }
+  }
+  hookConsole()
 
   function connect() {
     if (es) try { es.close() } catch { /* ignore */ }
-    es = new EventSource(`/api/page/stream?top=${top}`)
+    es = new EventSource(`/api/page/stream?top=${top}${check ? `&check=${encodeURIComponent(check)}` : ''}`)
     es.onmessage = (ev) => {
       let cmd
       try { cmd = JSON.parse(ev.data) } catch { return }
@@ -30,9 +75,9 @@ function startPageBridge() {
   async function handle(cmd) {
     let body
     try {
-      body = { id: cmd.id, ...(await run(cmd.op, cmd.payload || {})) }
+      body = { id: cmd.id, ...(check ? { check } : null), ...(await run(cmd.op, cmd.payload || {})) }
     } catch (e) {
-      body = { id: cmd.id, ok: false, error: String(e && e.message ? e.message : e) }
+      body = { id: cmd.id, ...(check ? { check } : null), ok: false, error: String(e && e.message ? e.message : e) }
     }
     try {
       await fetch('/api/page/result', {
@@ -49,7 +94,16 @@ function startPageBridge() {
     if (op === 'eval') return evalJs(payload.code)
     if (op === 'layout-snapshot') return captureLayout(payload)
     if (op === 'snapshot') return snapshot(payload)
+    if (op === 'console') return readConsole(payload)
     return { ok: false, error: 'unknown op ' + op }
+  }
+
+  function readConsole(payload) {
+    const since = Number(payload.sinceSeq || 0)
+    const levels = Array.isArray(payload.levels) && payload.levels.length ? new Set(payload.levels) : null
+    const max = Math.max(1, Math.min(200, Number(payload.maxEntries || 100)))
+    const entries = consoleBuffer.filter((e) => e.seq > since && (!levels || levels.has(e.level))).slice(-max)
+    return { ok: true, entries, latestSeq: consoleSeq, frame: frameKind() }
   }
 
   function frameKind() {

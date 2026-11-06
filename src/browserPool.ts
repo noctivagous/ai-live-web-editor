@@ -9,6 +9,7 @@ import {
   summarizeWireframeSnapshot,
   type WireframeSnapshotOutput,
 } from './layout/layoutSnapshot.js'
+import { createRingBuffer, pushRing, readRing, type RingEntry } from './verify/ringBuffer.js'
 
 export type LayoutSnapshotParams = Parameters<typeof captureWireframeSnapshot>[0]['params']
 export type LayoutSvgOptions = Parameters<typeof renderSvgWireframe>[1]
@@ -20,6 +21,65 @@ let activeExecutable: string | undefined
 
 export interface PoolActivity { kind: string; summary: string; at: string }
 export const poolActivity: PoolActivity[] = []
+
+/** P0-b console signal (pool half): per-page ring buffers, keyed by page. */
+const consoleBuffers = new Map<object, ReturnType<typeof createRingBuffer>>()
+const networkBuffers = new Map<object, ReturnType<typeof createRingBuffer>>()
+
+function pageBuffers(page: object) {
+  let c = consoleBuffers.get(page)
+  if (!c) {
+    c = createRingBuffer(200)
+    consoleBuffers.set(page, c)
+  }
+  let n = networkBuffers.get(page)
+  if (!n) {
+    n = createRingBuffer(200)
+    networkBuffers.set(page, n)
+  }
+  return { c, n }
+}
+
+function hookPageCapture(page: any) {
+  if (page.__aiLiveCaptureHooked) return
+  page.__aiLiveCaptureHooked = true
+  const { c, n } = pageBuffers(page)
+  try {
+    page.on('console', (msg: any) => {
+      try { pushRing(c, { level: String(msg.type()), text: String(msg.text()).slice(0, 2000), url: page.url?.() }) } catch { /* ignore */ }
+    })
+    page.on('pageerror', (err: any) => {
+      try { pushRing(c, { level: 'pageerror', text: String(err?.message || err).slice(0, 2000), stack: String(err?.stack || '').slice(0, 1000), url: page.url?.() }) } catch { /* ignore */ }
+    })
+    page.on('requestfailed', (req: any) => {
+      try { pushRing(n, { level: 'requestfailed', kind: 'requestfailed', text: `${req.method?.() || ''} ${req.url?.() || ''} ${req.failure?.()?.errorText || ''}`.slice(0, 2000), url: page.url?.() }) } catch { /* ignore */ }
+    })
+    page.on('response', (res: any) => {
+      try {
+        const status = res.status?.()
+        if (typeof status === 'number' && status >= 400) {
+          pushRing(n, { level: 'response', kind: 'bad-status', text: `${status} ${res.url?.() || ''}`.slice(0, 2000), url: page.url?.() })
+        }
+      } catch { /* ignore */ }
+    })
+    page.on('close', () => {
+      consoleBuffers.delete(page)
+      networkBuffers.delete(page)
+    })
+  } catch { /* ignore */ }
+}
+
+export function readPoolConsole(page: object, opts: { sinceSeq?: number, levels?: string[], maxEntries?: number } = {}) {
+  const buf = pageBuffers(page).c
+  return { ok: true, ...readRing(buf, opts) }
+}
+
+export function readPoolNetwork(page: object, opts: { sinceSeq?: number, maxEntries?: number } = {}) {
+  const buf = pageBuffers(page).n
+  return { ok: true, ...readRing(buf, opts), note: 'request-level (failed requests + HTTP >= 400)' }
+}
+
+export type { RingEntry }
 
 function recordActivity(kind: string, summary: string) {
   poolActivity.unshift({ kind, summary, at: new Date().toLocaleTimeString() })
@@ -124,6 +184,7 @@ export async function getPage(url?: string) {
   if (!ctx) throw new Error('No browser context')
   let page = ctx.pages()[0]
   if (!page) page = await ctx.newPage()
+  hookPageCapture(page)
   if (url) {
     try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 5000 }) } catch {}
   }

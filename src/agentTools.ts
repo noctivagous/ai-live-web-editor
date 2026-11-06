@@ -15,6 +15,8 @@ export const FILE_ACTIVE_TOOLS = [
   'pool-open',
   'run-project-check',
   'resolve-source',
+  'get-console',
+  'get-network-failures',
 ] as const
 
 export const SKETCH_ACTIVE_TOOLS = [
@@ -25,6 +27,8 @@ export const SKETCH_ACTIVE_TOOLS = [
   'layout-snapshot',
   'layout-svg',
   'pool-open',
+  'get-console',
+  'get-network-failures',
 ] as const
 
 export function activeToolsForMode(mode: SketchMode): string[] {

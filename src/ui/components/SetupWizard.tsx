@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { listFiles } from '../lib/api'
+import { listFiles, type BraveStatus } from '../lib/api'
 import { ModalityPanel, ProviderSetup, hasValidConnection, useConnections } from './ProviderSetup'
+import { SearchSetup } from './SearchSetup'
 import { MODALITY_LABELS, type Modality } from '../../providerPresets'
 
-const STEPS = ['Welcome', 'AI provider', 'Models by type', 'Project files', 'Preview', 'Done']
+const STEPS = ['Welcome', 'AI provider', 'Models by type', 'Search', 'Project files', 'Preview', 'Done']
 
 type Check = { state: 'wait' | 'ok' | 'bad', detail: string }
 
@@ -42,6 +43,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
   const { payload, reload } = useConnections()
   const [fsCheck, setFsCheck] = useState<Check>({ state: 'wait', detail: 'Checking…' })
   const [hmrCheck, setHmrCheck] = useState<Check>({ state: 'wait', detail: 'Checking…' })
+  const [brave, setBrave] = useState<BraveStatus | null>(null)
 
   const valid = hasValidConnection(payload)
   const active = payload?.connections.find(c => c.id === payload.activeId)
@@ -70,8 +72,8 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
   }
 
   useEffect(() => {
-    if (step === 3 && fsCheck.state === 'wait') void runFsCheck()
-    if (step === 4 && hmrCheck.state === 'wait') void runHmrCheck()
+    if (step === 4 && fsCheck.state === 'wait') void runFsCheck()
+    if (step === 5 && hmrCheck.state === 'wait') void runHmrCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
@@ -132,12 +134,24 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
 
         {step === 3 && (
           <div>
+            <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#d4d4d8', margin: '0 0 12px' }}>
+              Optional: give the agent web search. With a Brave key it can look
+              things up and compile research briefs before building. You can
+              skip this and add the key later — it is the same card in
+              Settings, under Search.
+            </p>
+            <SearchSetup onStatus={setBrave} />
+          </div>
+        )}
+
+        {step === 4 && (
+          <div>
             <CheckRow check={fsCheck} title="Project files" />
             <button className="deck-btn" onClick={() => void runFsCheck()}>Recheck</button>
           </div>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <div>
             <CheckRow check={hmrCheck} title="Preview servers">
               <small>
@@ -149,11 +163,17 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <div style={{ fontSize: 13.5, lineHeight: 1.65 }}>
             <CheckRow check={providerCheck} title="AI provider" />
-            <CheckRow check={fsCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 4.' } : fsCheck} title="Project files" />
-            <CheckRow check={hmrCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 5.' } : hmrCheck} title="Preview" />
+            <CheckRow
+              check={brave?.configured
+                ? { state: 'ok', detail: 'Brave key saved — web search and research are on.' }
+                : { state: 'wait', detail: 'Not set — optional. Add it any time in Settings, under Search.' }}
+              title="Search"
+            />
+            <CheckRow check={fsCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 5.' } : fsCheck} title="Project files" />
+            <CheckRow check={hmrCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 6.' } : hmrCheck} title="Preview" />
             <p style={{ color: '#a1a1aa', fontSize: 12.5 }}>
               Ask the agent to edit or generate files from the chat panel. Providers
               and models can be changed any time in Settings.

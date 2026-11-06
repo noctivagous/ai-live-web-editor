@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { btn } from '../lib/styles'
 import { setPlaywrightPool, type LauncherConfig } from '../lib/api'
 import { ModalityPanel, ProviderSetup, useConnections } from './ProviderSetup'
+import { SearchSetup } from './SearchSetup'
 
 function Overlay({ onClose, children }: {
   onClose: () => void
@@ -91,6 +92,9 @@ export function SettingsModal({ open, onClose, config, editorTheme, onTheme, onR
 
       <label className="field-label" style={{ marginTop: 16 }}>Models by type</label>
       <ModalityPanel payload={payload} reload={reload} onChanged={onConfigSaved} />
+
+      <label className="field-label" style={{ marginTop: 16 }}>Search</label>
+      <SearchSetup />
 
       <label className="field-label" htmlFor="editor-theme" style={{ marginTop: 16 }}>Editor theme</label>
       <select

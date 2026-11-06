@@ -39,6 +39,16 @@ export function hasAiKey(): boolean {
   return Boolean(openaiApiKey())
 }
 
+/** Brave Search API key for the web research tools (phase-11-06 §N). BYOK via `.env`. */
+export function braveApiKey(): string {
+  return process.env.BRAVE_API_KEY?.trim() || ''
+}
+
+/** Brave API base; overridable for testing against a stub. */
+export function braveApiBase(): string {
+  return process.env.BRAVE_API_BASE?.trim() || 'https://api.search.brave.com/res/v1'
+}
+
 export function openaiBaseUrl(): string {
   return process.env.OPENAI_BASE_URL?.trim() || ''
 }

@@ -159,6 +159,31 @@ export function mountChatOverlay() {
     collapsed: wrap.classList.contains('collapsed'),
   })
 
+  // Keep the whole window inside the viewport: shrink first, then shift.
+  // Runs on mount (stale saves, smaller screens), drag/resize end, and
+  // viewport resizes — afterwards pos() + savePos() persist the corrected box.
+  function clampWin() {
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    if (!wrap.classList.contains('collapsed')) {
+      if (size.w > vw - 16) size.w = Math.max(MIN_WIDTH, vw - 16)
+      if (size.h > vh - 16) size.h = Math.max(MIN_HEIGHT, vh - 16)
+      wrap.style.width = size.w + 'px'
+      wrap.style.height = size.h + 'px'
+    }
+    const r = host.getBoundingClientRect()
+    let x = r.left
+    let y = r.top
+    if (r.right > vw) x -= r.right - vw
+    if (r.bottom > vh) y -= r.bottom - vh
+    if (x < 0) x = 0
+    if (y < 0) y = 0
+    host.style.right = 'auto'
+    host.style.bottom = 'auto'
+    host.style.left = x + 'px'
+    host.style.top = y + 'px'
+  }
+
   const bar = wrap.querySelector('.bar')
   const btn = wrap.querySelector('[data-collapse]')
   btn.addEventListener('click', (ev) => {
@@ -185,6 +210,7 @@ export function mountChatOverlay() {
   window.addEventListener('mouseup', () => {
     if (!drag) return
     drag = null
+    clampWin()
     savePos(pos())
   })
 
@@ -198,10 +224,9 @@ export function mountChatOverlay() {
   })
   window.addEventListener('mousemove', (ev) => {
     if (!sizing) return
-    size.w = Math.min(window.innerWidth - 16, Math.max(MIN_WIDTH, sizing.w + ev.clientX - sizing.x))
-    size.h = Math.min(window.innerHeight - 16, Math.max(MIN_HEIGHT, sizing.h + ev.clientY - sizing.y))
-    wrap.style.width = size.w + 'px'
-    wrap.style.height = size.h + 'px'
+    size.w = Math.max(MIN_WIDTH, sizing.w + ev.clientX - sizing.x)
+    size.h = Math.max(MIN_HEIGHT, sizing.h + ev.clientY - sizing.y)
+    clampWin()
     if (window.__AI_LIVE_CHAT__) window.__AI_LIVE_CHAT__.width = size.w
     const api = window.__AI_LIVE_EDIT__
     if (api && typeof api.setToolbarOffset === 'function') api.setToolbarOffset(size.w + 32)
@@ -209,12 +234,19 @@ export function mountChatOverlay() {
   window.addEventListener('mouseup', () => {
     if (!sizing) return
     sizing = null
+    clampWin()
     savePos(pos())
   })
 
   shadow.appendChild(wrap)
   document.documentElement.appendChild(host)
   showManualPopover(host)
+  clampWin()
+  savePos(pos())
+  window.addEventListener('resize', () => {
+    clampWin()
+    savePos(pos())
+  })
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   window.__AI_LIVE_CHAT__ = { mounted: true, width: size.w, popover: usePopover }
   void installAnnotateToolbar()

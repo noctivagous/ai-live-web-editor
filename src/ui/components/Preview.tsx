@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { fetchOverlaySource, staticPreviewUrl, submitLiveEdit, type PageNote } from '../lib/api'
+import { pollUntilUp } from '../lib/previewProbe'
 
 const STATIC_URL = '/projects/'
 const DEFAULT_HMR = 'http://localhost:5173'
@@ -61,28 +62,32 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     setUrl(next)
     if (next === liveUrl) {
       setChecking(true)
-      setHmr(await probe(next) ? 'up' : 'down')
+      setHmr(await pollUntilUp(() => probe(next)) ? 'up' : 'down')
       setChecking(false)
     }
   }
 
+  // After a project switch the launcher restarts :5173, so the first probe
+  // can land in the dead window. Keep polling with backoff until the new
+  // server answers instead of sticking on "not running".
   useEffect(() => {
-    let cancelled = false
+    const ctrl = new AbortController()
     setAnnotating(false)
     setNoteCount(0)
     setUrl(liveUrl)
     setChecking(true)
     setHmr('unknown')
-    probe(liveUrl).then((up) => {
-      if (cancelled) return
+    void pollUntilUp(() => probe(liveUrl), { signal: ctrl.signal }).then((up) => {
+      if (ctrl.signal.aborted) return
       setHmr(up ? 'up' : 'down')
       setChecking(false)
     })
-    return () => { cancelled = true }
+    return () => { ctrl.abort() }
   }, [liveUrl])
 
   const onHmr = url === liveUrl
   const showDown = onHmr && hmr === 'down'
+  const showWaiting = onHmr && hmr === 'unknown'
 
   // Poll the in-page note count while annotate mode is on.
   useEffect(() => {
@@ -211,6 +216,16 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
               <button className="deck-btn" onClick={() => { setKey(k => k + 1); void switchUrl(liveUrl) }}>Retry live</button>
               <button className="deck-btn" onClick={() => void switchUrl(STATIC_URL)}>Use Static</button>
+            </div>
+          </div>
+        </div>
+      ) : showWaiting ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+          <div style={{ maxWidth: 420 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Starting preview server…</div>
+            <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+              Waiting for <span className="mono">{liveUrl.replace(/^https?:\/\//, '')}</span> to
+              answer (the server restarts when you switch projects). The preview loads on its own.
             </div>
           </div>
         </div>

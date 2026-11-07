@@ -111,6 +111,35 @@ export function activeToolsForMode(mode: SketchMode): string[] {
   return mode === 'sketch' ? [...SKETCH_ACTIVE_TOOLS] : [...FILE_ACTIVE_TOOLS]
 }
 
+/**
+ * The one list of tools that write project files (basics audit
+ * slice 3). The verify gate's trigger, the self-check trigger, the
+ * Deck's edit grouping, and Chat's post-turn refresh all read this
+ * set — before it existed, each hard-coded {str-replace,
+ * write-real-file} and catalog/template installs (which copy real
+ * files into the project) were invisible to all four.
+ *
+ * Name-level by necessity: consumers see tool names, not arguments.
+ * `research` is deliberately absent — it writes only when a turn
+ * passes saveTo, and what it writes is a document, not app code;
+ * `adopt-registry` writes editor config (.ai-live/), not project
+ * files. Both still surface in the Deck's per-turn file list, which
+ * is extracted from result text.
+ */
+export const WRITE_TOOLS: ReadonlySet<string> = new Set([
+  'str-replace',
+  'write-real-file',
+  'delete-file',
+  'rename-file',
+  'make-dir',
+  'place-template',
+  'install-catalog-component',
+])
+
+export function isWriteTool(name: string): boolean {
+  return WRITE_TOOLS.has(name)
+}
+
 const LAYOUT_RE = /\b(layout|wireframe|overlap|spacing|responsive|breakpoint|viewport|align|alignment|centered|centred|screenshot|visual|look|looks|styling|styles?|css|margin|padding|width|height|mobile|desktop|clipped|overflow)\b|https?:\/\//i
 const CATALOG_RE = /\b(components?|templates?|catalog|library|install|buttons?|dialogs?|modals?|dropdowns?|tooltips?|accordion|tabs?|forms?|inputs?|tables?|cards?|pricing|hero|navbar|navigation|sidebar|headers?|footers?|dashboard|widgets?|icons?|charts?|menus?|pages?|sections?|landing)\b/i
 const RESEARCH_RE = /\b(web|internet|online|search|research|lookup|google|docs?|documentation|latest|changelog|version of)\b|\blook up\b/i

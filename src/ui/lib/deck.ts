@@ -1,4 +1,5 @@
 import type { LogItem, ToolStep, TurnUsage } from './chatSession.js'
+import { WRITE_TOOLS } from '../../agentTools'
 
 export interface TokenPricing { input: number; output: number }
 
@@ -64,7 +65,9 @@ const INSPECT_TOOLS = new Set([
   'list-real-files', 'read-real-file', 'grep',
   'inspect-dom', 'take-snapshot', 'layout-snapshot', 'layout-svg', 'pool-open',
 ])
-const EDIT_TOOLS = new Set(['str-replace', 'write-real-file', 'writeRealFileTool'])
+/* The shared write list (agentTools.ts WRITE_TOOLS), plus the
+ * writeRealFileTool key form Mastra steps can carry. */
+const EDIT_TOOLS = new Set([...WRITE_TOOLS, 'writeRealFileTool'])
 const LIVE_TOOLS = new Set(['patch-dom', 'eval-js'])
 const CHECK_TOOLS = new Set(['run-project-check'])
 

@@ -679,7 +679,8 @@ export async function pipeAgentChatStream(
     // Self mode (§L): a Files turn that wrote files gets tsc +
     // tests run against the editor itself, fire-and-forget; the
     // result rides the workflow snapshot beside the SELF badge.
-    if (mode === 'files' && toolTrace.some(t => t === 'str-replace' || t === 'write-real-file')) {
+    const { isWriteTool } = await import('./agentTools.js')
+    if (mode === 'files' && toolTrace.some(t => isWriteTool(t))) {
       const { isSelfWorkspace, runSelfChecks } = await import('./selfMode.js')
       if (isSelfWorkspace()) {
         send({ type: 'status', text: 'self-checks running (tsc + tests)…' })

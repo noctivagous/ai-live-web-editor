@@ -22,6 +22,17 @@ describe('shouldTriggerGate', () => {
     assert.equal(shouldTriggerGate('files', []), false)
     assert.equal(shouldTriggerGate('sketch', ['str-replace']), false)
   })
+
+  it('fires for every tool in the shared write list (slice 3)', () => {
+    for (const t of ['place-template', 'install-catalog-component', 'delete-file', 'rename-file', 'make-dir']) {
+      assert.equal(shouldTriggerGate('files', [t]), true, t)
+    }
+  })
+
+  it('does not fire for research or adopt-registry (not project-file writes)', () => {
+    assert.equal(shouldTriggerGate('files', ['research']), false)
+    assert.equal(shouldTriggerGate('files', ['adopt-registry']), false)
+  })
 })
 
 describe('findingKey', () => {

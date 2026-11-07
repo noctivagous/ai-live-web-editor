@@ -33,10 +33,13 @@ import {
 } from '../lib/annotationSync'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
+import { WRITE_TOOLS } from '../../agentTools'
 import { slideTurnsOrDefault } from '../lib/deck'
 
 function isWriteTool(name: string): boolean {
-  return name === 'write-real-file' || name === 'str-replace' || name === 'writeRealFileTool'
+  /* The shared write list (agentTools.ts WRITE_TOOLS), plus the
+   * writeRealFileTool key form Mastra steps can carry. */
+  return WRITE_TOOLS.has(name) || name === 'writeRealFileTool'
 }
 
 function previewPartialArgs(name: string, raw: string): string {

@@ -9,7 +9,9 @@ import {
   FILE_PLAN_TOOLS,
   FILE_RESEARCH_TOOLS,
   fileToolsForTurn,
+  isWriteTool,
   SKETCH_ACTIVE_TOOLS,
+  WRITE_TOOLS,
 } from './agentTools.js'
 
 describe('activeToolsForMode', () => {
@@ -81,5 +83,27 @@ describe('fileToolsForTurn', () => {
       searchAvailable: true,
     })
     assert.deepEqual(all, [...FILE_ACTIVE_TOOLS])
+  })
+})
+
+describe('WRITE_TOOLS (slice 3)', () => {
+  it('is exactly the tools that write project files', () => {
+    assert.deepEqual([...WRITE_TOOLS].sort(), [
+      'delete-file',
+      'install-catalog-component',
+      'make-dir',
+      'place-template',
+      'rename-file',
+      'str-replace',
+      'write-real-file',
+    ])
+    for (const t of WRITE_TOOLS) assert.equal(isWriteTool(t), true, t)
+    for (const t of ['grep', 'read-real-file', 'research', 'adopt-registry', 'patch-dom', 'plan-update-task']) {
+      assert.equal(isWriteTool(t), false, t)
+    }
+  })
+
+  it('every write tool is a registered Files tool', () => {
+    for (const t of WRITE_TOOLS) assert.ok((FILE_ACTIVE_TOOLS as readonly string[]).includes(t), t)
   })
 })

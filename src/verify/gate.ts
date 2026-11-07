@@ -3,6 +3,7 @@
  * After a Files turn that wrote files, the host re-checks layout geometry
  * and console errors itself and folds NEW findings back into the turn.
  */
+import { isWriteTool } from '../agentTools.js'
 
 export type LayoutFinding = {
   key: string
@@ -22,10 +23,11 @@ export type ConsoleEntry = {
   ts?: number
 }
 
-/** Gate trigger: a Files-mode turn whose tool trace wrote files. */
+/** Gate trigger: a Files-mode turn whose tool trace wrote files.
+ * The write list is the shared WRITE_TOOLS set (agentTools.ts). */
 export function shouldTriggerGate(mode: string, toolNames: string[]): boolean {
   if (mode !== 'files') return false
-  return toolNames.some((n) => n === 'str-replace' || n === 'write-real-file')
+  return toolNames.some((n) => isWriteTool(n))
 }
 
 /**

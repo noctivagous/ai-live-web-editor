@@ -4,6 +4,7 @@ import { pollUntilUp } from '../lib/previewProbe'
 import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
 import { isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
 import { Markdown } from './Markdown'
+import { FolderSetupWizard } from './FolderSetupWizard'
 
 const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site']
 const TARGET_WIDTHS: Record<DeviceTarget, number | null> = { phone: 375, tablet: 768, desktop: null }
@@ -45,12 +46,14 @@ async function ensureOverlay(iframe: HTMLIFrameElement | null): Promise<boolean>
   } catch { return false }
 }
 
-export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, setup, startPage }: {
+export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, setup, startPage, files = [] }: {
   hmrUrl?: string
   onChanged: () => void
   onResult: (text: string) => void
   collapsed?: boolean
   onToggleCollapse?: () => void
+  /** The project's file list, for the setup wizard's conversions. */
+  files?: string[]
   /** Folder classification from the launcher; 'loose'/'empty' folders
    * have no page to serve, so the pane states that plainly instead of
    * polling a dead port. 'html' folders are served by the launcher's
@@ -61,6 +64,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   startPage?: string | null
 }) {
   const noSetup = setup != null && (setup.kind === 'loose' || setup.kind === 'empty')
+  // Setup wizard dismissal (slice C): per project mount; the plain
+  // panels keep a Set up preview button to reopen it. Whether the
+  // wizard is needed is computed with the mark, further down.
+  const [wizardDismissed, setWizardDismissed] = useState(false)
   const liveUrl = hmrUrl || DEFAULT_HMR
   const [url, setUrl] = useState(liveUrl)
   const [key, setKey] = useState(0)
@@ -182,6 +189,11 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mark, baseRenderer])
   const renderer = hostOverride ? 'host' : baseRenderer
+  // The wizard is needed when there is nothing to preview: a
+  // loose/empty folder, or a multi-page site with no start page
+  // designated and nothing marked (slice C).
+  const needsWizard = noSetup || (setup?.kind === 'html' && !startPage && !mark)
+  const showWizard = needsWizard && !wizardDismissed
   const hostPath = startPage ? `/${startPage}` : '/index.html'
   const pagePath = renderer === 'host' ? hostPath : (location ?? mark ?? '/index.html')
   const frameSrc = url === STATIC_URL
@@ -385,18 +397,24 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           )}
         </span>
       </div>
-      {!collapsed && (noSetup ? (
+      {!collapsed && (showWizard && setup ? (
+        <FolderSetupWizard
+          setup={setup}
+          files={files}
+          onApplied={() => { void refreshFoundation(); onChanged() }}
+          onDismiss={() => setWizardDismissed(true)}
+        />
+      ) : noSetup ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>No preview set up yet</div>
             <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
-              {setup.kind === 'html' && setup.entry
-                ? <><span className="mono">{setup.entry}</span> is in this folder but hasn&rsquo;t been set as the preview page.</>
-                : setup.kind === 'html'
-                  ? <>This folder has more than one HTML file ({setup.htmlFiles.join(', ')}) and none is set as the preview page.</>
-                  : setup.kind === 'loose'
-                    ? <>This folder has no HTML page, so there is nothing to preview yet. Its files are open in the editor.</>
-                    : <>This folder is empty, so there is nothing to preview yet.</>}
+              {setup.kind === 'loose'
+                ? <>This folder has no HTML page, so there is nothing to preview yet. Its files are open in the editor.</>
+                : <>This folder is empty, so there is nothing to preview yet.</>}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <button type="button" className="deck-btn" onClick={() => setWizardDismissed(false)}>Set up preview</button>
             </div>
           </div>
         </div>
@@ -428,6 +446,11 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
                     ? <>This folder has more than one HTML file ({setup.htmlFiles.join(', ')}) and none is marked. Use the eye button on a file in the file pane to preview it.</>
                     : <>Use the eye button on a file in the file pane to preview it here.</>}
               </div>
+              {needsWizard && wizardDismissed && (
+                <div style={{ marginTop: 12 }}>
+                  <button type="button" className="deck-btn" onClick={() => setWizardDismissed(false)}>Set up preview</button>
+                </div>
+              )}
             </div>
           </div>
         )

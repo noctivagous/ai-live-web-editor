@@ -8,6 +8,8 @@ import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiB
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
 import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, SELF_PROJECT_ID, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
+import { applyPageTemplate, applySeedApp, convertTextToPage, TEMPLATE_IDS, type PageTemplateId, type TemplateId } from './setupWizard.js'
+import { writeProjectConfig } from './projectConfig.js'
 import { getSelfCheck, isSelfMode, isSelfWorkspace, listSnapshotsAt, revertSelfSnapshot } from './selfMode.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
@@ -171,6 +173,53 @@ app.post('/api/projects/import', (req, res) => {
     resetSketchForProjectSwitch()
     const project = selectProject(name)
     res.json({ ok: true, active: project.id, root: project.root, setup: project.setup, projects: listProjects(), received, installed, installError, writeErrors })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
+})
+
+/* Setup wizard (Open slice C): apply a starting template to the
+ * ACTIVE project, or turn one of its text files into a page. Page
+ * templates and conversions designate their page as the start page;
+ * every path re-selects the project afterwards so Vite restarts and
+ * the preview session reseeds from the new state. */
+app.post('/api/projects/apply-template', (req, res) => {
+  try {
+    const rawTemplate = typeof req.body?.template === 'string' ? req.body.template : ''
+    if (!TEMPLATE_IDS.includes(rawTemplate as TemplateId)) throw new Error('Unknown template')
+    const template = rawTemplate as TemplateId
+    const root = getFsRoot()
+    let installed = false
+    let installError: string | undefined
+    if (template === 'seed-app') {
+      applySeedApp(root)
+      try {
+        execSync('npm install', { cwd: root, stdio: 'inherit' })
+        installed = true
+      } catch (e: any) {
+        installError = e.message || 'npm install failed'
+      }
+    } else {
+      applyPageTemplate(root, template as PageTemplateId)
+      writeProjectConfig({ entry: 'index.html' }, root)
+    }
+    resetSketchForProjectSwitch()
+    const project = selectProject(readActiveId())
+    res.json({ ok: true, active: project.id, setup: project.setup, projects: listProjects(), installed, installError })
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e.message })
+  }
+})
+
+app.post('/api/projects/convert', (req, res) => {
+  try {
+    const p = typeof req.body?.path === 'string' ? req.body.path : ''
+    const root = getFsRoot()
+    const { created } = convertTextToPage(root, p)
+    writeProjectConfig({ entry: created.replace(/^\//, '') }, root)
+    resetSketchForProjectSwitch()
+    const project = selectProject(readActiveId())
+    res.json({ ok: true, created, active: project.id, setup: project.setup, projects: listProjects() })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
   }

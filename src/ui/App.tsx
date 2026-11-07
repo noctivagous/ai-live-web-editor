@@ -1036,10 +1036,11 @@ export default function App() {
               key={activeProject}
               setup={projects.find(p => p.id === activeProject)?.setup}
               startPage={startPage}
+              files={files}
               hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
               collapsed={collapse.preview}
               onToggleCollapse={() => toggleCollapse('preview')}
-              onChanged={() => { loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
+              onChanged={() => { void loadProjects(); loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
               onResult={setNotice}
             />
           </div>

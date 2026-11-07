@@ -102,6 +102,32 @@ export async function getConfig() {
   return r.json() as Promise<LauncherConfig>
 }
 
+/* ── Setup wizard (Open slice C) ─────────────────────────────── */
+
+export type ProjectTemplateId = 'seed-app' | 'blank-page' | 'article' | 'pricing'
+
+export async function applyProjectTemplate(template: ProjectTemplateId) {
+  const r = await fetch(`${API}/api/projects/apply-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template }),
+  })
+  const data = await r.json() as { ok: boolean, setup?: ProjectSetupInfo, projects?: ProjectInfo[], installed?: boolean, installError?: string, error?: string }
+  if (!r.ok || data.ok === false) throw new Error(data.error || `Template failed (${r.status})`)
+  return data
+}
+
+export async function convertToPage(path: string) {
+  const r = await fetch(`${API}/api/projects/convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  const data = await r.json() as { ok: boolean, created?: string, setup?: ProjectSetupInfo, projects?: ProjectInfo[], error?: string }
+  if (!r.ok || data.ok === false) throw new Error(data.error || `Convert failed (${r.status})`)
+  return data
+}
+
 export interface ProviderModels {
   ok: boolean
   provider?: string

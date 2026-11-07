@@ -111,7 +111,15 @@ export async function liveConsole(params: Record<string, unknown> = {}, url?: st
     const denied = requirePlaywrightPool()
     if (denied) return denied
     const { getPage, readPoolConsole } = await import('./browserPool.js')
-    const page = await getPage(typeof params.url === 'string' ? params.url : url)
+    /* getPage can fail (browser launch, navigation) — return the same
+     * error-object shape as every sibling path instead of throwing
+     * through the get-console tool (slice 5a). */
+    let page: Awaited<ReturnType<typeof getPage>>
+    try {
+      page = await getPage(typeof params.url === 'string' ? params.url : url)
+    } catch (e: unknown) {
+      return { ok: false, via: 'playwright', error: e instanceof Error ? e.message : String(e) }
+    }
     return { via: 'playwright', ...readPoolConsole(page, params as any) }
   }
   const raw = await pageCommand('console', params) as any

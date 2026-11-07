@@ -542,11 +542,13 @@ export async function pipeAgentChatStream(
     // P0-b pre-edit baseline on Files turns (post-edit diff needs it).
     // Never breaks the turn: failure means the gate reports "unverified".
     let baseline: import('./verify/runGate.js').GateBaseline | null = null
+    let baselineError: string | null = null
     if (mode === 'files' && verifyGateEnabled()) {
       try {
         baseline = await captureBaseline()
-      } catch {
+      } catch (e: unknown) {
         baseline = null
+        baselineError = e instanceof Error ? e.message : String(e)
       }
     }
     const streamChunks = async (stream: AsyncIterable<unknown>) => {
@@ -657,6 +659,10 @@ export async function pipeAgentChatStream(
       }
     } else if (mode === 'files' && !verifyGateEnabled()) {
       verification = { ran: false, skipped: 'AI_LIVE_VERIFY=0' }
+    } else if (mode === 'files' && baselineError && shouldTriggerGate(mode, toolTrace)) {
+      // A baseline-capture failure must read as a skipped gate with a
+      // reason, not as a silent "nothing to verify" (slice 5a).
+      verification = { ran: false, skipped: `baseline capture failed: ${baselineError}` }
     }
     // Usage lives outside the chunk mapping: some gateways omit it, so a
     // missing value is "not reported", never 0.

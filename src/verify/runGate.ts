@@ -71,14 +71,32 @@ async function bridgeSeq(): Promise<number> {
   }
 }
 
+/** Pool counterpart of bridgeSeq: the pool console ring's current
+ * sequence, so the post-turn diff reports only entries newer than the
+ * baseline. Without it poolSeq stayed 0 and every pre-existing pool
+ * console error counted as a new finding (slice 5a). */
+export async function poolSeq(): Promise<number> {
+  try {
+    const { playwrightPoolEnabled, liveTarget } = await import('../env.js')
+    if (!playwrightPoolEnabled() || liveTarget() !== 'pool') return 0
+    const { liveConsole } = await import('../liveTarget.js')
+    const raw = await liveConsole({ maxEntries: 1 }, undefined) as any
+    if (raw?.error) return 0
+    return Number(raw?.latestSeq || 0)
+  } catch {
+    return 0
+  }
+}
+
 /** Pre-stream baseline. Cheap parts always run on Files turns; frames cost ~2 page loads. */
 export async function captureBaseline(): Promise<GateBaseline | null> {
   if (!verifyGateEnabled()) return null
   const base: GateBaseline = { at: Date.now(), bridgeSeq: 0, bridgeLayout: [], frames: [], poolSeq: 0 }
-  const [layout, seq] = await Promise.all([bridgeLayout(), bridgeSeq()])
+  const [layout, seq, pseq] = await Promise.all([bridgeLayout(), bridgeSeq(), poolSeq()])
   base.bridgeLayout = layout.findings
   base.bridgeWidth = layout.width
   base.bridgeSeq = seq
+  base.poolSeq = pseq
   const markers = await ensureCheckFrames(currentCheckWidths())
   if (markers.length) {
     const snaps = await snapshotCheckFrames()

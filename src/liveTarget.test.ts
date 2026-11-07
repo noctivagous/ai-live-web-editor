@@ -1,6 +1,18 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { agentLayoutSnapshotResult } from './liveTarget.js'
+import { agentLayoutSnapshotResult, liveConsole } from './liveTarget.js'
+import { poolSeq } from './verify/runGate.js'
+
+describe('liveConsole / poolSeq error shapes (slice 5a)', () => {
+  it('liveConsole resolves the pool-off error object for a pool URL instead of throwing', async () => {
+    const r = await liveConsole({}, 'http://example.com/') as { error?: string }
+    assert.match(String(r.error), /Playwright pool is off/)
+  })
+
+  it('poolSeq is 0 while the pool is not the live target', async () => {
+    assert.equal(await poolSeq(), 0)
+  })
+})
 
 describe('agentLayoutSnapshotResult', () => {
   const full = {

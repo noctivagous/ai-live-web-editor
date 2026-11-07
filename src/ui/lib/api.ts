@@ -318,6 +318,9 @@ export interface WorkflowSnapshot {
   searchOptions?: SearchOption[]
   /** Planning (§O): the active plan's summary, for the header pill. */
   plan?: PlanSummary | null
+  /** Preview (Open slice B): the marked file + drifted location. */
+  previewMark?: string | null
+  previewLocation?: string | null
   error?: string
 }
 
@@ -408,6 +411,8 @@ export async function getWorkflow() {
 }
 
 export interface ProjectConfig {
+  /** The designated start page (Open slice B), root-relative .html. */
+  entry?: string
   type?: string
   format?: 'app' | 'page'
   deviceTargets?: DeviceTarget[]
@@ -433,7 +438,7 @@ export async function postProjectConfig(patch: Record<string, unknown>) {
   return r.json() as Promise<{ ok: boolean, config: ProjectConfig, designated: boolean }>
 }
 
-export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept', deviceTarget?: DeviceTarget, searchBackend?: SearchBackendId }) {
+export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept', deviceTarget?: DeviceTarget, searchBackend?: SearchBackendId, previewMark?: string | null, previewLocation?: string | null }) {
   const r = await fetch(`${API}/api/workflow`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -12,11 +12,16 @@ import { sanitizeOverrides } from './shortcuts'
 
 export type ChatViewPref = 'chat' | 'panel'
 export type FileSortPref = 'name' | 'type' | 'modified'
+/** How the preview's file gets chosen in the file pane (slice B):
+ * 'marked' = only an explicit mark moves the preview (default);
+ * 'follow' = clicking a file marks it too. */
+export type FilePreviewModePref = 'marked' | 'follow'
 
 export interface UiPrefs {
   chatView: ChatViewPref
   fileSort: FileSortPref
   fileShowHidden: boolean
+  filePreviewMode: FilePreviewModePref
   /** Code editor (Monaco) options. Defaults match the editor's
    * long-standing hardcoded behavior. */
   editorFontSize: number
@@ -32,6 +37,7 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   chatView: 'chat',
   fileSort: 'name',
   fileShowHidden: false,
+  filePreviewMode: 'marked',
   editorFontSize: 13,
   editorTabSize: 4,
   editorWordWrap: true,
@@ -63,6 +69,7 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     chatView: v.chatView === 'panel' ? 'panel' : 'chat',
     fileSort: v.fileSort === 'type' || v.fileSort === 'modified' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,
+    filePreviewMode: v.filePreviewMode === 'follow' ? 'follow' : 'marked',
     editorFontSize: clampInt(v.editorFontSize, 10, 20, UI_PREFS_DEFAULTS.editorFontSize),
     editorTabSize: v.editorTabSize === 2 ? 2 : 4,
     editorWordWrap: v.editorWordWrap !== false,

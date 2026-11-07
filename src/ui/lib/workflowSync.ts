@@ -34,6 +34,8 @@ function patchesEqual(
 export function workflowSnapshotsEqual(a: WorkflowSyncSnapshot, b: WorkflowSyncSnapshot): boolean {
   return a.mode === b.mode
     && a.deviceTarget === b.deviceTarget
+    && (a.previewMark || null) === (b.previewMark || null)
+    && (a.previewLocation || null) === (b.previewLocation || null)
     && (a.searchBackend || 'off') === (b.searchBackend || 'off')
     && JSON.stringify(a.searchOptions || []) === JSON.stringify(b.searchOptions || [])
     && Boolean(a.selfMode) === Boolean(b.selfMode)
@@ -92,6 +94,8 @@ export function parseWorkflowSnapshot(raw: unknown): WorkflowSyncSnapshot | null
     ok: row.ok !== false,
     mode,
     deviceTarget: parseDeviceTarget(row.deviceTarget),
+    previewMark: typeof row.previewMark === 'string' && row.previewMark.startsWith('/') ? row.previewMark : null,
+    previewLocation: typeof row.previewLocation === 'string' && row.previewLocation.startsWith('/') ? row.previewLocation : null,
     searchBackend: parseSearchBackend(row.searchBackend),
     searchOptions: parseSearchOptions(row.searchOptions),
     selfMode: Boolean(row.selfMode),

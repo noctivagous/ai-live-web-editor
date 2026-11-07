@@ -9,8 +9,11 @@ import {
   parentPath, siblingNames, sortTree, validateEntryName, visibleTree,
   type SortMode, type TreeNode,
 } from '../lib/fileTree'
-import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs'
+import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type FilePreviewModePref } from '../lib/uiPrefs'
 import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
+import { getWorkflow, postWorkflow, readFile } from '../lib/api'
+import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
+import { isRenderable, isScriptFile, looksLikeComponent } from '../lib/previewRender'
 
 /* File browser pane: a real tree over the launcher's flat file list.
    Everything it shows comes from /api/fs/list (files + dirs + mtimes);
@@ -38,7 +41,7 @@ type EditState =
   | { kind: 'create-file', dir: string }
   | { kind: 'create-folder', dir: string }
 
-export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRefresh, onCreateFile, onCreateFolder, onRename, onDelete, onDuplicate }: {
+export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRefresh, onCreateFile, onCreateFolder, onRename, onDelete, onDuplicate, startPage, onSetStartPage }: {
   files: string[]
   dirs?: string[]
   mtimes?: Record<string, number>
@@ -50,6 +53,10 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
   onRename: (from: string, to: string) => Promise<FsOpResult>
   onDelete: (path: string, recursive: boolean) => Promise<FsOpResult>
   onDuplicate: (path: string) => Promise<FsOpResult>
+  /** The designated start page (project.ai.json entry, root-relative), badged in the tree. */
+  startPage?: string | null
+  /** Promote a file to the start page (writes the manifest via App). */
+  onSetStartPage?: (path: string) => void
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [query, setQuery] = useState('')
@@ -62,11 +69,62 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
     return next
   })
   const [overrides, setOverrides] = useState(() => loadUiPrefs().shortcutOverrides)
+  const [previewMode, setPreviewModeState] = useState<FilePreviewModePref>(() => loadUiPrefs().filePreviewMode)
   useEffect(() => {
-    const onPrefs = () => setOverrides(loadUiPrefs().shortcutOverrides)
+    const onPrefs = () => {
+      setOverrides(loadUiPrefs().shortcutOverrides)
+      setPreviewModeState(loadUiPrefs().filePreviewMode)
+    }
     window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
     return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
   }, [])
+  const setPreviewMode = (m: FilePreviewModePref) => { setPreviewModeState(m); saveUiPrefs({ filePreviewMode: m }) }
+
+  // The preview mark (slice B): session state on the launcher, mirrored
+  // through the workflow snapshot. The pane renders the eye; marking
+  // posts back. A fresh file list means a (possibly) new project, whose
+  // seed was set server-side at select time — re-read it then.
+  const [mark, setMark] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    const refresh = async () => {
+      try {
+        const wf = await getWorkflow()
+        if (live && wf) setMark(wf.previewMark ?? null)
+      } catch { /* launcher down */ }
+    }
+    void refresh()
+    const off = subscribeWorkflow(() => { void refresh() })
+    return () => { live = false; off() }
+  }, [files])
+  async function markFile(path: string) {
+    if (!isRenderable(path)) {
+      // A plain script file may still be a component (a Lit element
+      // in a .ts file): sniff its content before refusing the mark.
+      let component = false
+      if (isScriptFile(path)) {
+        try {
+          const data = await readFile(path) as { content?: string }
+          component = typeof data?.content === 'string' && looksLikeComponent(data.content)
+        } catch { /* unreadable: refuse below */ }
+      }
+      if (!component) {
+        setNotice(`No rendering for ${baseName(path)} — the preview stays where it is.`)
+        return
+      }
+    }
+    setMark(path)
+    try {
+      const data = await postWorkflow({ previewMark: path })
+      if (data && 'previewMark' in data) setMark(data.previewMark ?? null)
+      publishWorkflowChanged()
+    } catch { /* the next snapshot refresh reconciles */ }
+  }
+  function handleSelectNode(node: TreeNode) {
+    if (node.isDir) return
+    onSelect(node.path)
+    if (previewMode === 'follow') void markFile(node.path)
+  }
   const [focused, setFocused] = useState(active)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -204,7 +262,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
     else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
     else if (e.key === 'Enter') {
       const row = rows[idx]
-      if (row) { e.preventDefault(); row.node.isDir ? toggleDir(row.node.path) : onSelect(row.node.path) }
+      if (row) { e.preventDefault(); row.node.isDir ? toggleDir(row.node.path) : handleSelectNode(row.node) }
     } else if (e.key === 'ArrowRight') {
       const row = rows[idx]
       if (row?.node.isDir) { e.preventDefault(); expandDir(row.node.path) }
@@ -250,6 +308,10 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
           <option value="type">Type</option>
           <option value="modified">Modified</option>
         </select>
+        <span className="ft-preview-mode" role="group" aria-label="Preview selection">
+          <button type="button" className={`deck-btn btn-icon ft-tool${previewMode === 'marked' ? ' on' : ''}`} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
+          <button type="button" className={`deck-btn btn-icon ft-tool${previewMode === 'follow' ? ' on' : ''}`} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
+        </span>
       </div>
       <div className="ft-filter">
         <Search size={12} className="ft-filter-icon" />
@@ -315,7 +377,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
                 onDragEnd={() => { setDragPath(null); setDragOver(null) }}
                 onDragOver={node.isDir ? e => { e.preventDefault(); e.stopPropagation(); setDragOver(node.path) } : undefined}
                 onDrop={node.isDir ? e => { e.preventDefault(); e.stopPropagation(); void dropOnto(node.path); setDragPath(null); setDragOver(null) } : undefined}
-                onClick={() => { setFocused(node.path); if (!node.isDir) onSelect(node.path) }}
+                onClick={() => { setFocused(node.path); if (!node.isDir) handleSelectNode(node) }}
                 onDoubleClick={() => { if (node.isDir) toggleDir(node.path) }}
                 onContextMenu={e => { e.preventDefault(); setFocused(node.path); setMenu({ x: e.clientX, y: e.clientY, node }) }}
                 title={node.path}
@@ -325,7 +387,16 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
                   : <span className="ft-chev" />}
                 <Icon size={13} className={node.isDir ? 'ft-icon dir' : 'ft-icon'} />
                 <span className="ft-name">{node.name}</span>
+                {!node.isDir && startPage && node.path === `/${startPage}` && (
+                  <span className="ft-start-badge" title="Start page — the preview opens here (project.ai.json)">start</span>
+                )}
+                {!node.isDir && mark === node.path && (
+                  <Eye size={11} className="ft-mark-icon" aria-label="Previewed file" />
+                )}
                 <span className="ft-actions">
+                  {!node.isDir && mark !== node.path && (
+                    <button type="button" className="ft-act" title="Preview this file" tabIndex={-1} onClick={e => { e.stopPropagation(); void markFile(node.path) }}><Eye size={11} /></button>
+                  )}
                   <button type="button" className="ft-act" title="Rename (F2)" tabIndex={-1} onClick={e => { e.stopPropagation(); startRename(node) }}><Pencil size={11} /></button>
                   <button type="button" className="ft-act" title="Delete (Del)" tabIndex={-1} onClick={e => { e.stopPropagation(); requestDelete(node) }}><Trash size={11} /></button>
                 </span>
@@ -351,6 +422,10 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
       {menu && (
         <div className="ft-menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}>
           {!menu.node.isDir && <button type="button" onClick={() => { onSelect(menu.node.path); setMenu(null) }}>Open</button>}
+          {!menu.node.isDir && <button type="button" onClick={() => { void markFile(menu.node.path); setMenu(null) }}>Preview this file</button>}
+          {!menu.node.isDir && onSetStartPage && /\.html?$/i.test(menu.node.path) && startPage !== menu.node.path.slice(1) && (
+            <button type="button" onClick={() => { onSetStartPage(menu.node.path); setMenu(null) }}>Set as start page</button>
+          )}
           <button type="button" onClick={() => startCreate('create-file', menu.node.isDir ? menu.node.path : parentPath(menu.node.path))}>New file here</button>
           <button type="button" onClick={() => startCreate('create-folder', menu.node.isDir ? menu.node.path : parentPath(menu.node.path))}>New folder here</button>
           {!menu.node.isDir && <button type="button" onClick={() => { void run(() => onDuplicate(menu.node.path)); setMenu(null) }}>Duplicate</button>}

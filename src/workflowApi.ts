@@ -22,6 +22,7 @@ import { getAppkitEnabled, setAppkitEnabled } from './catalog/catalogSession.js'
 import { getSelfCheck, isSelfWorkspace } from './selfMode.js'
 import { planSnapshotField } from './plans/planApi.js'
 import { parseSearchBackend, searchSnapshot, setSearchChoice } from './searchSession.js'
+import { getPreviewLocation, getPreviewMark, parsePreviewPath, setPreviewLocation, setPreviewMark } from './previewSession.js'
 
 function restoreFailed(result: unknown): string | null {
   if (!result || typeof result !== 'object') return 'restore returned nothing'
@@ -113,6 +114,10 @@ function workflowSnapshot() {
     selfCheck: getSelfCheck(),
     // Planning (§O): the active plan's summary, for the header pill.
     plan: planSnapshotField(),
+    // Preview (Open slice B): the marked file + drifted location,
+    // set from the file pane, rendered by the Preview pane.
+    previewMark: getPreviewMark(),
+    previewLocation: getPreviewLocation(),
   }
 }
 
@@ -131,6 +136,22 @@ export function mountWorkflowApi(app: Express) {
       if (typeof body.appkitCatalog === 'boolean') setAppkitEnabled(body.appkitCatalog)
       const search = parseSearchBackend(body.searchBackend)
       if (search) setSearchChoice(search)
+      // Preview mark/location: an explicit null clears; a string must
+      // parse as a safe path; anything else leaves state untouched.
+      if ('previewMark' in body) {
+        if (body.previewMark === null) setPreviewMark(null)
+        else {
+          const p = parsePreviewPath(body.previewMark)
+          if (p) setPreviewMark(p)
+        }
+      }
+      if ('previewLocation' in body) {
+        if (body.previewLocation === null) setPreviewLocation(null)
+        else {
+          const p = parsePreviewPath(body.previewLocation)
+          if (p) setPreviewLocation(p)
+        }
+      }
       const action = body.action
       if (action === 'undo') {
         const { undone } = undoLastSketch()

@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
+import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
-import { subscribeWorkflow } from '../lib/workflowSync'
+import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
+import { isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
+import { Markdown } from './Markdown'
 
 const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site']
 const TARGET_WIDTHS: Record<DeviceTarget, number | null> = { phone: 375, tablet: 768, desktop: null }
@@ -43,18 +45,22 @@ async function ensureOverlay(iframe: HTMLIFrameElement | null): Promise<boolean>
   } catch { return false }
 }
 
-export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, setup }: {
+export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, setup, startPage }: {
   hmrUrl?: string
   onChanged: () => void
   onResult: (text: string) => void
   collapsed?: boolean
   onToggleCollapse?: () => void
-  /** Folder classification from the launcher; anything but 'ready'
-   * means no dev server will ever answer, so the pane states that
-   * plainly instead of polling a dead port. */
+  /** Folder classification from the launcher; 'loose'/'empty' folders
+   * have no page to serve, so the pane states that plainly instead of
+   * polling a dead port. 'html' folders are served by the launcher's
+   * standalone Vite on the same :5173 the ready projects use. */
   setup?: ProjectSetupInfo
+  /** The designated start page (project.ai.json entry, root-relative):
+   * the host page for component files. */
+  startPage?: string | null
 }) {
-  const noSetup = setup != null && setup.kind !== 'ready'
+  const noSetup = setup != null && (setup.kind === 'loose' || setup.kind === 'empty')
   const liveUrl = hmrUrl || DEFAULT_HMR
   const [url, setUrl] = useState(liveUrl)
   const [key, setKey] = useState(0)
@@ -69,11 +75,21 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   const [deviceTarget, setDeviceTargetState] = useState<DeviceTarget>('desktop')
   const [projectType, setProjectType] = useState('')
   const [projectFormat, setProjectFormat] = useState('')
+  // Preview mark + drift (slice B): the file the preview is of, and
+  // the page it has followed links to. Both ride the workflow snapshot.
+  const [mark, setMark] = useState<string | null>(null)
+  const [location, setLocation] = useState<string | null>(null)
+  const [readContent, setReadContent] = useState<string | null>(null)
+  const [readFailed, setReadFailed] = useState(false)
 
   async function refreshFoundation() {
     try {
       const wf = await getWorkflow()
       if (wf?.deviceTarget) setDeviceTargetState(wf.deviceTarget)
+      if (wf) {
+        setMark(wf.previewMark ?? null)
+        setLocation(wf.previewLocation ?? null)
+      }
     } catch { /* ignore */ }
     try {
       const pc = await getProjectConfig()
@@ -146,6 +162,77 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   const onHmr = url === liveUrl
   const showDown = onHmr && hmr === 'down'
   const showWaiting = onHmr && hmr === 'unknown'
+
+  // ── Mark-driven rendering (slice B) ────────────────────────────
+  const baseRenderer = mark ? rendererFor(mark) : null
+  // A marked script file whose name says nothing may still be a
+  // component (Lit element in .ts): sniff the content once per mark.
+  const [hostOverride, setHostOverride] = useState(false)
+  useEffect(() => {
+    setHostOverride(false)
+    if (!mark || baseRenderer !== 'none' || !isScriptFile(mark)) return
+    let live = true
+    void (async () => {
+      try {
+        const data = await readFile(mark) as { content?: string }
+        if (live && typeof data?.content === 'string' && looksLikeComponent(data.content)) setHostOverride(true)
+      } catch { /* stays 'none' */ }
+    })()
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mark, baseRenderer])
+  const renderer = hostOverride ? 'host' : baseRenderer
+  const hostPath = startPage ? `/${startPage}` : '/index.html'
+  const pagePath = renderer === 'host' ? hostPath : (location ?? mark ?? '/index.html')
+  const frameSrc = url === STATIC_URL
+    ? `${STATIC_URL.replace(/\/$/, '')}${pagePath}`
+    : pagePath === '/index.html' ? `${liveUrl}/` : `${liveUrl}${pagePath}`
+  const displayUrl = renderer === 'reading' || renderer === 'image' ? (mark ?? '') : frameSrc
+  const frameMode = renderer === 'page' || renderer === 'host'
+
+  // A new mark restarts the frame on the live server for that file.
+  const prevMark = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevMark.current === mark) return
+    prevMark.current = mark
+    setUrl(liveUrl)
+    setKey(k => k + 1)
+    setReadContent(null)
+    setReadFailed(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mark])
+
+  // Reading view: fetch the marked document's text.
+  useEffect(() => {
+    if (renderer !== 'reading' || !mark) return
+    let live = true
+    void (async () => {
+      try {
+        const data = await readFile(mark) as { content?: string }
+        if (live) setReadContent(typeof data?.content === 'string' ? data.content : '')
+      } catch { if (live) setReadFailed(true) }
+    })()
+    return () => { live = false }
+  }, [renderer, mark])
+
+  /** Same-origin (static) frames only: watch where links take the
+   * page and record it as drift, so the bar can offer the way back. */
+  function onFrameLoad() {
+    if (renderer !== 'page' || url !== STATIC_URL) return
+    try {
+      const p = frameRef.current?.contentWindow?.location?.pathname || ''
+      const rel = p.startsWith('/projects') ? p.slice('/projects'.length) : ''
+      if (rel && rel !== pagePath && /\.html?$/i.test(rel)) {
+        void postWorkflow({ previewLocation: rel }).then(() => { setLocation(rel); publishWorkflowChanged() })
+      }
+    } catch { /* cross-origin: the location is not observable */ }
+  }
+
+  async function returnToMark() {
+    try { await postWorkflow({ previewLocation: null }); publishWorkflowChanged() } catch { /* ignore */ }
+    setLocation(null)
+    setKey(k => k + 1)
+  }
 
   // Poll the in-page note count while annotate mode is on.
   useEffect(() => {
@@ -229,7 +316,13 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </button>
         )}
         <span style={{ fontWeight: 600 }}>PREVIEW</span>
-        <span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
+        <span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayUrl}</span>
+        {renderer === 'page' && location && mark && location !== mark && (
+          <span className="pill" title="You followed a link inside the preview">
+            viewing {location}
+            <button type="button" className="deck-btn" style={{ marginLeft: 6, padding: '0 6px', fontSize: 10.5 }} onClick={() => void returnToMark()}>Return to {mark}</button>
+          </span>
+        )}
         {onHmr && (noSetup ? (
           <span className="pill" title="This folder has no preview set up">
             <span className="dot" />
@@ -307,6 +400,37 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             </div>
           </div>
         </div>
+      ) : !frameMode ? (
+        renderer === 'reading' ? (
+          <div style={{ flex: 1, overflow: 'auto', background: '#141417', padding: '18px 22px', minHeight: 0 }}>
+            <div style={{ maxWidth: 680, margin: '0 auto', color: '#d4d4d8', fontSize: 13.5, lineHeight: 1.65 }}>
+              {readFailed
+                ? <div style={{ color: '#a1a1aa' }}>Could not read {mark}.</div>
+                : readContent === null
+                  ? <div style={{ color: '#a1a1aa' }}>Loading {mark}…</div>
+                  : /\.md$/i.test(mark || '')
+                    ? <Markdown text={readContent} />
+                    : <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{readContent}</div>}
+            </div>
+          </div>
+        ) : renderer === 'image' ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 16, minHeight: 0, overflow: 'auto' }}>
+            <img src={`${staticPreviewUrl().replace(/\/?$/, '')}${mark}`} alt={mark || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          </div>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+            <div style={{ maxWidth: 420 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>{mark ? 'No rendering for this file' : 'No file marked for preview'}</div>
+              <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+                {mark
+                  ? <><span className="mono">{mark}</span> has no preview rendering. Mark a page, document or image in the file pane instead.</>
+                  : setup?.kind === 'html'
+                    ? <>This folder has more than one HTML file ({setup.htmlFiles.join(', ')}) and none is marked. Use the eye button on a file in the file pane to preview it.</>
+                    : <>Use the eye button on a file in the file pane to preview it here.</>}
+              </div>
+            </div>
+          </div>
+        )
       ) : showDown ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
@@ -333,10 +457,17 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </div>
         </div>
       ) : (
+        <>
+          {renderer === 'host' && (
+            <div style={{ padding: '5px 10px', fontSize: 11.5, color: '#a1a1aa', background: '#17171b', borderBottom: '1px solid #1e1e23' }}>
+              <span className="mono">{mark}</span> is shown in <span className="mono">{hostPath}</span>, the page that renders it.
+            </div>
+          )}
         <iframe
           ref={frameRef}
-          key={`${url}-${key}`}
-          src={url}
+          key={`${frameSrc}-${key}`}
+          src={frameSrc}
+          onLoad={onFrameLoad}
           style={{
             flex: 1,
             width: TARGET_WIDTHS[deviceTarget] ? `${TARGET_WIDTHS[deviceTarget]}px` : '100%',
@@ -350,6 +481,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           }}
           title="preview"
         />
+        </>
       ))}
     </div>
   )

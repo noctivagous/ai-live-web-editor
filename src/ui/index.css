@@ -530,6 +530,10 @@ select.pill:disabled{cursor:default; opacity:.7}
 .ft-toolbar { display: flex; gap: 4px; align-items: center; padding: 6px 8px 2px; }
 .ft-tool { padding: 3px 5px; }
 .ft-sort { margin-left: auto; font-size: 11px; padding: 2px 4px; max-width: 86px; }
+.ft-preview-mode { display: flex; gap: 2px; margin-left: 6px; }
+.ft-preview-mode .ft-tool { font-size: 10.5px; padding: 3px 6px; }
+.ft-mark-icon { color: #7dd3fc; flex-shrink: 0; margin-left: 4px; }
+.ft-start-badge { font-size: 9.5px; color: #fbbf24; border: 1px solid rgba(251,191,36,.4); border-radius: 999px; padding: 0 5px; margin-left: 6px; flex-shrink: 0; }
 .ft-filter { display: flex; align-items: center; gap: 5px; margin: 6px 8px 4px; padding: 4px 7px; border: 1px solid #26262c; border-radius: 8px; background: #101013; }
 .ft-filter-icon { color: #71717a; flex-shrink: 0; }
 .ft-filter-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e4e4e7; font-size: 12px; font-family: inherit; }

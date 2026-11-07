@@ -95,7 +95,33 @@ export function startVite() {
     return
   }
   if (!fs.existsSync(path.join(root, 'package.json'))) {
-    console.log('[vite] skip, no package.json at', root)
+    // No package.json (Open slice B): a folder with HTML pages still
+    // gets a live preview — the editor's own Vite, run standalone in
+    // the folder. It serves the pages and compiles their modules
+    // (Lit's TypeScript included) with no project setup at all.
+    // Folders with no HTML have nothing to serve; the preview pane
+    // states that itself.
+    if (classifyProject(root).htmlFiles.length === 0) {
+      console.log('[vite] skip, no package.json and no HTML at', root)
+      return
+    }
+    const viteBin = path.join(EDITOR_ROOT, 'node_modules', 'vite', 'bin', 'vite.js')
+    if (!fs.existsSync(viteBin)) {
+      console.log('[vite] skip, standalone vite not installed at', viteBin)
+      return
+    }
+    const standalone = spawn(process.execPath, [viteBin, '--port', '5173', '--host'], {
+      cwd: root,
+      stdio: 'inherit',
+      env: process.env,
+      detached: process.platform !== 'win32',
+    })
+    viteChild = standalone
+    standalone.on('exit', (code, signal) => {
+      if (viteChild === standalone) viteChild = null
+      console.log('[vite] standalone exit', code, signal || '')
+    })
+    console.log('[vite] standalone started in', root, standalone.pid ? `pid ${standalone.pid}` : '')
     return
   }
   const child = spawn('npm', ['run', 'dev'], {
@@ -111,6 +137,16 @@ export function startVite() {
     console.log('[vite] child exit', code, signal || '')
   })
   console.log('[vite] started in', root, child.pid ? `pid ${child.pid}` : '')
+}
+
+/** Seed the preview session for a newly opened project (slice B):
+ * the designated start page wins, else the detected entry candidate. */
+async function adoptPreviewSeed(root: string) {
+  try {
+    const { readProjectConfig } = await import('./projectConfig.js')
+    const { seedPreviewSession } = await import('./previewSession.js')
+    seedPreviewSession(readProjectConfig(root).entry ?? null, classifyProject(root).entry)
+  } catch { /* classification is best-effort */ }
 }
 
 /** Adopt the project's saved default device target, if any (phase-11-06 §B). */
@@ -144,6 +180,7 @@ export function selectProject(id: string): ProjectInfo {
   setFsRoot(found.root)
   void adoptProjectDevice(found.root)
   void adoptProjectAppkit(found.root)
+  void adoptPreviewSeed(found.root)
   writeActiveId(found.id)
   startVite()
   return found

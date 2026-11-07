@@ -29,8 +29,9 @@ import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
 import { loadCollapse, saveCollapse } from './lib/collapse'
+import { publishWorkflowChanged } from './lib/workflowSync'
 import {
-  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getProjectConfig, probeModels, saveAiConfig,
+  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getProjectConfig, postProjectConfig, postWorkflow, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject, fetchSyncChanges,
   type LauncherConfig, type ProjectInfo, type ProjectSetupInfo, type ConnectionsPayload,
@@ -89,6 +90,32 @@ export default function App() {
 
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [activeProject, setActiveProject] = useState('')
+  /** The active project's designated start page (project.ai.json
+   * entry), shared by the file pane's badge and the Preview. */
+  const [startPage, setStartPage] = useState<string | null>(null)
+  useEffect(() => {
+    if (!activeProject) { setStartPage(null); return }
+    let live = true
+    void getProjectConfig()
+      .then(r => { if (live) setStartPage(r.config.entry ?? null) })
+      .catch(() => { if (live) setStartPage(null) })
+    return () => { live = false }
+  }, [activeProject])
+
+  /** Promote a file to the start page: write the manifest, and mark
+   * the file so the preview shows what was just designated. */
+  async function handleSetStartPage(path: string) {
+    const entry = path.replace(/^\//, '')
+    try {
+      const r = await postProjectConfig({ entry })
+      setStartPage(r.config.entry ?? entry)
+      await postWorkflow({ previewMark: path })
+      publishWorkflowChanged()
+      setStatus(`start page: ${entry}`)
+    } catch {
+      setNotice(`Could not set the start page to ${entry}.`)
+    }
+  }
   // Folder import: Import is a copy, Open is live two-way sync.
   const [overLimit, setOverLimit] = useState<{
     pick: PickedFolder
@@ -975,6 +1002,8 @@ export default function App() {
               onRename={renameFromPane}
               onDelete={deleteFromPane}
               onDuplicate={duplicateFromPane}
+              startPage={startPage}
+              onSetStartPage={(p) => { void handleSetStartPage(p) }}
             />
           ) : (
             <Library
@@ -1006,6 +1035,7 @@ export default function App() {
             <Preview
               key={activeProject}
               setup={projects.find(p => p.id === activeProject)?.setup}
+              startPage={startPage}
               hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
               collapsed={collapse.preview}
               onToggleCollapse={() => toggleCollapse('preview')}

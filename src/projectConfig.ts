@@ -40,6 +40,13 @@ export function parseProjectFormat(value: unknown): ProjectFormat | undefined {
 }
 
 export interface ProjectConfig {
+  /**
+   * The designated start page (Open slice B): a root-relative .html
+   * file the preview opens on and the file pane badges as the start
+   * page. Designation only — what the preview currently shows is
+   * session state (previewSession), seeded from this.
+   */
+  entry?: string
   type?: string
   format?: ProjectFormat
   deviceTargets?: DeviceTarget[]
@@ -84,10 +91,21 @@ export function readProjectConfig(root: string = getFsRoot()): ProjectConfig {
   }
 }
 
+/** A designated entry must be a plain root-relative .html path:
+ * no leading slash, no traversal, no nested exotica. */
+export function parseProjectEntry(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const v = value.trim().replace(/^\/+/, '')
+  if (!v || v.includes('..') || v.includes('\\') || v.length > 200) return undefined
+  return /\.html?$/i.test(v) ? v : undefined
+}
+
 export function sanitizeProjectConfig(value: unknown): ProjectConfig {
   if (!value || typeof value !== 'object') return {}
   const v = value as Record<string, unknown>
   const out: ProjectConfig = {}
+  const entry = parseProjectEntry(v.entry)
+  if (entry) out.entry = entry
   if (typeof v.type === 'string' && v.type.trim()) out.type = v.type.trim()
   const format = parseProjectFormat(v.format)
   if (format) out.format = format
@@ -149,6 +167,7 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   } else if (format === 'page') {
     lines.push('Format: page (document flow) — the page scrolls and grows; content lives in sections. Add controls and sections in the flow; adapt across targets by reflowing (stack columns, scale type), not by pinning fixed regions.')
   }
+  if (config.entry) lines.push(`Start page: ${config.entry} — the project's designated entry page; the preview opens here and other pages/components are reached from it.`)
   if (config.appkit) lines.push('Component stock: this project opts into the Noct AppKit (Lit) catalog stock in addition to shadcn.')
   if (config.styleSet) lines.push(`Style set: ${config.styleSet} — use its tokens for new UI.`)
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)

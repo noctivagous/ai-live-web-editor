@@ -19,6 +19,9 @@ projects/*
 providers.json
 .DS_Store
 
+# Server-side error log (local diagnostics, never committed)
+logs/
+
 dist-verify/
 
 # Per-project local config written by the AI editor (not source)

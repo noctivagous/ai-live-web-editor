@@ -315,7 +315,11 @@ app.post('/api/config/pool', async (req, res) => {
       const { closePool } = await import('./browserPool.js')
       await closePool()
     } else {
-      void openPoolBrowser().catch((e) => console.error('[browser]', e))
+      void openPoolBrowser().catch(async (e) => {
+        console.error('[browser]', e)
+        const { logServerError } = await import('./serverLog.js')
+        logServerError({ kind: 'pool', route: 'POST /api/config/pool', message: e instanceof Error ? e.message : String(e) })
+      })
     }
     res.json({ ...publicConfig(), saved: true })
   } catch (e: any) {
@@ -473,6 +477,8 @@ app.post('/api/chat', async (req, res) => {
     res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
   } catch (e: any) {
     console.error(e)
+    const { logServerError } = await import('./serverLog.js')
+    logServerError({ kind: 'chat-error', route: 'POST /api/chat', status: 500, message: e.message })
     const { describeUpstreamError } = await import('./chatStream.js')
     res.status(500).json({ ok: false, error: describeUpstreamError(e) })
   }
@@ -519,6 +525,8 @@ app.post('/api/live-edit/submit', async (req, res) => {
     })
   } catch (e: any) {
     console.error(e)
+    const { logServerError } = await import('./serverLog.js')
+    logServerError({ kind: 'chat-error', route: 'POST /api/live-edit/submit', status: 500, message: e.message })
     const { describeUpstreamError } = await import('./chatStream.js')
     res.status(500).json({ ok: false, error: describeUpstreamError(e) })
   }
@@ -645,7 +653,11 @@ const server = app.listen(PORT, () => {
   console.log(`[launcher] Projects: http://localhost:${PORT}/projects/`)
   console.log(`[launcher] Playwright pool: ${playwrightPoolEnabled() ? 'on' : 'off'} · live target: ${liveTarget()}${liveTarget() === 'pool' ? ' (no Vite bridge)' : ''}`)
   if (playwrightPoolEnabled()) {
-    void openPoolBrowser().catch((e) => console.error('[browser]', e))
+    void openPoolBrowser().catch(async (e) => {
+      console.error('[browser]', e)
+      const { logServerError } = await import('./serverLog.js')
+      logServerError({ kind: 'pool', route: 'boot', message: e instanceof Error ? e.message : String(e) })
+    })
   }
 })
 

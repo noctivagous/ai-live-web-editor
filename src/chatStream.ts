@@ -546,6 +546,16 @@ export async function pipeAgentChatStream(
           followUp: false,
         }
       }
+      if (gate.layout.length || gate.console.length || gate.unverified.length) {
+        const { logServerError } = await import('./serverLog.js')
+        logServerError({
+          kind: 'verify-gate',
+          route: 'POST /api/chat/stream',
+          model,
+          message: `gate findings: ${gate.layout.length} layout, ${gate.console.length} console, ${gate.unverified.length} unverified`,
+          detail: gate.unverified.join(' | ') || undefined,
+        })
+      }
     } else if (mode === 'files' && !verifyGateEnabled()) {
       verification = { ran: false, skipped: 'AI_LIVE_VERIFY=0' }
     }
@@ -558,9 +568,15 @@ export async function pipeAgentChatStream(
         ? await (r.totalUsage as PromiseLike<unknown>)
         : r.totalUsage
       usage = toTurnUsage(raw)
-      if (!usage) console.warn('[chat] provider did not report token usage for this turn')
+      if (!usage) {
+        console.warn('[chat] provider did not report token usage for this turn')
+        const { logServerError } = await import('./serverLog.js')
+        logServerError({ kind: 'chat-usage', route: 'POST /api/chat/stream', model, message: 'provider did not report token usage for this turn' })
+      }
     } catch (e: unknown) {
       console.warn('[chat] usage lookup failed:', e instanceof Error ? e.message : String(e))
+      const { logServerError } = await import('./serverLog.js')
+      logServerError({ kind: 'chat-usage', route: 'POST /api/chat/stream', model, message: 'usage lookup failed', detail: e instanceof Error ? e.message : String(e) })
     }
     // Self mode (§L): a Files turn that wrote files gets tsc +
     // tests run against the editor itself, fire-and-forget; the
@@ -581,6 +597,8 @@ export async function pipeAgentChatStream(
       return
     }
     console.error(e)
+    const { logServerError } = await import('./serverLog.js')
+    logServerError({ kind: 'chat-error', route: 'POST /api/chat/stream', message: e instanceof Error ? e.message : String(e) })
     try { send({ type: 'error', error: describeUpstreamError(e) }) } catch { /* closed */ }
     res.end()
   }

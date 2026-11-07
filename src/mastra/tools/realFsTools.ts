@@ -216,7 +216,11 @@ export const runProjectCheckTool = createTool({
   execute: async () => {
     const root = getFsRoot()
     const pkgPath = path.join(root, 'package.json')
-    if (!fs.existsSync(pkgPath)) return { ok: false, error: 'No package.json in the active project' }
+    if (!fs.existsSync(pkgPath)) {
+      const { logServerError } = await import('../../serverLog.js')
+      logServerError({ kind: 'project-check', message: 'No package.json in the active project' })
+      return { ok: false, error: 'No package.json in the active project' }
+    }
     let scripts: Record<string, string> = {}
     try {
       const parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { scripts?: unknown }
@@ -224,9 +228,13 @@ export const runProjectCheckTool = createTool({
         scripts = parsed.scripts as Record<string, string>
       }
     } catch (e: unknown) {
+      const { logServerError } = await import('../../serverLog.js')
+      logServerError({ kind: 'project-check', message: 'Could not parse package.json', detail: e instanceof Error ? e.message : String(e) })
       return { ok: false, error: 'Could not parse package.json: ' + (e instanceof Error ? e.message : String(e)) }
     }
     if (typeof scripts.build !== 'string' || !scripts.build) {
+      const { logServerError } = await import('../../serverLog.js')
+      logServerError({ kind: 'project-check', message: 'No build script in package.json' })
       return { ok: false, error: 'No build script in package.json' }
     }
     try {
@@ -240,6 +248,8 @@ export const runProjectCheckTool = createTool({
     } catch (e: unknown) {
       const err = e as { stdout?: unknown; stderr?: unknown; message?: string; killed?: boolean }
       const combined = [err.stdout, err.stderr].filter(Boolean).join('\n')
+      const { logServerError } = await import('../../serverLog.js')
+      logServerError({ kind: 'project-check', message: 'project build failed', detail: tail(combined) || (err.message ?? 'build failed') })
       return {
         ok: false,
         script: 'build',

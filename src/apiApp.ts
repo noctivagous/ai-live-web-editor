@@ -108,7 +108,11 @@ mountPlanApi(app)
         await closePool()
       } else {
         const { openPoolBrowser } = await import('./poolPage.js')
-        void openPoolBrowser().catch((e) => console.error('[browser]', e))
+        void openPoolBrowser().catch(async (e) => {
+          console.error('[browser]', e)
+          const { logServerError } = await import('./serverLog.js')
+          logServerError({ kind: 'pool', route: 'POST /api/config/pool', message: e instanceof Error ? e.message : String(e) })
+        })
       }
       res.json({ ...publicConfig(url()), saved: true })
     } catch (e: any) {
@@ -207,6 +211,8 @@ mountPlanApi(app)
       res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
     } catch (e: any) {
       console.error(e)
+      const { logServerError } = await import('./serverLog.js')
+      logServerError({ kind: 'chat-error', route: 'POST /api/chat', status: 500, message: e.message })
       const { describeUpstreamError } = await import('./chatStream.js')
       res.status(500).json({ ok: false, error: describeUpstreamError(e) })
     }
@@ -250,6 +256,8 @@ mountPlanApi(app)
       })
     } catch (e: any) {
       console.error(e)
+      const { logServerError } = await import('./serverLog.js')
+      logServerError({ kind: 'chat-error', route: 'POST /api/live-edit/submit', status: 500, message: e.message })
       const { describeUpstreamError } = await import('./chatStream.js')
       res.status(500).json({ ok: false, error: describeUpstreamError(e) })
     }

@@ -56,7 +56,7 @@ Efficient workflow:
 When the user points at another URL (not the Vite app), pass url= to inspect/patch/eval/layout-snapshot/layout-svg, or call pool-open. That uses the Playwright pool, which the user must enable in Settings. If the pool is off, tell them to enable it.
 
 Live-edit mode: the user may annotate elements on the page. When you receive a live-edit request:
-1. resolve-source on each annotated selector to find the file that renders it
+1. resolve-source on each annotated selector to find the file that renders it (pass sourceLoc when the snapshot/inspect result carried a data-ai-loc stamp — that is an exact match)
 2. inspect-dom on the selector plus ranged read-real-file around the resolved range
 3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.

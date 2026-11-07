@@ -3,25 +3,92 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nexus — Build the future</title>
-    <meta name="description" content="Nexus is the developer platform for AI infrastructure, cloud scale, and real-time systems." />
+    <title>NEXUS // CYBER_GRID — Build the Future</title>
+    <meta name="description" content="NEXUS is the cyber-grid for AI infrastructure, edge compute, and real-time systems." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       html { scroll-behavior: smooth; }
       body {
-        font-family: Inter, system-ui, -apple-system, sans-serif;
-        background: #07090f;
-        color: #e8ecf4;
+        font-family: Rajdhani, Inter, system-ui, sans-serif;
+        background: #05010a;
+        color: #d9fbff;
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      /* grid backdrop */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(0,240,255,0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,240,255,0.07) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 100%);
+        animation: gridPan 14s linear infinite;
+      }
+      /* scanlines + vignette */
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        pointer-events: none;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0px,
+          transparent 3px,
+          rgba(0,0,0,0.22) 4px
+        );
+        mix-blend-mode: multiply;
+        opacity: 0.5;
       }
       a { color: inherit; text-decoration: none; }
       button { font-family: inherit; cursor: pointer; border: none; background: none; }
       img { max-width: 100%; display: block; }
-      #root { min-height: 100vh; }
+      #root { min-height: 100vh; position: relative; z-index: 1; }
+      ::selection { background: #00f0ff; color: #05010a; }
+      ::-webkit-scrollbar { width: 10px; }
+      ::-webkit-scrollbar-track { background: #0a0414; }
+      ::-webkit-scrollbar-thumb { background: linear-gradient(#00f0ff, #ff2bd6); border-radius: 0; }
+
+      @keyframes gridPan {
+        from { background-position: 0 0, 0 0; }
+        to { background-position: 0 44px, 0 0; }
+      }
+      @keyframes blink {
+        0%, 60% { opacity: 1; }
+        61%, 100% { opacity: 0.15; }
+      }
+      @keyframes flicker {
+        0%, 100% { opacity: 1; }
+        92% { opacity: 1; }
+        93% { opacity: 0.6; }
+        94% { opacity: 1; }
+        96% { opacity: 0.75; }
+        97% { opacity: 1; }
+      }
+      @keyframes pulseGlow {
+        0%, 100% { box-shadow: 0 0 18px rgba(0,240,255,0.45), 0 0 46px rgba(255,43,214,0.18); }
+        50% { box-shadow: 0 0 28px rgba(0,240,255,0.75), 0 0 70px rgba(255,43,214,0.32); }
+      }
+      @keyframes marquee {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+      }
+      .cyber-blink { animation: blink 1.1s steps(1) infinite; }
+      .cyber-flicker { animation: flicker 4s linear infinite; }
+      .cyber-pulse { animation: pulseGlow 2.6s ease-in-out infinite; }
+
+      @media (max-width: 640px) {
+        body::before { background-size: 32px 32px; }
+      }
     </style>
   </head>
   <body>

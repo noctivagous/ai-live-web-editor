@@ -229,10 +229,14 @@ Phase-11-05 §9. Usage is measured; savings are not yet proven.
   (preserve variants/responsive prefixes), add-import-for-component,
   add/change-prop. Each a `str-replace` wrapper with a fixture test,
   dialect from the project profile
-- [ ] Exact DOM↔source stamp: Vite plugin tags JSX with
-  `data-ai-loc="file:line"` in dev; `resolve-source` already
-  honours a `sourceLoc` when supplied. Do it when nested catalog
-  components prove systematically ambiguous for the heuristic join
+- [x] Exact DOM↔source stamp: Vite plugin tags JSX with
+  `data-ai-loc="file:line"` in dev (landed 2026-11-07:
+  `src/vite-plugin/stampAiLoc.ts` pre-transform on project
+  `.jsx/.tsx`, same-line insert so line numbers hold;
+  bridge `inspect`/snapshot/layout return `sourceLoc`;
+  `resolve-source` takes an optional `sourceLoc` for an exact
+  match, heuristic fallback unchanged). Prompt tells the agent to
+  pass `sourceLoc` when the snapshot/inspect result carries one
 - [ ] Session compact (Agent-context Layer 3): only after chat
   persists a long thread — keep last ~4 text turns + a 20-line
   working set (files touched, what changed, open questions) in a

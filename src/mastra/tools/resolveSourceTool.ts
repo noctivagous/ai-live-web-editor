@@ -58,16 +58,20 @@ export function indexProjectSources(root: string): SourceFile[] {
 export const resolveSourceTool = createTool({
   id: 'resolve-source',
   description:
-    'Map a live-DOM selector (take-snapshot line, inspect-dom selector, annotate selector) to the source file/component that renders it. Call this before grep when a selector needs a file. Fails closed when ambiguous.',
+    'Map a live-DOM selector (take-snapshot line, inspect-dom selector, annotate selector) to the source file/component that renders it. When the bridge returned a sourceLoc (dev-only data-ai-loc stamp), pass it for an exact match. Call this before grep when a selector needs a file. Fails closed when ambiguous.',
   inputSchema: z.object({
     selector: z.string().describe('CSS selector from the live page (snapshot line, overlay, or stableId path)'),
     stableId: z.string().optional().describe('Bridge stableId (id:foo or path:...) when known'),
     textSnippet: z.string().optional().describe('Visible text of the element, if known'),
     classList: z.array(z.string()).optional().describe('Class tokens of the element, if known'),
     tagName: z.string().optional().describe('Lowercase tag name, if known'),
+    sourceLoc: z.object({
+      file: z.string().describe('Project-relative stamp path, e.g. /src/App.jsx'),
+      line: z.number().int().positive().optional().describe('1-based stamped line'),
+    }).optional().describe('Exact join: bridge sourceLoc from the data-ai-loc stamp. Wins over heuristic anchors.'),
   }),
-  execute: async ({ selector, stableId, textSnippet, classList, tagName }) => {
+  execute: async ({ selector, stableId, textSnippet, classList, tagName, sourceLoc }) => {
     const files = indexProjectSources(getFsRoot())
-    return resolveSelector({ selector, stableId, textSnippet, classList, tagName }, files)
+    return resolveSelector({ selector, stableId, textSnippet, classList, tagName, sourceLoc }, files)
   },
 })

@@ -1036,7 +1036,10 @@ the project's own components, never replacing them.
   stamp) is deferred until nested catalog components (Step 1) prove
   systematically ambiguous. The resolver already honours an exact
   `sourceLoc` stamp when the bridge supplies one, so the upgrade is
-  additive. Caveat: lumen is a single-component app, so file-level
+  additive. Update 2026-11-07: the stamp landed anyway as a cheap
+  additive win (`src/vite-plugin/stampAiLoc.ts`, bridge `sourceLoc`,
+  `resolve-source` passthrough) — heuristic stays the fallback.
+  Caveat: lumen is a single-component app, so file-level
   precision is trivially high; component/range attribution is
   best-effort (enclosing `App` + anchor line).
 - [x] Rung 0 resolver tool `resolve-source` (`selector` →

@@ -16,6 +16,7 @@ import { createApiApp } from '../apiApp.js'
 import { loadDotEnv, setEnvPath } from '../env.js'
 import { setFsRoot } from '../launcher.js'
 import { markPageOwner } from '../pageBridge.js'
+import { stampAiLoc, stampTarget } from './stampAiLoc.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PKG_ROOT = path.resolve(__dirname, '..')
@@ -48,17 +49,26 @@ export function aiLiveEditor(opts: AiLiveEditorOptions = {}): Plugin {
     return fs.readFileSync(file, 'utf-8').replaceAll('__LAUNCHER_URL__', JSON.stringify(apiBase))
   }
 
+  let fsRoot = ''
   return {
     name: 'ai-live-editor',
     apply: 'serve',
+    enforce: 'pre',
     config() {
       return { server: { fs: { allow: [PKG_ROOT] } } }
     },
     configResolved(config) {
-      const fsRoot = path.resolve(opts.fsRoot || config.root)
+      fsRoot = path.resolve(opts.fsRoot || config.root)
       setFsRoot(fsRoot)
       setEnvPath(resolveEnvFile(fsRoot, opts.envFile))
       loadDotEnv()
+    },
+    transform(code, id) {
+      if (!fsRoot) return null
+      const rel = stampTarget(id, fsRoot)
+      if (!rel) return null
+      const stamped = stampAiLoc(code, rel)
+      return stamped === code ? null : { code: stamped, map: null }
     },
     resolveId(id) {
       if (id === 'ai-live-editor/chat-overlay') return '\0' + id

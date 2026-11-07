@@ -161,6 +161,13 @@ function capturePageSnapshot(payload, document) {
     var line = indent + 'uid=' + id + ' ' + role
     if (name) line += ' "' + name.replace(/"/g, "'") + '"'
     line += ' ' + selector
+    // Exact join: carry the dev-only data-ai-loc stamp only when present,
+    // so unstamped pages pay zero extra tokens.
+    try {
+      var stamped = el.closest ? el.closest('[data-ai-loc]') : null
+      var loc = stamped && stamped.getAttribute ? stamped.getAttribute('data-ai-loc') : null
+      if (loc) line += ' [data-ai-loc="' + String(loc).replace(/"/g, "'") + '"]'
+    } catch (e) { /* stamp is best-effort */ }
     lines.push(line)
     count++
   }

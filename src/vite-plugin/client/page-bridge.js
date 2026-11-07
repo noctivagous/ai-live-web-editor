@@ -110,10 +110,27 @@ function startPageBridge() {
     return window === window.top ? 'top' : 'iframe'
   }
 
+  // Exact DOM→file join: read the dev-only data-ai-loc stamp the Vite
+  // transform adds (`/rel/path.jsx:LINE`), else the nearest stamped
+  // ancestor. Absent on unstamped pages — the resolver falls back to
+  // heuristic matching.
+  function readSourceLoc(el) {
+    try {
+      const n = el && typeof el.closest === 'function' ? el.closest('[data-ai-loc]') : null
+      const raw = n && n.getAttribute ? n.getAttribute('data-ai-loc') : null
+      if (!raw) return undefined
+      const i = String(raw).lastIndexOf(':')
+      if (i < 0) return { file: String(raw) }
+      const line = Number(String(raw).slice(i + 1))
+      return { file: String(raw).slice(0, i), line: Number.isFinite(line) && line > 0 ? line : undefined }
+    } catch { return undefined }
+  }
+
   function inspect(selector) {
     const el = selector ? document.querySelector(selector) : document.documentElement
     if (!el) return { ok: false, error: 'Selector not found: ' + selector, frame: frameKind() }
     const r = el.getBoundingClientRect()
+    const sourceLoc = readSourceLoc(el)
     return {
       ok: true,
       tag: el.tagName,
@@ -123,6 +140,7 @@ function startPageBridge() {
       url: location.href,
       title: document.title,
       frame: frameKind(),
+      ...(sourceLoc ? { sourceLoc } : null),
     }
   }
 
@@ -208,6 +226,7 @@ function startPageBridge() {
         for (const k of LAYOUT_STYLES) computedStyles[k] = cs.getPropertyValue(k)
       }
       const parent = el.parentElement
+      const sourceLoc = readSourceLoc(el)
       elements.push({
         tagName: el.tagName,
         id,
@@ -217,6 +236,7 @@ function startPageBridge() {
         computedStyles,
         stableId: id ? `id:${id}` : `path:${cssPath(el)}`,
         parentStableId: parent ? (parent.id ? `id:${parent.id}` : `path:${cssPath(parent)}`) : undefined,
+        ...(sourceLoc ? { sourceLoc } : null),
       })
     }
     return {

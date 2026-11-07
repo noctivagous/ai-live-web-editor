@@ -599,6 +599,10 @@ select.pill:disabled{cursor:default; opacity:.7}
 .set-slider { display: inline-flex; align-items: center; gap: 8px; }
 .set-slider-val { font-size: 12px; color: #a1a1aa; min-width: 34px; }
 .set-confirm { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #d4d4d8; }
+.set-group-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #a1a1aa; margin: 14px 0 2px; }
+.set-group-label:first-child { margin-top: 0; }
+.set-keys { display: flex; align-items: center; gap: 8px; }
+.set-key-chip { font-size: 12px; color: #e4e4e7; background: #1b1b20; border: 1px solid #2e2e36; border-bottom-width: 2px; border-radius: 6px; padding: 3px 8px; min-width: 44px; text-align: center; }
 .deck-btn.danger { border-color: #ef4444; color: #f87171; }
 .set-checks { display: inline-flex; gap: 12px; flex-wrap: wrap; }
 .set-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: #d4d4d8; cursor: pointer; }

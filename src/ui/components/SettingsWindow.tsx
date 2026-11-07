@@ -9,6 +9,9 @@ import {
 } from '../lib/uiPrefs'
 import { buildSettingsExport, chatSessionKeys, parseSettingsImport } from '../lib/settingsData'
 import {
+  SHORTCUTS, comboFromEvent, effectiveCombo, findConflict, formatCombo, shortcutDef,
+} from '../lib/shortcuts'
+import {
   SETTING_SECTIONS, fieldsForSection, searchSettings, sectionById,
   type SettingField, type SettingSection,
 } from '../lib/settingsSchema'
@@ -47,6 +50,88 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const [dataNotice, setDataNotice] = useState<string | null>(null)
   const [dataConfirm, setDataConfirm] = useState<'reset' | 'clearChats' | null>(null)
   const importRef = React.useRef<HTMLInputElement>(null)
+  const [recordingId, setRecordingId] = useState<string | null>(null)
+  const [shortcutError, setShortcutError] = useState<string | null>(null)
+
+  // Click-to-record: while a row is recording, the next real key
+  // press becomes its binding. Plain Escape cancels.
+  useEffect(() => {
+    if (!recordingId) return
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) { setRecordingId(null); return }
+      const combo = comboFromEvent(e)
+      if (!combo) return // modifier alone — keep waiting
+      const clash = findConflict(recordingId, combo, prefs.shortcutOverrides)
+      if (clash) {
+        setShortcutError(`“${formatCombo(combo)}” is already used by “${shortcutDef(clash)?.label}”.`)
+        setRecordingId(null)
+        return
+      }
+      const next = { ...prefs.shortcutOverrides }
+      if (combo === shortcutDef(recordingId)?.combo) delete next[recordingId]
+      else next[recordingId] = combo
+      setPrefs(saveUiPrefs({ shortcutOverrides: next }))
+      setShortcutError(null)
+      setRecordingId(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [recordingId, prefs.shortcutOverrides])
+
+  const shortcutsSection = () => {
+    const scopes = [...new Set(SHORTCUTS.map(s => s.scope))]
+    const anyOverrides = Object.keys(prefs.shortcutOverrides).length > 0
+    return (
+      <div>
+        {scopes.map(scope => (
+          <div key={scope}>
+            <div className="set-group-label">{scope}</div>
+            {SHORTCUTS.filter(s => s.scope === scope).map(s => {
+              const overridden = s.editable && s.id in prefs.shortcutOverrides
+              return (
+                <div className="set-row" key={s.id}>
+                  <div className="set-row-text">
+                    <div className="set-row-label">{s.label}</div>
+                    {s.note && <div className="field-hint">{s.note}</div>}
+                    {overridden && <div className="field-hint">Changed from {formatCombo(s.combo)}.</div>}
+                  </div>
+                  <div className="set-row-control set-keys">
+                    <span className="set-key-chip">{s.editable ? formatCombo(effectiveCombo(s.id, prefs.shortcutOverrides)) : s.combo}</span>
+                    {s.editable ? (
+                      <>
+                        <button type="button" className="deck-btn" onClick={() => { setShortcutError(null); setRecordingId(s.id) }}>
+                          {recordingId === s.id ? 'Press keys…' : 'Record'}
+                        </button>
+                        {overridden && (
+                          <button type="button" className="deck-btn" onClick={() => {
+                            const next = { ...prefs.shortcutOverrides }
+                            delete next[s.id]
+                            setPrefs(saveUiPrefs({ shortcutOverrides: next }))
+                          }}>Reset</button>
+                        )}
+                      </>
+                    ) : (
+                      <span className="set-note">Built in</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+        {shortcutError && <div className="field-hint" style={{ color: 'var(--red)', marginTop: 8 }}>{shortcutError}</div>}
+        {anyOverrides && (
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="deck-btn" onClick={() => setPrefs(saveUiPrefs({ shortcutOverrides: {} }))}>
+              Reset all bindings to defaults
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   useEffect(() => { setSection(initialSection) }, [initialSection])
   useEffect(() => { void reload() }, [reload])
@@ -313,6 +398,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     if (s.custom === 'search') return <SearchSetup />
     if (s.custom === 'preview') return previewSection()
     if (s.custom === 'data') return dataSection()
+    if (s.custom === 'shortcuts') return shortcutsSection()
     if (s.custom === 'about') return aboutSection()
     return (
       <div>

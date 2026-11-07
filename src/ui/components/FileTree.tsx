@@ -9,7 +9,8 @@ import {
   parentPath, siblingNames, sortTree, validateEntryName, visibleTree,
   type SortMode, type TreeNode,
 } from '../lib/fileTree'
-import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
+import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs'
+import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
 
 /* File browser pane: a real tree over the launcher's flat file list.
    Everything it shows comes from /api/fs/list (files + dirs + mtimes);
@@ -60,6 +61,12 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
     saveUiPrefs({ fileShowHidden: next })
     return next
   })
+  const [overrides, setOverrides] = useState(() => loadUiPrefs().shortcutOverrides)
+  useEffect(() => {
+    const onPrefs = () => setOverrides(loadUiPrefs().shortcutOverrides)
+    window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+    return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+  }, [])
   const [focused, setFocused] = useState(active)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -181,6 +188,18 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
       const next = rows[Math.min(rows.length - 1, Math.max(0, idx + d))]
       if (next) setFocused(next.node.path)
     }
+    // Rebindable commands first (Settings → Keyboard Shortcuts), so a
+    // user binding wins over the pane's structural navigation keys.
+    if (matchShortcut(e.nativeEvent, effectiveCombo('fileRename', overrides))) {
+      const row = rows[idx]
+      if (row) { e.preventDefault(); startRename(row.node) }
+      return
+    }
+    if (matchShortcut(e.nativeEvent, effectiveCombo('fileDelete', overrides))) {
+      const row = rows[idx]
+      if (row) { e.preventDefault(); requestDelete(row.node) }
+      return
+    }
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
     else if (e.key === 'Enter') {
@@ -192,12 +211,6 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
     } else if (e.key === 'ArrowLeft') {
       const row = rows[idx]
       if (row?.node.isDir) { e.preventDefault(); setCollapsed(prev => new Set(prev).add(row.node.path)) }
-    } else if (e.key === 'F2') {
-      const row = rows[idx]
-      if (row) { e.preventDefault(); startRename(row.node) }
-    } else if (e.key === 'Delete') {
-      const row = rows[idx]
-      if (row) { e.preventDefault(); requestDelete(row.node) }
     }
   }
 

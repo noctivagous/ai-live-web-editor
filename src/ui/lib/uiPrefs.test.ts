@@ -61,3 +61,12 @@ describe('uiPrefs editor fields + replace', () => {
     assert.deepEqual(loadUiPrefs(store), next)
   })
 })
+
+describe('uiPrefs shortcut overrides', () => {
+  it('keeps valid overrides and drops unknown, fixed, and default-equal entries', () => {
+    const p = validateUiPrefs({ shortcutOverrides: { fileRename: 'F4', deckNext: 'arrowright', nope: 'f9', chatSend: 'x', fileDelete: 'junk++' } })
+    assert.deepEqual(p.shortcutOverrides, { fileRename: 'f4' })
+    assert.deepEqual(validateUiPrefs({}).shortcutOverrides, {})
+    assert.deepEqual(validateUiPrefs({ shortcutOverrides: 'nope' }).shortcutOverrides, {})
+  })
+})

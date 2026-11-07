@@ -8,6 +8,8 @@
  * project.ai.json); this module is only for per-device choices.
  */
 
+import { sanitizeOverrides } from './shortcuts'
+
 export type ChatViewPref = 'chat' | 'panel'
 export type FileSortPref = 'name' | 'type' | 'modified'
 
@@ -22,6 +24,8 @@ export interface UiPrefs {
   editorWordWrap: boolean
   editorMinimap: boolean
   editorLineNumbers: boolean
+  /** Keyboard shortcut overrides by registry id (shortcuts.ts). */
+  shortcutOverrides: Record<string, string>
 }
 
 export const UI_PREFS_DEFAULTS: UiPrefs = {
@@ -33,6 +37,7 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   editorWordWrap: true,
   editorMinimap: false,
   editorLineNumbers: true,
+  shortcutOverrides: {},
 }
 
 export const UI_PREFS_KEY = 'ai-live-editor.uiPrefs'
@@ -63,6 +68,7 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     editorWordWrap: v.editorWordWrap !== false,
     editorMinimap: v.editorMinimap === true,
     editorLineNumbers: v.editorLineNumbers !== false,
+    shortcutOverrides: sanitizeOverrides(v.shortcutOverrides),
   }
 }
 

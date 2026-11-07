@@ -8,6 +8,8 @@ import {
   TOOL_GROUP_LABEL, fmtCost, fmtTokens, formatElapsed, looksLikeKeyError, slideTurns, stepElapsed, turnCost, turnTitle,
   type DeckCard, type DeckTurn, type TokenPricing,
 } from '../lib/deck'
+import { loadUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs'
+import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { Markdown } from './Markdown'
 import type { ChatWorkflow, DeviceTarget, SearchBackendId, WorkflowSnapshot } from '../lib/api'
@@ -397,18 +399,26 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
     if (sending && activeRef.current >= slides.length - 2) goTo(slides.length - 1)
   }, [slides.length, sending]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [overrides, setOverrides] = useState(() => loadUiPrefs().shortcutOverrides)
+  useEffect(() => {
+    const onPrefs = () => setOverrides(loadUiPrefs().shortcutOverrides)
+    window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+    return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      if (e.key === 'Escape') { if (overview) setOverview(false); else onClose() }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); goTo(activeRef.current + 1) }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(activeRef.current - 1) }
-      else if (e.key.toLowerCase() === 'o') setOverview(o => !o)
+      // Rebindable commands first (Settings → Keyboard Shortcuts).
+      if (matchShortcut(e, effectiveCombo('deckNext', overrides))) { e.preventDefault(); goTo(activeRef.current + 1) }
+      else if (matchShortcut(e, effectiveCombo('deckPrev', overrides))) { e.preventDefault(); goTo(activeRef.current - 1) }
+      else if (matchShortcut(e, effectiveCombo('deckOverview', overrides))) setOverview(o => !o)
+      else if (e.key === 'Escape') { if (overview) setOverview(false); else onClose() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [overview, onClose]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [overview, onClose, overrides]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onScroll = () => {
     const wrap = scrollRef.current

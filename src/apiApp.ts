@@ -15,6 +15,7 @@ import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
+import { mountFsApi } from './fsApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { activeToolsForMode } from './agentTools.js'
 import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard, withSketchPreamble } from './sketchSession.js'
@@ -70,6 +71,7 @@ mountResearchApi(app)
 mountPlanApi(app)
   mountCodebaseMapApi(app)
   mountCatalogApi(app)
+  mountFsApi(app)
 
   app.get('/api/fs/health', (_req, res) => {
     const root = getFsRoot()
@@ -127,19 +129,25 @@ mountPlanApi(app)
   app.get('/api/fs/list', (_req, res) => {
     const root = getFsRoot()
     const files: string[] = []
+    const dirs: string[] = []
+    const mtimes: Record<string, number> = {}
     function walk(dir: string, base = '') {
       try {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           if (entry.name.startsWith('.chrome-data') || entry.name === 'node_modules' || entry.name === '.vite' || entry.name === 'dist') continue
           const full = path.join(dir, entry.name)
           const rel = path.join(base, entry.name)
-          if (entry.isDirectory()) walk(full, rel)
-          else files.push('/' + rel.replace(/\\/g, '/'))
+          const asPath = '/' + rel.replace(/\\/g, '/')
+          if (entry.isDirectory()) { dirs.push(asPath); walk(full, rel) }
+          else {
+            files.push(asPath)
+            try { mtimes[asPath] = fs.statSync(full).mtimeMs } catch { /* raced */ }
+          }
         }
       } catch { /* ignore unreadable */ }
     }
     walk(root)
-    res.json({ files, root })
+    res.json({ files, dirs, mtimes, root })
   })
 
   app.get('/api/fs/read', (req, res) => {

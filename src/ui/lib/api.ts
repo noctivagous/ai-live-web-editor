@@ -6,7 +6,25 @@ export function staticPreviewUrl(): string {
 
 export async function listFiles() {
   const r = await fetch(`${API}/api/fs/list`)
-  return r.json() as Promise<{files: string[], root: string}>
+  return r.json() as Promise<{files: string[], dirs?: string[], mtimes?: Record<string, number>, root: string}>
+}
+
+async function fsPost(url: string, body: unknown) {
+  const r = await fetch(`${API}${url}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  })
+  return r.json() as Promise<{ok: boolean, error?: string, [k: string]: unknown}>
+}
+export function renameFsPath(from: string, to: string) {
+  return fsPost('/api/fs/rename', { from, to })
+}
+export function deleteFsPath(path: string, recursive = false) {
+  return fsPost('/api/fs/delete', { path, recursive })
+}
+export function mkdirFsPath(path: string) {
+  return fsPost('/api/fs/mkdir', { path })
 }
 export async function readFile(path: string) {
   const r = await fetch(`${API}/api/fs/read?path=${encodeURIComponent(path)}`)

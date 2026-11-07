@@ -27,7 +27,7 @@ import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
 import { loadCollapse, saveCollapse } from './lib/collapse'
 import {
-  listFiles, readFile, writeFile, getConfig, probeModels, saveAiConfig,
+  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject, fetchSyncChanges,
   type LauncherConfig, type ProjectInfo, type ConnectionsPayload,
@@ -41,6 +41,8 @@ function connTone(status: string): string {
 
 export default function App() {
   const [files, setFiles] = useState<string[]>([])
+  const [fileDirs, setFileDirs] = useState<string[]>([])
+  const [fileMtimes, setFileMtimes] = useState<Record<string, number>>({})
   const [leftView, setLeftView] = useState<'files' | 'library'>('files')
   const [activePath, setActivePath] = useState('/index.html')
   const [content, setContent] = useState('// loading...')
@@ -107,15 +109,62 @@ export default function App() {
     })
   }
 
-  async function loadFiles() {
+  async function loadFiles(nextActive?: string) {
     try {
       const data = await listFiles()
       setFiles(data.files)
+      setFileDirs(data.dirs || [])
+      setFileMtimes(data.mtimes || {})
       setStatus(`real FS: ${data.files.length} files @ ${data.root}`)
+      const wanted = nextActive ?? activePath
       if (data.files.length) {
-        loadFile(data.files.includes(activePath) ? activePath : data.files[0])
+        loadFile(data.files.includes(wanted) ? wanted : data.files[0])
       }
     } catch (e: unknown) { setStatus('Failed to connect to launcher at :4112 - is it running? ' + (e instanceof Error ? e.message : String(e))) }
+  }
+
+  // File-browser operations: each returns the API result so the pane can
+  // show the server's own error; on success the list is reloaded from
+  // the server (the pane keeps no shadow state of the disk).
+  async function createFileFromPane(p: string) {
+    const r = await writeFile(p, '')
+    if (r.ok) { await loadFiles(p) }
+    return { ok: Boolean(r.ok), error: r.error as string | undefined }
+  }
+  async function createFolderFromPane(p: string) {
+    const r = await mkdirFsPath(p)
+    if (r.ok) await loadFiles()
+    return r
+  }
+  async function renameFromPane(from: string, to: string) {
+    const r = await renameFsPath(from, to)
+    if (r.ok) {
+      const next = activePath === from || activePath.startsWith(from + '/')
+        ? to + activePath.slice(from.length)
+        : undefined
+      await loadFiles(next)
+    }
+    return r
+  }
+  async function deleteFromPane(p: string, recursive: boolean) {
+    const r = await deleteFsPath(p, recursive)
+    if (r.ok) await loadFiles()
+    return r
+  }
+  async function duplicateFromPane(p: string) {
+    const data = await readFile(p)
+    if (data.error || data.content === undefined) return { ok: false, error: data.error || 'Could not read the file' }
+    const slash = p.lastIndexOf('/')
+    const dir = p.slice(0, slash)
+    const name = p.slice(slash + 1)
+    const dot = name.lastIndexOf('.')
+    const stem = dot > 0 ? name.slice(0, dot) : name
+    const ext = dot > 0 ? name.slice(dot) : ''
+    let candidate = `${dir}/${stem} copy${ext}`
+    for (let n = 2; files.includes(candidate); n++) candidate = `${dir}/${stem} copy ${n}${ext}`
+    const r = await writeFile(candidate, data.content)
+    if (r.ok) await loadFiles(candidate)
+    return { ok: Boolean(r.ok), error: r.error as string | undefined }
   }
 
   async function loadFile(p: string) {
@@ -869,10 +918,20 @@ export default function App() {
             {leftView === 'files' && <span className="sub">{files.length}</span>}
           </div>
           {leftView === 'files' ? (
-            <FileTree files={files} active={activePath} onSelect={loadFile} onNew={async () => {
-              const p = prompt('Path e.g. /src/new.tsx'); if (!p) return;
-              await writeFile(p, '// new'); loadFiles(); loadFile(p)
-            }} />
+            <FileTree
+              key={activeProject}
+              files={files}
+              dirs={fileDirs}
+              mtimes={fileMtimes}
+              active={activePath}
+              onSelect={loadFile}
+              onRefresh={() => void loadFiles()}
+              onCreateFile={createFileFromPane}
+              onCreateFolder={createFolderFromPane}
+              onRename={renameFromPane}
+              onDelete={deleteFromPane}
+              onDuplicate={duplicateFromPane}
+            />
           ) : (
             <Library
               key={activeProject}

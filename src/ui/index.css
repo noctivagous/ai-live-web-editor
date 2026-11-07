@@ -525,3 +525,47 @@ select.pill:disabled{cursor:default; opacity:.7}
 .pv-sum-val{
   font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
 }
+
+/* File browser pane (tree over the launcher file list). */
+.ft-toolbar { display: flex; gap: 4px; align-items: center; padding: 6px 8px 2px; }
+.ft-tool { padding: 3px 5px; }
+.ft-sort { margin-left: auto; font-size: 11px; padding: 2px 4px; max-width: 86px; }
+.ft-filter { display: flex; align-items: center; gap: 5px; margin: 6px 8px 4px; padding: 4px 7px; border: 1px solid #26262c; border-radius: 8px; background: #101013; }
+.ft-filter-icon { color: #71717a; flex-shrink: 0; }
+.ft-filter-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e4e4e7; font-size: 12px; font-family: inherit; }
+.ft-filter-count { font-size: 10.5px; color: #a1a1aa; background: #1c1c21; border-radius: 999px; padding: 0 6px; }
+.ft-filter-clear { display: inline-flex; background: none; border: none; color: #71717a; cursor: pointer; padding: 1px; }
+.ft-filter-clear:hover { color: #e4e4e7; }
+.ft-tree { flex: 1; min-height: 0; overflow: auto; padding: 2px 6px 8px; outline: none; }
+.ft-row { display: flex; align-items: center; gap: 5px; padding: 3px 6px 3px 0; border-radius: 7px; cursor: pointer; font-size: 12.5px; color: #b4b4b9; border: 1px solid transparent; white-space: nowrap; }
+.ft-row:hover { background: #141417; }
+.ft-row.active { background: #17171b; border-color: #2a2a32; color: #fff; }
+.ft-row.focused { border-color: #3a3a44; }
+.ft-row.active.focused { border-color: #4a4a58; }
+.ft-row.drop { background: #1d2431; border-color: #3b82f6; }
+.ft-row.editing { background: #101013; border-color: #2a2a32; cursor: default; }
+.ft-chev { display: inline-flex; width: 14px; flex-shrink: 0; justify-content: center; background: none; border: none; color: #71717a; padding: 0; cursor: pointer; }
+.ft-icon { color: #8b8b93; flex-shrink: 0; }
+.ft-icon.dir { color: #c9a86a; }
+.ft-name { overflow: hidden; text-overflow: ellipsis; }
+.ft-actions { margin-left: auto; display: none; gap: 2px; }
+.ft-row:hover .ft-actions { display: inline-flex; }
+.ft-act { display: inline-flex; background: none; border: none; color: #8b8b93; cursor: pointer; padding: 2px; border-radius: 4px; }
+.ft-act:hover { color: #fff; background: #26262c; }
+.ft-edit-input { flex: 1; min-width: 0; background: #0c0c0e; border: 1px solid #3b82f6; border-radius: 5px; color: #fff; font-size: 12.5px; padding: 2px 6px; outline: none; font-family: inherit; }
+.ft-edit-error { margin: 4px 8px; font-size: 11.5px; color: #fca5a5; }
+.ft-empty { font-size: 12.5px; color: #71717a; padding: 8px 6px; line-height: 1.6; }
+.ft-footer { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-top: 1px solid #1b1b20; font-size: 11px; color: #71717a; }
+.ft-notice { display: inline-flex; align-items: center; gap: 4px; color: #fca5a5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-menu { position: fixed; z-index: 95; min-width: 168px; background: #17171b; border: 1px solid #2e2e36; border-radius: 10px; padding: 4px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; }
+.ft-menu button { text-align: left; background: none; border: none; color: #d4d4d8; font-size: 12.5px; padding: 6px 9px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+.ft-menu button:hover { background: #232329; color: #fff; }
+.ft-menu button.danger { color: #fca5a5; }
+.ft-menu button.danger:hover { background: #2b1717; }
+.ft-confirm-overlay { position: fixed; inset: 0; background: rgba(8, 8, 10, 0.72); display: flex; align-items: center; justify-content: center; z-index: 96; padding: 20px; }
+.ft-confirm { background: #141417; border: 1px solid #26262c; border-radius: 12px; padding: 16px; max-width: 380px; width: 100%; }
+.ft-confirm-title { font-size: 13.5px; font-weight: 600; color: #fff; word-break: break-all; }
+.ft-confirm-body { font-size: 12.5px; color: #a1a1aa; line-height: 1.55; margin-top: 6px; }
+.ft-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.deck-btn.danger { color: #fca5a5; border-color: #4a2626; }
+.deck-btn.danger:hover { background: #2b1717; }

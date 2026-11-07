@@ -5,7 +5,9 @@ import { Library } from './components/Library'
 import { MonacoEditor } from './components/MonacoEditor'
 import { Preview } from './components/Preview'
 import { Chat } from './components/Chat'
-import { NoticeDialog, SettingsModal } from './components/Modal'
+import { NoticeDialog } from './components/Modal'
+import { SettingsWindow } from './components/SettingsWindow'
+import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { ImportProgressDialog, ImportReportDialog, OverLimitDialog, ReimportButton } from './components/FolderImport'
 import { SyncConflictsDialog, SyncStatusBar, type ConflictChoice, type ConflictItem } from './components/FolderSync'
 import {
@@ -27,7 +29,7 @@ import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
 import { loadCollapse, saveCollapse } from './lib/collapse'
 import {
-  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, probeModels, saveAiConfig,
+  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getProjectConfig, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject, fetchSyncChanges,
   type LauncherConfig, type ProjectInfo, type ConnectionsPayload,
@@ -48,17 +50,30 @@ export default function App() {
   const [content, setContent] = useState('// loading...')
   const [status, setStatus] = useState('connecting to :4112...')
   const [notice, setNotice] = useState<string | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
+  const [settingsAt, setSettingsAt] = useState<string | null>(null)
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
   // Planning (§O): the /plan overlay floats over files + middle; chat stays live.
   const [planOpen, setPlanOpen] = useState<{ level?: number, goal?: string, n: number } | null>(null)
   useEffect(() => {
     const onPlanOpen = (e: Event) => {
       const d = (e as CustomEvent).detail as { level?: number, goal?: string } | undefined
-      setPlanOpen(prev => ({ level: d?.level, goal: d?.goal, n: (prev?.n ?? 0) + 1 }))
+      const open = (level?: number) => setPlanOpen(prev => ({ level, goal: d?.goal, n: (prev?.n ?? 0) + 1 }))
+      if (d?.level) { open(d.level); return }
+      // No level named: the project's default plan level applies (§O —
+      // defaults ride project.ai.json; Settings → Plans & Workflow).
+      void getProjectConfig()
+        .then(r => open(r.config.planLevel))
+        .catch(() => open(undefined))
     }
     window.addEventListener('ai-live:plan-open', onPlanOpen)
     return () => window.removeEventListener('ai-live:plan-open', onPlanOpen)
   }, [])
+  useEffect(() => {
+    if (!settingsMenuOpen) return
+    const close = () => setSettingsMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [settingsMenuOpen])
   const [config, setConfig] = useState<LauncherConfig | null>(null)
   const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem(EDITOR_THEME_KEY) || 'vs-dark')
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
@@ -768,7 +783,7 @@ export default function App() {
 
   function reopenSetup() {
     localStorage.removeItem(SETUP_DONE_KEY)
-    setShowSettings(false)
+    setSettingsAt(null)
     setSetupDone(false)
   }
 
@@ -884,7 +899,18 @@ export default function App() {
           <ReimportButton projectId={activeProject} suppress={syncSession?.projectId === activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <button className="deck-btn" onClick={() => setShowSettings(true)} title="Settings"><Settings size={13} />Settings</button>
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button className="deck-btn" onClick={() => setSettingsMenuOpen(o => !o)} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings</button>
+            {settingsMenuOpen && (
+              <div className="set-menu" role="menu">
+                {SETTING_SECTIONS.map(s => (
+                  <button key={s.id} type="button" role="menuitem" onClick={() => { setSettingsMenuOpen(false); setSettingsAt(s.id) }}>
+                    {s.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
       </header>
@@ -1013,15 +1039,17 @@ export default function App() {
           onPostpone={postponeSyncConflicts}
         />
       )}
-      <SettingsModal
-        open={showSettings}
-        onClose={() => setShowSettings(false)}
-        config={config}
-        editorTheme={editorTheme}
-        onTheme={changeTheme}
-        onReplayWizard={reopenSetup}
-        onConfigSaved={() => { void refreshConfig() }}
-      />
+      {settingsAt && (
+        <SettingsWindow
+          initialSection={settingsAt}
+          onClose={() => setSettingsAt(null)}
+          config={config}
+          editorTheme={editorTheme}
+          onTheme={changeTheme}
+          onReplayWizard={reopenSetup}
+          onConfigSaved={() => { void refreshConfig() }}
+        />
+      )}
     </div>
   )
 }

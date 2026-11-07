@@ -52,6 +52,11 @@ export interface ProjectConfig {
    * itself a Noct project here.
    */
   appkit?: boolean
+  /** Default /plan level (1|2|3) when the command names none (§O:
+   * defaults ride project.ai.json). */
+  planLevel?: 1 | 2 | 3
+  /** Default plan mutability, 0–10 (§O). */
+  planMutability?: number
 }
 
 /**
@@ -91,6 +96,10 @@ export function sanitizeProjectConfig(value: unknown): ProjectConfig {
   const def = parseDeviceTarget(v.defaultDeviceTarget)
   if (def) out.defaultDeviceTarget = def
   if (v.appkit === true) out.appkit = true
+  if (v.planLevel === 1 || v.planLevel === 2 || v.planLevel === 3) out.planLevel = v.planLevel
+  if (typeof v.planMutability === 'number' && Number.isFinite(v.planMutability)) {
+    out.planMutability = Math.min(10, Math.max(0, Math.round(v.planMutability)))
+  }
   if (typeof v.styleSet === 'string' && v.styleSet.trim()) out.styleSet = v.styleSet.trim()
   if (Array.isArray(v.features)) {
     const features = v.features.filter((f): f is string => typeof f === 'string' && Boolean(f.trim()))

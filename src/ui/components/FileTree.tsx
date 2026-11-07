@@ -9,6 +9,7 @@ import {
   parentPath, siblingNames, sortTree, validateEntryName, visibleTree,
   type SortMode, type TreeNode,
 } from '../lib/fileTree'
+import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
 
 /* File browser pane: a real tree over the launcher's flat file list.
    Everything it shows comes from /api/fs/list (files + dirs + mtimes);
@@ -51,8 +52,14 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<SortMode>('name')
-  const [showHidden, setShowHidden] = useState(false)
+  const [sort, setSortState] = useState<SortMode>(() => loadUiPrefs().fileSort)
+  const [showHidden, setShowHiddenState] = useState(() => loadUiPrefs().fileShowHidden)
+  const setSort = (m: SortMode) => { setSortState(m); saveUiPrefs({ fileSort: m }) }
+  const setShowHidden = (fn: (v: boolean) => boolean) => setShowHiddenState(v => {
+    const next = fn(v)
+    saveUiPrefs({ fileShowHidden: next })
+    return next
+  })
   const [focused, setFocused] = useState(active)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [editValue, setEditValue] = useState('')

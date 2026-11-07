@@ -110,3 +110,13 @@ test('device parsers accept only known targets', () => {
   assert.equal(parseDeviceTargets('phone'), undefined)
   assert.equal(parseDeviceTargets([]), undefined)
 })
+
+test('plan defaults sanitize: level 1|2|3 only, mutability clamped 0..10', () => {
+  assert.equal(sanitizeProjectConfig({ planLevel: 2 }).planLevel, 2)
+  assert.equal(sanitizeProjectConfig({ planLevel: 4 }).planLevel, undefined)
+  assert.equal(sanitizeProjectConfig({ planLevel: '2' }).planLevel, undefined)
+  assert.equal(sanitizeProjectConfig({ planMutability: 7 }).planMutability, 7)
+  assert.equal(sanitizeProjectConfig({ planMutability: 42 }).planMutability, 10)
+  assert.equal(sanitizeProjectConfig({ planMutability: -3 }).planMutability, 0)
+  assert.equal(sanitizeProjectConfig({ planMutability: 'high' }).planMutability, undefined)
+})

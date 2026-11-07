@@ -32,6 +32,7 @@ import {
   type AnnotationDigest,
 } from '../lib/annotationSync'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
+import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
 import { slideTurnsOrDefault } from '../lib/deck'
 
 function isWriteTool(name: string): boolean {
@@ -108,7 +109,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const [workingLabel, setWorkingLabel] = useState(() => loadChat(projectId).workingLabel)
   const [workflow, setWorkflow] = useState<ChatWorkflow>('files')
   const [deckOpen, setDeckOpen] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(() => loadUiPrefs().chatView === 'panel')
   const [sketch, setSketch] = useState<WorkflowSnapshot | null>(null)
   // Page annotations from the live page. Only the embed iframe hears the page
   // directly (postMessage); it re-publishes so the sidebar shows the same chips.
@@ -558,7 +559,11 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         onClear={clearChat}
         onOpenDeck={openDeck}
         panelActive={panelOpen}
-        onTogglePanel={() => setPanelOpen(o => !o)}
+        onTogglePanel={() => setPanelOpen(o => {
+          const next = !o
+          saveUiPrefs({ chatView: next ? 'panel' : 'chat' })
+          return next
+        })}
       />
       <SketchPanel
         workflow={workflow}

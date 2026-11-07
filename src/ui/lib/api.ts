@@ -404,6 +404,9 @@ export interface ProjectConfig {
   defaultDeviceTarget?: DeviceTarget
   styleSet?: string
   features?: string[]
+  appkit?: boolean
+  planLevel?: 1 | 2 | 3
+  planMutability?: number
 }
 
 export async function getProjectConfig() {

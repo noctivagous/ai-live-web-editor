@@ -1,0 +1,170 @@
+/**
+ * The settings model: field definitions kept separate from the
+ * values, the same model/instance split the plan system uses
+ * (XForms-style — definitions in the model, answers in an instance).
+ * The Settings window renders the declarative sections generically
+ * from these definitions; sections whose content is an interactive
+ * workflow rather than a form (provider setup with probe/validate,
+ * search-key testing) are registered here as custom sections and
+ * stay hand-built components.
+ *
+ * A field's `store` names its instance: 'project' values live in
+ * project.ai.json (via /api/project/config), 'prefs' values in this
+ * device's uiPrefs. Scope follows the store: project fields are
+ * Project scope, prefs are Device scope, the custom provider/search
+ * sections are Global (launcher) scope.
+ */
+
+export type SettingScope = 'global' | 'project' | 'device'
+export type SettingStore = 'project' | 'prefs'
+export type SettingControl = 'select' | 'toggle' | 'slider' | 'text' | 'checkboxes'
+
+export interface SettingOption { value: string, label: string }
+
+export interface SettingField {
+  /** Instance key: the property name in the store's record. */
+  id: string
+  section: string
+  label: string
+  hint?: string
+  control: SettingControl
+  store: SettingStore
+  options?: SettingOption[]
+  min?: number
+  max?: number
+  /** Coerce the control's string value to a number on save. */
+  numeric?: boolean
+  keywords?: string
+}
+
+export interface SettingSection {
+  id: string
+  title: string
+  scope: SettingScope
+  /** Set for sections rendered by a dedicated component, not fields. */
+  custom?: 'providers' | 'search' | 'preview' | 'about'
+  keywords?: string
+}
+
+export const SETTING_SECTIONS: SettingSection[] = [
+  { id: 'providers', title: 'AI Providers & Models', scope: 'global', custom: 'providers', keywords: 'api key connection model provider modality openai meta' },
+  { id: 'search', title: 'Search & Research', scope: 'global', custom: 'search', keywords: 'brave web search research backend' },
+  { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'theme chat view panel deck file pane sort hidden' },
+  { id: 'project', title: 'Project', scope: 'project', keywords: 'type format device targets style appkit catalog manifest' },
+  { id: 'plans', title: 'Plans & Workflow', scope: 'project', keywords: 'plan level mutability default planning' },
+  { id: 'preview', title: 'Preview & Live App', scope: 'global', custom: 'preview', keywords: 'playwright pool browser live target preview' },
+  { id: 'about', title: 'About & Launcher', scope: 'global', custom: 'about', keywords: 'version workspace launcher setup wizard replay about' },
+]
+
+export const SETTING_FIELDS: SettingField[] = [
+  // Appearance — device prefs (uiPrefs instance).
+  {
+    id: 'chatView', section: 'appearance', label: 'Default chat view', control: 'select', store: 'prefs',
+    hint: 'Which presentation the chat pane opens in. Switching views in the chat header updates this.',
+    options: [{ value: 'chat', label: 'Chat (scrolling)' }, { value: 'panel', label: 'Panel (stationary indicators)' }],
+    keywords: 'deck panel stationary scrolling',
+  },
+  {
+    id: 'fileSort', section: 'appearance', label: 'File pane sort order', control: 'select', store: 'prefs',
+    hint: 'The file browser pane starts in this order; changing it in the pane updates this.',
+    options: [{ value: 'name', label: 'Name' }, { value: 'type', label: 'Type' }, { value: 'modified', label: 'Modified' }],
+    keywords: 'files explorer order',
+  },
+  {
+    id: 'fileShowHidden', section: 'appearance', label: 'Show hidden files', control: 'toggle', store: 'prefs',
+    hint: 'Dotfiles and dot-folders in the file browser pane.',
+    keywords: 'dotfiles hidden files explorer',
+  },
+  // Project — project.ai.json instance.
+  {
+    id: 'type', section: 'project', label: 'Project type', control: 'select', store: 'project',
+    hint: 'Designates the project. Not designated is a valid state — the editor asserts no type defaults.',
+    options: [
+      { value: '', label: 'Not designated' },
+      { value: 'web-app', label: 'Web app' },
+      { value: 'canvas-tool', label: 'Canvas tool' },
+      { value: 'game', label: 'Game' },
+      { value: 'dashboard', label: 'Dashboard' },
+      { value: 'content-site', label: 'Content site' },
+    ],
+    keywords: 'designate manifest kind',
+  },
+  {
+    id: 'format', section: 'project', label: 'Format', control: 'select', store: 'project',
+    hint: 'App fits the viewport and scrolls by region; page grows and scrolls as a document. Auto follows the type (content site → page, other types → app).',
+    options: [
+      { value: '', label: 'Auto (from type)' },
+      { value: 'app', label: 'App — viewport-fit' },
+      { value: 'page', label: 'Page — document flow' },
+    ],
+    keywords: 'overflow viewport document responsive',
+  },
+  {
+    id: 'deviceTargets', section: 'project', label: 'Device targets', control: 'checkboxes', store: 'project',
+    hint: 'Widths the layout gate checks. None checked means all three.',
+    options: [
+      { value: 'phone', label: 'Phone (375)' },
+      { value: 'tablet', label: 'Tablet (768)' },
+      { value: 'desktop', label: 'Desktop (1280)' },
+    ],
+    keywords: 'responsive widths phone tablet desktop',
+  },
+  {
+    id: 'defaultDeviceTarget', section: 'project', label: 'Default device target', control: 'select', store: 'project',
+    hint: 'The preview target a session starts on for this project.',
+    options: [
+      { value: '', label: 'Desktop' },
+      { value: 'phone', label: 'Phone' },
+      { value: 'tablet', label: 'Tablet' },
+      { value: 'desktop', label: 'Desktop' },
+    ],
+    keywords: 'preview target session',
+  },
+  {
+    id: 'styleSet', section: 'project', label: 'Style set', control: 'text', store: 'project',
+    hint: 'The named token/style set the agent consults for this project, if any.',
+    keywords: 'theme tokens styles',
+  },
+  {
+    id: 'appkit', section: 'project', label: 'AppKit component stock', control: 'toggle', store: 'project',
+    hint: 'Adds the Noct AppKit (Lit) catalog stock next to the default shadcn stock for this project.',
+    keywords: 'catalog components noct lit',
+  },
+  // Plans & Workflow — project.ai.json instance.
+  {
+    id: 'planLevel', section: 'plans', label: 'Default plan level', control: 'select', store: 'project', numeric: true,
+    hint: 'Used when /plan names no level. Level 1 is the lightest; 3 adds mutability, staged questions, and variants.',
+    options: [
+      { value: '1', label: 'Level 1' },
+      { value: '2', label: 'Level 2' },
+      { value: '3', label: 'Level 3' },
+    ],
+    keywords: 'planning extensiveness',
+  },
+  {
+    id: 'planMutability', section: 'plans', label: 'Default plan mutability', control: 'slider', store: 'project', numeric: true,
+    min: 0, max: 10,
+    hint: 'How much of a new plan the agent may reshape without asking, 0 (nothing) to 10 (anything).',
+    keywords: 'planning change freedom',
+  },
+]
+
+export function fieldsForSection(sectionId: string): SettingField[] {
+  return SETTING_FIELDS.filter(f => f.section === sectionId)
+}
+
+export function sectionById(id: string): SettingSection | undefined {
+  return SETTING_SECTIONS.find(s => s.id === id)
+}
+
+/** Settings search: sections and fields matching the query, so the
+ * window can jump straight to a setting by name. */
+export function searchSettings(query: string): { sections: SettingSection[], fields: SettingField[] } {
+  const q = query.trim().toLowerCase()
+  if (!q) return { sections: [...SETTING_SECTIONS], fields: [...SETTING_FIELDS] }
+  const hit = (text: string | undefined) => Boolean(text && text.toLowerCase().includes(q))
+  return {
+    sections: SETTING_SECTIONS.filter(s => hit(s.title) || hit(s.keywords)),
+    fields: SETTING_FIELDS.filter(f => hit(f.label) || hit(f.hint) || hit(f.keywords)),
+  }
+}

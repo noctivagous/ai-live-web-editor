@@ -6,8 +6,12 @@ import path from 'node:path'
 import { setFsRoot } from '../../launcher.js'
 import { createPlan, getActivePlan, getPlan, savePlan } from '../../plans/plans.js'
 import { findComponentTool } from './catalogTools.js'
-import { unpackCodeTool } from './codeTools.js'
+import { pageSectionsTool, runInPageTool } from './layoutTools.js'
+import { readSymbolTool, unpackCodeTool } from './codeTools.js'
 import { codebaseMapTool, installCatalogComponentTool } from './codebaseMapTools.js'
+import {
+  featureAddNodeTool, featureLinkTool, featureQueryTool, featureSetStatusTool,
+} from './featureTools.js'
 import {
   planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
   planReviseQuestionTool, planUpdateTaskTool,
@@ -252,6 +256,69 @@ describe('catalog + template tools execute()', () => {
   })
 })
 
+/**
+ * Feature graph tools: add-node bootstraps the graph, every mutation
+ * persists to ai-features/, queries read the same store back, and
+ * bad ids / duplicate edges come back as error values.
+ */
+describe('feature graph tools execute()', () => {
+  it('queries and status on a graph-less project return the no-graph error value', async () => {
+    const root = tmpProject({})
+    try {
+      const q = await run(featureQueryTool, { mode: 'overview' })
+      assert.equal(q.ok, false)
+      assert.match(String(q.error), /No feature graph/)
+      const s = await run(featureSetStatusTool, { id: 'f-x', status: 'done' })
+      assert.equal(s.ok, false)
+      assert.match(String(s.error), /No feature graph/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('builds a small graph end to end: bootstrap, link, status, query', async () => {
+    const root = tmpProject({})
+    try {
+      const region = await run(featureAddNodeTool, { name: 'Storefront', kind: 'region' })
+      assert.equal(region.ok, true)
+      const regionId = (region.node as { id: string }).id
+      assert.ok(fs.existsSync(path.join(root, 'ai-features/graph.json')), 'first add bootstraps the graph')
+
+      const badParent = await run(featureAddNodeTool, { name: 'Orphan', kind: 'feature', parentId: 'f-missing' })
+      assert.equal(badParent.ok, false)
+      assert.match(String(badParent.error), /No node with id/)
+
+      const prices = await run(featureAddNodeTool, { name: 'Price display', kind: 'feature', parentId: regionId })
+      const pricesId = (prices.node as { id: string }).id
+      const currency = await run(featureAddNodeTool, {
+        name: 'Currency', kind: 'setting', parentId: regionId,
+        params: [{ name: 'currency', type: 'choice', options: ['USD', 'EUR'], default: 'USD' }],
+      })
+      const currencyId = (currency.node as { id: string }).id
+
+      const linked = await run(featureLinkTool, { from: currencyId, to: pricesId, type: 'configures' })
+      assert.equal(linked.ok, true)
+      const dup = await run(featureLinkTool, { from: currencyId, to: pricesId, type: 'configures' })
+      assert.equal(dup.ok, false)
+      const badLink = await run(featureLinkTool, { from: currencyId, to: 'f-missing', type: 'configures' })
+      assert.equal(badLink.ok, false)
+
+      const configured = await run(featureQueryTool, { mode: 'configures', id: currencyId })
+      assert.equal(configured.ok, true)
+      assert.deepEqual((configured.configures as Array<{ id: string }>).map(n => n.id), [pricesId])
+
+      const statused = await run(featureSetStatusTool, { id: pricesId, status: 'done' })
+      assert.equal(statused.ok, true)
+      assert.equal((statused.overall as { pct: number }).pct, 50, 'one of two counted leaves built (region excluded)')
+      const badStatus = await run(featureSetStatusTool, { id: 'f-missing', status: 'done' })
+      assert.equal(badStatus.ok, false)
+
+      const overview = await run(featureQueryTool, { mode: 'overview' })
+      assert.equal(overview.ok, true)
+      assert.equal((overview.regions as unknown[]).length, 1)
+      assert.ok(fs.existsSync(path.join(root, 'ai-features/graph.md')), 'rendered outline written beside the canonical json')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
 describe('unpack-code execute()', () => {
   const DENSE = 'const a=1;function go(x){return x+a}const h=(y)=>y*3;'
 
@@ -290,5 +357,63 @@ describe('unpack-code execute()', () => {
       assert.equal(again.ok, false)
       assert.match(String(again.error), /already an unpacked copy/)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('read-symbol execute()', () => {
+  const DENSE = 'const a=1;function go(x){return x+a}const h=(y)=>y*3;'
+
+  it('pulls one named symbol out of a dense file without the rest', async () => {
+    const root = tmpProject({ 'dist/bundle.min.js': DENSE })
+    try {
+      const r = await run(readSymbolTool, { path: '/dist/bundle.min.js', name: 'go' })
+      assert.equal(r.ok, true)
+      assert.equal(r.matchCount, 1)
+      const m = (r.matches as { kind: string, source: string, truncated: boolean }[])[0]
+      assert.equal(m.kind, 'function')
+      assert.ok(m.source.includes('return x + a'), m.source)
+      assert.ok(!m.source.includes('y * 3'), m.source)
+      assert.equal(m.truncated, false)
+      // The unpacked copy exists for follow-up ranged reads.
+      assert.ok(fs.existsSync(path.join(root, '.ai-live', 'unpacked', 'dist', 'bundle.min.js')))
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('reports a miss with the names that do exist, and reads from a copy path', async () => {
+    const root = tmpProject({ 'mod.js': DENSE })
+    try {
+      const miss = await run(readSymbolTool, { path: '/mod.js', name: 'nope' })
+      assert.equal(miss.ok, false)
+      assert.match(String(miss.error), /No top-level symbol named nope/)
+      assert.ok((miss.available as string[]).includes('go'))
+      assert.ok((miss.available as string[]).includes('h'))
+      const fromCopy = await run(readSymbolTool, { path: '/.ai-live/unpacked/mod.js', name: 'h' })
+      assert.equal(fromCopy.ok, true)
+      assert.equal(fromCopy.unpackedPath, '/.ai-live/unpacked/mod.js')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('run-in-page execute()', () => {
+  it('returns the no-live-page error as a value when nothing is connected', async () => {
+    const r = await run(runInPageTool, { code: 'return 1' })
+    assert.ok(r.error || r.ok === false, JSON.stringify(r))
+    assert.match(String(r.error), /Vite page/)
+  })
+})
+
+describe('page-sections execute()', () => {
+  it('returns the no-live-page error as a value when nothing is connected', async () => {
+    // No bridge client is connected in the test environment and no url
+    // is passed, so the eval never leaves the bridge: the tool must
+    // surface that as an error value, never a throw. (The program
+    // itself is verified live against a real Chromium page; the
+    // normalizer has its own unit suite.)
+    const r = await run(pageSectionsTool, {})
+    assert.ok(r.error || r.ok === false, JSON.stringify(r))
+    // The bridge's exact wording varies by channel ('No live Vite page
+    // connected' vs 'Vite page not reachable on :5173'); the contract
+    // pinned here is an error value naming the page, never a throw.
+    assert.match(String(r.error), /Vite page/)
   })
 })

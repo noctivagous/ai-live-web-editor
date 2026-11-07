@@ -1,5 +1,6 @@
 import { liveTarget, playwrightPoolEnabled } from './env.js'
 import { pageCommand, type PageOp } from './pageBridge.js'
+import { joinSectionsToElements, normalizePageSections, PAGE_SECTIONS_PROGRAM } from './workbench/pageSections.js'
 import { isSketchMode, recordLiveSketchPatch } from './sketchSession.js'
 
 const VITE_ORIGIN = process.env.VITE_ORIGIN || 'http://localhost:5173'
@@ -80,17 +81,44 @@ export function agentLayoutSnapshotResult(result: unknown): unknown {
   return rest
 }
 
+/**
+ * The agent-facing layout result, with section grouping: run the
+ * page-sections program over the same channel and join its sections
+ * onto the elements geometrically, so the flat list arrives grouped
+ * by the part of the page each element belongs to. Best-effort —
+ * any failure (pool off, no page, unparseable answer, document
+ * coordinate space) returns the plain agent result unchanged.
+ * Internal callers (gate, SVG, /api) keep using liveLayoutSnapshot
+ * directly and never pay for the extra eval.
+ */
+export async function annotateAgentLayoutResult(result: unknown, url?: string, opts?: { documentCoords?: boolean }): Promise<unknown> {
+  const base = agentLayoutSnapshotResult(result)
+  if (opts?.documentCoords) return base
+  const obj = base as Record<string, unknown> | null
+  if (!obj || !Array.isArray(obj.elements) || !obj.elements.length) return base
+  try {
+    const raw = usePlaywrightLive(url)
+      ? await runPoolOp('eval', { code: PAGE_SECTIONS_PROGRAM, url })
+      : await pageCommand('eval', { code: PAGE_SECTIONS_PROGRAM })
+    const sections = normalizePageSections(raw)
+    if (sections) {
+      joinSectionsToElements(obj.elements as Array<{ rect?: { x?: number, y?: number, width?: number, height?: number }, section?: string }>, sections.sections)
+    }
+  } catch { /* annotation is a bonus, never a failure */ }
+  return base
+}
+
 /** inspect/patch/eval: Vite page bridge unless LIVE_TARGET=pool or `url` is another origin. */
 export async function livePageOp(op: PageOp, payload: Record<string, unknown> = {}) {
   const url = typeof payload.url === 'string' ? payload.url : undefined
   const sketchOnVite = isSketchMode() && isViteAppUrl(url)
   let result: unknown
   if (usePlaywrightLive(url) && !sketchOnVite) {
-    if (op === 'layout-snapshot') return agentLayoutSnapshotResult(await liveLayoutSnapshot(payload, url))
+    if (op === 'layout-snapshot') return annotateAgentLayoutResult(await liveLayoutSnapshot(payload, url), url, { documentCoords: payload.coordinateSpace === 'document' })
     if (op === 'console') return liveConsole(payload, url)
     result = await runPoolOp(op, payload)
   } else if (op === 'layout-snapshot') {
-    result = agentLayoutSnapshotResult(await liveLayoutSnapshot(payload, url))
+    result = await annotateAgentLayoutResult(await liveLayoutSnapshot(payload, url), url, { documentCoords: payload.coordinateSpace === 'document' })
   } else if (op === 'console') {
     result = await liveConsole(payload, url)
   } else {

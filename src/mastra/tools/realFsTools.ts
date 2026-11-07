@@ -247,7 +247,7 @@ export const makeDirTool = createTool({
 
 export const inspectDOMTool = createTool({
   id: 'inspect-dom',
-  description: 'Inspect a live element. Default: the Vite app page. Pass url (another origin) to use the optional Playwright pool.',
+  description: 'Deep-dive ONE known element on the live page: capped HTML and text, rect, a child summary (count + tags, so you can tell a leaf from a subtree), and the data-ai-loc source stamp (sourceLoc) when the element carries one. This is the LAST step of the page senses, on one selector — for structure use page-sections first, for geometry layout-snapshot. Default: the Vite app page. Pass url (another origin) to use the optional Playwright pool.',
   inputSchema: z.object({ selector: z.string().optional(), url: z.string().optional() }),
   execute: async ({ selector, url }) => livePageOp('inspect', { selector, url }),
 })
@@ -255,7 +255,7 @@ export const inspectDOMTool = createTool({
 export const takeSnapshotTool = createTool({
   id: 'take-snapshot',
   description:
-    'Accessibility-style text snapshot of the live page (roles, names, CSS selectors). Prefer this over inspect-dom to see page structure. Use the selector on each line with patch-dom. verbose includes generic nodes. Pass url for the Playwright pool.',
+    'Accessibility-style text snapshot of the live page (roles, names, CSS selectors) — the selector harvest for patch-dom, and the accessibility view. For page STRUCTURE use page-sections first (cheaper, semantic); snapshot when you need per-element selectors or accessible names, and scope it with scopeSelector when you only need one region. Use the selector on each line with patch-dom. verbose includes generic nodes. Pass url for the Playwright pool.',
   inputSchema: z.object({
     verbose: z.boolean().optional().describe('Include generic nodes, not only landmarks/controls/headings'),
     scopeSelector: z.string().optional().describe('Only snapshot under this selector'),

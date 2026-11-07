@@ -133,9 +133,12 @@ function startPageBridge() {
     const sourceLoc = readSourceLoc(el)
     return {
       ok: true,
+      ...(selector ? { selector } : null),
       tag: el.tagName,
       html: (el.outerHTML || '').slice(0, 20000),
       text: (el.textContent || '').slice(0, 8000),
+      children: el.children.length,
+      childTags: Array.from(el.children).slice(0, 10).map((c) => c.tagName.toLowerCase()),
       rect: { x: r.x, y: r.y, width: r.width, height: r.height },
       url: location.href,
       title: document.title,
@@ -164,6 +167,15 @@ function startPageBridge() {
     if (typeof code !== 'string' || !code.trim()) return { ok: false, error: 'code required' }
     try {
       const value = (0, eval)(code)
+      // Async code (run-in-page's program is an async IIFE): the op
+      // dispatcher awaits run(), so returning the settled result
+      // keeps the channel honest instead of serializing a Promise.
+      if (value && typeof value.then === 'function') {
+        return value.then(
+          (v) => ({ ok: true, result: serialize(v, 0) }),
+          (e) => ({ ok: false, error: String(e && e.message ? e.message : e) }),
+        )
+      }
       return { ok: true, result: serialize(value, 0) }
     } catch (e) {
       return { ok: false, error: String(e && e.message ? e.message : e) }

@@ -16,6 +16,7 @@ function capturePageSnapshot(payload, document) {
   var lines = []
   var count = 0
   var truncated = false
+  var nodeCapped = false
   var uid = 0
 
   function cssPath(el) {
@@ -150,6 +151,7 @@ function capturePageSnapshot(payload, document) {
   function emit(el, depth) {
     if (count >= maxNodes) {
       truncated = true
+      nodeCapped = true
       return
     }
     var role = roleOf(el)
@@ -196,6 +198,9 @@ function capturePageSnapshot(payload, document) {
   lines.push('uid=1_' + uid++ + ' RootWebArea "' + (title || 'page').replace(/"/g, "'") + '" ' + cssPath(root))
   count++
   walk(root, 1, true)
+  if (nodeCapped) {
+    lines.push('… truncated at ' + maxNodes + ' nodes — narrow with scopeSelector, or map the page with page-sections')
+  }
   var text = lines.join('\n')
   if (text.length > textMax) {
     text = text.slice(0, textMax) + '\n… truncated'

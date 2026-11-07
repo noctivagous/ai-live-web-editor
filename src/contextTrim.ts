@@ -15,6 +15,15 @@
  *   reads fold Roo-style: path + line range + the file's signature
  *   (components/exports from the §1 extractor), not the body.
  *   inspect-dom HTML and snapshot dumps clip to a head + a note.
+ * - Fresh results with uniform arrays get the payload diet
+ *   instead of raw JSON (the structured-payload analysis): the
+ *   array — uniform objects re-paying their keys per item —
+ *   becomes legend + rows text. layout-snapshot elements (styles
+ *   keep only non-default values; rows group under their
+ *   page-section headers when annotated), grep hits (grouped by
+ *   file), find-component tier-1 summaries (one row each; full
+ *   entries are never dieted). Stored results keep the objects;
+ *   only the provider-bound copy changes shape.
  *
  * The pure core (trimPrompt) works on the LanguageModelV2 prompt
  * shape so it is unit-testable without a model.
@@ -25,6 +34,14 @@ import { currentAgentSettings } from './agentSettings.js'
 
 /** Results at or below this size are never worth folding. */
 export const TRIM_THRESHOLD_CHARS = 1500
+/**
+ * The diet has its own, lower floor: folding and dieting are
+ * different decisions (a 1.4k catalog-summary result is far too
+ * small to fold but still worth serializing), and the diet's
+ * no-win guard (it only applies when it actually shrinks the
+ * result) is the real safety.
+ */
+export const DIET_MIN_CHARS = 600
 /** Hard ceiling for one folded summary. */
 export const TRIM_SUMMARY_CHARS = 640
 
@@ -102,7 +119,159 @@ function summarizeToolResult(toolName: string, output: { type: string, value: un
   return clip(`[trimmed: ${toolName} result, ${n} chars folded. Head: ${clip(originalText, 380)}]`, TRIM_SUMMARY_CHARS)
 }
 
-export interface TrimStats { trimmed: number, savedChars: number }
+/**
+ * CSS initial values for the layout style preset's properties. A
+ * computed style equal to its initial value carries no information
+ * (position:static, overflow:visible, inset:auto…), so the diet
+ * drops it. `display` is deliberately absent — its initial value
+ * differs per element.
+ */
+const DEFAULT_COMPUTED_STYLES: Record<string, string> = {
+  'position': 'static', 'top': 'auto', 'right': 'auto', 'bottom': 'auto', 'left': 'auto',
+  'z-index': 'auto', 'flex-direction': 'row', 'flex-wrap': 'nowrap', 'flex': '0 1 auto',
+  'flex-basis': 'auto', 'flex-grow': '0', 'flex-shrink': '1',
+  'grid-template-columns': 'none', 'grid-template-rows': 'none', 'grid-auto-flow': 'row',
+  'grid-auto-columns': 'auto', 'grid-auto-rows': 'auto',
+  'justify-content': 'normal', 'align-items': 'normal', 'align-content': 'normal',
+  'place-content': 'normal', 'place-items': 'normal', 'place-self': 'auto',
+  'gap': 'normal', 'row-gap': 'normal', 'column-gap': 'normal',
+  'margin-top': '0px', 'margin-right': '0px', 'margin-bottom': '0px', 'margin-left': '0px',
+  'padding-top': '0px', 'padding-right': '0px', 'padding-bottom': '0px', 'padding-left': '0px',
+  'width': 'auto', 'height': 'auto', 'max-width': 'none', 'max-height': 'none',
+  'box-sizing': 'content-box', 'overflow': 'visible', 'overflow-x': 'visible', 'overflow-y': 'visible',
+  'contain': 'none', 'content-visibility': 'visible',
+  'opacity': '1', 'visibility': 'visible', 'pointer-events': 'auto', 'transform': 'none',
+}
+
+/**
+ * Properties whose no-information value varies by engine: Chrome's
+ * computed min-width/min-height surface as '0px' where the spec
+ * initial is 'auto', and an all-auto inset serializes as 'auto'.
+ * Any of the listed values drops.
+ */
+const DEFAULT_COMPUTED_STYLE_SETS: Record<string, string[]> = {
+  'min-width': ['auto', '0px'],
+  'min-height': ['auto', '0px'],
+  'inset': ['auto'],
+}
+
+const LAYOUT_ROW_LEGEND = '[elements as rows · legend: stableId tag#id.classes depth x,y wxh "text" {styles — non-default values only} · rows group under ## section headers]'
+
+/**
+ * Serialize a layout-snapshot result's elements array as legend +
+ * rows. Returns null when the value is not a layout result with
+ * elements, or when the diet would not actually shrink it.
+ */
+export function dietLayoutResult(value: unknown): { value: Record<string, unknown>, savedChars: number } | null {
+  const obj = asObject(value)
+  if (!obj || !Array.isArray(obj.elements) || !obj.elements.length) return null
+  const lines: string[] = [LAYOUT_ROW_LEGEND]
+  let currentSection: string | null = null
+  for (const raw of obj.elements) {
+    const el = asObject(raw)
+    if (!el) continue
+    const section = typeof el.section === 'string' && el.section ? el.section : null
+    if (section !== currentSection) {
+      currentSection = section
+      if (section) lines.push(`## ${section}`)
+    }
+    const rect = asObject(el.rect)
+    const num = (v: unknown) => Math.round(typeof v === 'number' && Number.isFinite(v) ? v : 0)
+    const tag = String(el.tagName || '?').toLowerCase()
+    const idPart = typeof el.id === 'string' && el.id ? `#${el.id}` : ''
+    const classes = Array.isArray(el.classList) ? el.classList.slice(0, 2).map(c => `.${String(c)}`).join('') : ''
+    const depth = typeof el.depth === 'number' ? String(el.depth) : '-'
+    const text = typeof el.textSnippet === 'string' && el.textSnippet
+      ? ` "${clip(el.textSnippet.replace(/"/g, "'"), 40)}"`
+      : ''
+    let styles = ''
+    const stylesObj = asObject(el.computedStyles)
+    if (stylesObj) {
+      const kept = Object.entries(stylesObj)
+        .filter(([k, v]) => {
+          const value = String(v)
+          if (!value) return false // the engine emits '' for n/a properties — no information
+          if (DEFAULT_COMPUTED_STYLES[k] === value) return false
+          if (DEFAULT_COMPUTED_STYLE_SETS[k]?.includes(value)) return false
+          return true
+        })
+        .map(([k, v]) => `${k}:${String(v)}`)
+      if (kept.length) styles = ` {${kept.join('; ')}}`
+    }
+    const changed = el.changed === true ? ' ~changed' : ''
+    lines.push(`${String(el.stableId || '-')} ${tag}${idPart}${classes} ${depth} ${num(rect?.x)},${num(rect?.y)} ${num(rect?.width)}x${num(rect?.height)}${text}${styles}${changed}`)
+  }
+  const dieted = { ...obj, elements: lines.join('\n') }
+  const savedChars = JSON.stringify(obj).length - JSON.stringify(dieted).length
+  return savedChars > 0 ? { value: dieted, savedChars } : null
+}
+
+const GREP_ROW_LEGEND = '[hits as rows · file path once per file, then "line text" per hit]'
+
+/**
+ * Serialize a grep result's hits as rows grouped by file (hits
+ * arrive in walk order, so same-file hits are consecutive; a file
+ * that recurs gets its header again). Null when the value is not a
+ * hits result, or the diet would not shrink it.
+ */
+export function dietGrepResult(value: unknown): { value: Record<string, unknown>, savedChars: number } | null {
+  const obj = asObject(value)
+  if (!obj || !Array.isArray(obj.hits) || !obj.hits.length) return null
+  const lines: string[] = [GREP_ROW_LEGEND]
+  let currentPath: string | null = null
+  for (const raw of obj.hits) {
+    const hit = asObject(raw)
+    if (!hit || typeof hit.path !== 'string') return null
+    if (hit.path !== currentPath) {
+      currentPath = hit.path
+      lines.push(hit.path)
+    }
+    const line = typeof hit.line === 'number' ? hit.line : 0
+    const text = typeof hit.text === 'string' ? hit.text.replace(/\s+/g, ' ').trim() : ''
+    lines.push(`  ${line} ${text}`)
+  }
+  const dieted = { ...obj, hits: lines.join('\n') }
+  const savedChars = JSON.stringify(obj).length - JSON.stringify(dieted).length
+  return savedChars > 0 ? { value: dieted, savedChars } : null
+}
+
+const COMPONENT_ROW_LEGEND = '[components as rows · tag [stock/category] — description (props: names)]'
+
+/**
+ * Serialize a find-component TIER-1 result's summaries as one row
+ * each. Full entries (tier 'full') are irregular one-offs and are
+ * never dieted. Null when not a summary result, or no win.
+ */
+export function dietFindComponentResult(value: unknown): { value: Record<string, unknown>, savedChars: number } | null {
+  const obj = asObject(value)
+  if (!obj || obj.tier !== 'summary' || !Array.isArray(obj.components) || !obj.components.length) return null
+  const lines: string[] = [COMPONENT_ROW_LEGEND]
+  for (const raw of obj.components) {
+    const c = asObject(raw)
+    if (!c || typeof c.tag !== 'string') return null
+    const where = [typeof c.stock === 'string' ? c.stock : '', typeof c.category === 'string' ? c.category : '']
+      .filter(Boolean).join('/')
+    const runtime = typeof c.runtime === 'string' ? ` · ${c.runtime}` : ''
+    const desc = typeof c.description === 'string' ? c.description.replace(/\s+/g, ' ').trim() : ''
+    const props = Array.isArray(c.props) && c.props.length ? ` (props: ${c.props.map(String).join(', ')})` : ''
+    lines.push(`${c.tag}${where ? ` [${where}${runtime}]` : ''} — ${desc}${props}`)
+  }
+  const dieted = { ...obj, components: lines.join('\n') }
+  const savedChars = JSON.stringify(obj).length - JSON.stringify(dieted).length
+  return savedChars > 0 ? { value: dieted, savedChars } : null
+}
+
+/** The payload diet, dispatched by tool. Null = leave the result as JSON. */
+function dietForTool(toolName: string | undefined, value: unknown): { value: Record<string, unknown>, savedChars: number } | null {
+  switch (toolName) {
+    case 'layout-snapshot': return dietLayoutResult(value)
+    case 'grep': return dietGrepResult(value)
+    case 'find-component': return dietFindComponentResult(value)
+    default: return null
+  }
+}
+
+export interface TrimStats { trimmed: number, savedChars: number, dieted?: number }
 export interface TrimResult<T> { prompt: T, stats: TrimStats, changed: boolean }
 
 /**
@@ -137,7 +306,30 @@ export function trimPrompt<T extends LooseMessage[]>(prompt: T, thresholdChars: 
     })
     return touched ? { ...msg, content: newParts } : msg
   })
-  return { prompt: next as T, stats, changed: stats.trimmed > 0 }
+
+  // Fresh zone (results answering the newest calls): no folding —
+  // but a fresh result with a uniform array still goes out in diet
+  // form (layout elements, grep hits, catalog summaries).
+  const dieted = next.map((msg, i) => {
+    if (i <= lastCallIdx || !Array.isArray(msg.content)) return msg
+    const parts = msg.content as LoosePart[]
+    if (!parts.some(p => p.type === 'tool-result' && p.output)) return msg
+    let touched = false
+    const newParts = parts.map(p => {
+      if (p.type !== 'tool-result' || !p.output) return p
+      if (resultText(p.output).length <= DIET_MIN_CHARS) return p
+      const out = dietForTool(p.toolName, p.output.value)
+      if (!out) return p
+      stats.dieted = (stats.dieted || 0) + 1
+      stats.savedChars += out.savedChars
+      touched = true
+      return p.output.type === 'text'
+        ? { ...p, output: { type: 'text', value: JSON.stringify(out.value) } }
+        : { ...p, output: { type: 'json', value: out.value } }
+    })
+    return touched ? { ...msg, content: newParts } : msg
+  })
+  return { prompt: dieted as T, stats, changed: stats.trimmed > 0 || (stats.dieted || 0) > 0 }
 }
 
 /**
@@ -156,7 +348,7 @@ export class ToolResultTrimProcessor implements Processor {
     const { prompt: next, changed, stats } = trimPrompt(prompt as unknown as LooseMessage[])
     if (!changed) return undefined
     if (process.env.AI_LIVE_TRIM_LOG === '1') {
-      console.log(`[trim] folded ${stats.trimmed} tool result(s), saved ~${stats.savedChars} chars this call`)
+      console.log(`[trim] folded ${stats.trimmed} tool result(s), dieted ${stats.dieted || 0} result(s), saved ~${stats.savedChars} chars this call`)
     }
     return { prompt: next as unknown as typeof prompt }
   }

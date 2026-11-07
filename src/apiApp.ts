@@ -16,6 +16,7 @@ import { mountAgentSettingsApi } from './agentSettingsApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
+import { mountFeatureApi } from './features/featureApi.js'
 import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
@@ -72,6 +73,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)
+mountFeatureApi(app)
 mountMemoryApi(app)
   mountCodebaseMapApi(app)
   mountCatalogApi(app)
@@ -213,10 +215,12 @@ mountMemoryApi(app)
       let tools = activeToolsForMode(mode)
       if (mode === 'files') {
         const { getActivePlan } = await import('./plans/plans.js')
+        const { getFeatureGraph } = await import('./features/features.js')
         const { getSearchBackend } = await import('./searchSession.js')
         tools = fileToolsForTurn({
           userText,
           hasActivePlan: Boolean(getActivePlan()),
+          hasFeatureGraph: Boolean(getFeatureGraph()),
           searchAvailable: getSearchBackend() !== 'off',
         })
       }

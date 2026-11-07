@@ -21,6 +21,7 @@ import { catalogSummary } from './catalog/catalog.js'
 import { templateSummary } from './catalog/templates.js'
 import { searchAvailable, searchBackendLabel } from './research/searchBackend.js'
 import { getActivePlan } from './plans/plans.js'
+import { featureGraphSummary, getFeatureGraph } from './features/features.js'
 
 export const PROJECT_CONFIG_FILE = 'project.ai.json'
 
@@ -190,5 +191,9 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
       `If the user asks to add, drop or reword a plan question, use plan-add-question / plan-remove-question / plan-revise-question — edit the plan in place, never restart it or re-ask settled questions. Questions: ${qList || '(none yet)'}`,
     )
   }
+  try {
+    const graph = getFeatureGraph()
+    if (graph) lines.push(featureGraphSummary(graph))
+  } catch { /* the brief never breaks on the graph */ }
   return lines.join('\n')
 }

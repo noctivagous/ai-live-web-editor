@@ -242,12 +242,30 @@ export async function evalJS(js: string, url?: string) {
 
 export async function inspectDOM(selector: string, url?: string) {
   const page = await getPage(url)
-  const data = await page.$eval(selector, (el: any) => ({
-    tag: el.tagName,
-    html: el.outerHTML.slice(0, 8000),
-    text: el.innerText.slice(0, 4000),
-    rect: el.getBoundingClientRect()
-  })).catch((e: any) => ({ error: e.message }))
+  const data = await page.$eval(selector, (el: any, sel: string) => {
+    // Mirror the bridge client's inspect shape (page-bridge.js):
+    // sourceLoc parsed from the data-ai-loc stamp, so resolve-source
+    // works the same on both channels.
+    const rawLoc = el.getAttribute('data-ai-loc')
+    let sourceLoc: { file: string, line?: number } | undefined
+    if (rawLoc) {
+      const i = rawLoc.lastIndexOf(':')
+      if (i > 0) {
+        const line = Number(rawLoc.slice(i + 1))
+        sourceLoc = { file: rawLoc.slice(0, i), line: Number.isFinite(line) && line > 0 ? line : undefined }
+      }
+    }
+    return {
+      selector: sel,
+      tag: el.tagName,
+      html: el.outerHTML.slice(0, 8000),
+      text: el.innerText.slice(0, 4000),
+      rect: el.getBoundingClientRect(),
+      children: el.children.length,
+      childTags: Array.from(el.children).slice(0, 10).map((c: any) => c.tagName.toLowerCase()),
+      ...(sourceLoc ? { sourceLoc } : {}),
+    }
+  }, selector).catch((e: any) => ({ error: e.message }))
   recordActivity('inspect', selector)
   return data
 }

@@ -83,6 +83,28 @@ describe('capturePageSnapshot', () => {
     void h1
   })
 
+  it('a node-capped snapshot says so in the text, with the way out', () => {
+    const body = El('body', { id: 'root' })
+    for (let i = 0; i < 6; i++) append(body, El('button', { id: `b${i}`, textContent: `Go ${i}` }))
+    const document = {
+      body,
+      title: 'Many buttons',
+      location: { href: 'http://localhost:5173/' },
+      querySelector: () => body,
+      documentElement: body,
+    }
+    const snap = load()({ maxNodes: 3 }, document)
+    assert.equal(snap.truncated, true)
+    assert.equal(snap.count, 3)
+    const text = String(snap.text)
+    assert.ok(text.includes('… truncated at 3 nodes'), 'cap is named in the dump itself')
+    assert.ok(text.includes('scopeSelector') && text.includes('page-sections'), 'the narrower tools are named')
+    // Under the cap there is no truncation line.
+    const full = load()({}, document)
+    assert.equal(full.truncated, false)
+    assert.equal(String(full.text).includes('truncated at'), false)
+  })
+
   it('verbose includes generic nodes', () => {
     const body = El('body', { id: 'root' })
     append(body, El('div', { id: 'box', textContent: 'generic' }))

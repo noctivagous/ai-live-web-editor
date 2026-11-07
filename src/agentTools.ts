@@ -34,12 +34,15 @@ export const FILE_CORE_TOOLS = [
 export const FILE_LAYOUT_TOOLS = [
   'layout-snapshot',
   'layout-svg',
+  'page-sections',
+  'run-in-page',
   'pool-open',
 ] as const
 
 /** Workbench code programs — dense/minified/generated file work. */
 export const FILE_CODE_TOOLS = [
   'unpack-code',
+  'read-symbol',
 ] as const
 
 /** Component catalog + templates. */
@@ -66,6 +69,14 @@ export const FILE_PLAN_TOOLS = [
   'plan-finish',
 ] as const
 
+/** Feature graph — only meaningful while a graph exists or is being discussed. */
+export const FILE_FEATURE_TOOLS = [
+  'feature-add-node',
+  'feature-set-status',
+  'feature-link',
+  'feature-query',
+] as const
+
 export const FILE_ACTIVE_TOOLS = [
   'list-real-files',
   'grep',
@@ -79,12 +90,15 @@ export const FILE_ACTIVE_TOOLS = [
   'inspect-dom',
   'layout-snapshot',
   'layout-svg',
+  'page-sections',
+  'run-in-page',
   'pool-open',
   'run-project-check',
   'resolve-source',
   'find-component',
   'codebase-map',
   'unpack-code',
+  'read-symbol',
   'adopt-registry',
   'install-catalog-component',
   'place-template',
@@ -97,6 +111,10 @@ export const FILE_ACTIVE_TOOLS = [
   'plan-revise-question',
   'plan-update-task',
   'plan-finish',
+  'feature-add-node',
+  'feature-set-status',
+  'feature-link',
+  'feature-query',
   'get-console',
   'get-network-failures',
 ] as const
@@ -150,13 +168,17 @@ const LAYOUT_RE = /\b(layout|wireframe|overlap|spacing|responsive|breakpoint|vie
 const CATALOG_RE = /\b(components?|templates?|catalog|library|install|buttons?|dialogs?|modals?|dropdowns?|tooltips?|accordion|tabs?|forms?|inputs?|tables?|cards?|pricing|hero|navbar|navigation|sidebar|headers?|footers?|dashboard|widgets?|icons?|charts?|menus?|pages?|sections?|landing)\b/i
 const RESEARCH_RE = /\b(web|internet|online|search|research|lookup|google|docs?|documentation|latest|changelog|version of)\b|\blook up\b/i
 const PLAN_RE = /\bplans?\b|\/plan\b/i
+const FEATURE_RE = /feature[-\s]?graph/i
 const CODE_RE = /\b(unpack\w*|unminif\w*|de-?minif\w*|minified|beautif\w*|prettif\w*|bundles?|bundled|vendor|obfuscat\w*)\b|\.min\.(?:js|mjs|cjs|ts)\b/i
+const RUN_RE = /\b(verify|verifying|runtime|execute|probe)\b|\bactually (returns?|exports?|renders?|does|do)\b|\bwhat does\b[^?]*\breturn/i
 
 export interface FilesTurnSignals {
   /** The newest user message's text (trigger evidence). */
   userText?: string
   /** A plan is active in this project (state evidence, beats text). */
   hasActivePlan?: boolean
+  /** A feature graph exists in this project (state evidence, beats text). */
+  hasFeatureGraph?: boolean
   /** A web search backend is available this turn. */
   searchAvailable?: boolean
 }
@@ -166,9 +188,11 @@ export function fileToolsForTurn(signals: FilesTurnSignals): string[] {
   const text = signals.userText || ''
   const wanted = new Set<string>(FILE_CORE_TOOLS)
   if (LAYOUT_RE.test(text)) for (const t of FILE_LAYOUT_TOOLS) wanted.add(t)
+  if (RUN_RE.test(text)) wanted.add('run-in-page')
   if (CATALOG_RE.test(text)) for (const t of FILE_CATALOG_TOOLS) wanted.add(t)
   if (CODE_RE.test(text)) for (const t of FILE_CODE_TOOLS) wanted.add(t)
   if (signals.searchAvailable && RESEARCH_RE.test(text)) for (const t of FILE_RESEARCH_TOOLS) wanted.add(t)
   if (signals.hasActivePlan || PLAN_RE.test(text)) for (const t of FILE_PLAN_TOOLS) wanted.add(t)
+  if (signals.hasFeatureGraph || FEATURE_RE.test(text)) for (const t of FILE_FEATURE_TOOLS) wanted.add(t)
   return FILE_ACTIVE_TOOLS.filter((t) => wanted.has(t))
 }

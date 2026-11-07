@@ -131,6 +131,48 @@ function sectionIndex(formatted: string): { sections: UnpackSection[], note?: st
   return { sections }
 }
 
+export interface SymbolMatch {
+  kind: UnpackSection['kind']
+  name: string
+  startLine: number
+  endLine: number
+  /** The section's formatted source, capped — see SYMBOL_SOURCE_CAP. */
+  source: string
+  truncated: boolean
+}
+
+/** One symbol's source, aligned with read-real-file's 20k read cap. */
+export const SYMBOL_SOURCE_CAP = 20_000
+
+/** A section's primary symbol name: the ` +n` multi-declarator suffix off. */
+export function primaryName(section: UnpackSection): string {
+  return section.name.replace(/ \+\d+$/, '')
+}
+
+/**
+ * Pull every top-level section whose primary name matches `name` out of
+ * an unpacked source. Duplicate declarations are legal JS, so this is a
+ * list; an empty list means the symbol is not a top-level section (it
+ * may still exist nested — the index is top-level by design).
+ */
+export function extractSymbol(formatted: string, sections: UnpackSection[], name: string): SymbolMatch[] {
+  const lines = formatted.split('\n')
+  const matches: SymbolMatch[] = []
+  for (const s of sections) {
+    if (primaryName(s) !== name) continue
+    const raw = lines.slice(s.startLine - 1, s.endLine).join('\n')
+    matches.push({
+      kind: s.kind,
+      name: s.name,
+      startLine: s.startLine,
+      endLine: s.endLine,
+      source: raw.slice(0, SYMBOL_SOURCE_CAP),
+      truncated: raw.length > SYMBOL_SOURCE_CAP,
+    })
+  }
+  return matches
+}
+
 /** De-minify one JS/TS source and index its top-level sections. Pure. */
 export function unpackSource(source: string, filename: string): UnpackOutput {
   const loader = loaderForPath(filename) || 'tsx'

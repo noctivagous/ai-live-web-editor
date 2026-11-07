@@ -6,6 +6,7 @@ import {
   FILE_CATALOG_TOOLS,
   FILE_CODE_TOOLS,
   FILE_CORE_TOOLS,
+  FILE_FEATURE_TOOLS,
   FILE_LAYOUT_TOOLS,
   FILE_PLAN_TOOLS,
   FILE_RESEARCH_TOOLS,
@@ -83,12 +84,21 @@ describe('fileToolsForTurn', () => {
     }
   })
 
+  it('adds feature tools on feature-graph state or feature-graph talk, not otherwise', () => {
+    for (const t of FILE_FEATURE_TOOLS) {
+      assert.ok(fileToolsForTurn({ userText: 'fix the typo', hasFeatureGraph: true }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'what does the feature graph say is blocked?' }).includes(t), t)
+      assert.equal(fileToolsForTurn({ userText: 'add a feature to the header' }).includes(t), false, t)
+    }
+  })
+
   it('the groups partition the full set, and a fully-triggered turn gets all of it', () => {
-    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS]
+    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS, ...FILE_FEATURE_TOOLS]
     assert.deepEqual([...grouped].sort(), [...FILE_ACTIVE_TOOLS].sort())
     const all = fileToolsForTurn({
-      userText: 'check the layout of the pricing page, search the latest docs, unpack the bundle, then update the plan',
+      userText: 'check the layout of the pricing page, search the latest docs, unpack the bundle, then update the plan and the feature graph',
       hasActivePlan: true,
+      hasFeatureGraph: true,
       searchAvailable: true,
     })
     assert.deepEqual(all, [...FILE_ACTIVE_TOOLS])

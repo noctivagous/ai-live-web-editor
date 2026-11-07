@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { loaderForPath, unpackSource } from './unpack.js'
+import { extractSymbol, loaderForPath, primaryName, SYMBOL_SOURCE_CAP, unpackSource } from './unpack.js'
 
 const MINIFIED = 'import{useState}from"react";const a=1,b=2;export function counter(){const[n,setN]=useState(0);return n+a}class Store{get(){return b}}const helper=(x)=>x*2;'
 
@@ -41,6 +41,37 @@ describe('unpackSource', () => {
     assert.ok(out.formatError)
     assert.equal(out.formatted, 'const = ;')
     assert.deepEqual(out.sections, [])
+  })
+
+  it('extractSymbol returns the named section source from the formatted copy', () => {
+    const out = unpackSource(MINIFIED, '/vendor.min.js')
+    const hits = extractSymbol(out.formatted, out.sections, 'helper')
+    assert.equal(hits.length, 1)
+    assert.equal(hits[0].kind, 'function')
+    assert.ok(hits[0].source.includes('helper'))
+    assert.ok(hits[0].source.includes('x * 2'))
+    assert.equal(hits[0].truncated, false)
+    assert.ok(hits[0].startLine >= 1 && hits[0].endLine >= hits[0].startLine)
+    // A nested or absent name finds nothing — the index is top-level.
+    assert.deepEqual(extractSymbol(out.formatted, out.sections, 'setN'), [])
+    assert.deepEqual(extractSymbol(out.formatted, out.sections, 'nope'), [])
+  })
+
+  it('extractSymbol matches a multi-declarator section by its primary name', () => {
+    const out = unpackSource(MINIFIED, '/vendor.min.js')
+    const a = out.sections.find((s) => s.name.startsWith('a '))
+    assert.ok(a, 'expected the grouped a +1 section')
+    assert.equal(primaryName(a), 'a')
+    assert.equal(extractSymbol(out.formatted, out.sections, 'a').length, 1)
+  })
+
+  it('extractSymbol caps an oversized symbol and flags the truncation', () => {
+    const padding = Array.from({ length: 2000 }, (_, i) => `  x += ${i};`).join('\n')
+    const out = unpackSource(`function big(x) {\n${padding}\n  return x;\n}`, '/big.js')
+    const hits = extractSymbol(out.formatted, out.sections, 'big')
+    assert.equal(hits.length, 1)
+    assert.equal(hits[0].truncated, true)
+    assert.equal(hits[0].source.length, SYMBOL_SOURCE_CAP)
   })
 
   it('picks loaders by extension', () => {

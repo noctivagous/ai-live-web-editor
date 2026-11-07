@@ -534,18 +534,23 @@ export async function pipeAgentChatStream(
     // Files turns send a per-turn tool set (core + the groups this turn
     // triggers) instead of all 28 schemas; Sketch keeps its fixed set.
     let turnHasActivePlan = false
+    let turnHasFeatureGraph = false
     let turnTools = activeToolsForMode(mode)
     if (mode === 'files') {
       try {
         const { getActivePlan } = await import('./plans/plans.js')
         turnHasActivePlan = Boolean(getActivePlan())
       } catch { /* plan tools stay text-triggered only */ }
+      try {
+        const { getFeatureGraph } = await import('./features/features.js')
+        turnHasFeatureGraph = Boolean(getFeatureGraph())
+      } catch { /* feature tools stay text-triggered only */ }
       let searchAvailable = false
       try {
         const { getSearchBackend } = await import('./searchSession.js')
         searchAvailable = getSearchBackend() !== 'off'
       } catch { /* research tools stay off */ }
-      turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, searchAvailable })
+      turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
     }
     const result = await agent.stream(payload as never, {
       maxSteps: 12,
@@ -591,7 +596,7 @@ export async function pipeAgentChatStream(
           // prompt/reply must not be persisted into the user's thread.
           // The gate prompt names the layout tools, so its own text
           // triggers the layout group; research stays off for a verify pass.
-          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan }),
+          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph }),
         })
         followResult = follow
         await streamChunks(follow.fullStream)

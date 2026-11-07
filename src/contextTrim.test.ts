@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { ToolResultTrimProcessor, trimPrompt, TRIM_THRESHOLD_CHARS } from './contextTrim.js'
+import { DIET_MIN_CHARS, dietFindComponentResult, dietGrepResult, dietLayoutResult, ToolResultTrimProcessor, trimPrompt, TRIM_THRESHOLD_CHARS } from './contextTrim.js'
 import { saveAgentSettings, setAgentSettingsPath } from './agentSettings.js'
 
 type Part = Record<string, unknown>
@@ -167,5 +167,238 @@ describe('ToolResultTrimProcessor', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+
+const DEFAULT_HEAVY_STYLES = {
+  display: 'block', position: 'static', top: 'auto', right: 'auto', bottom: 'auto', left: 'auto',
+  'z-index': 'auto', 'flex-direction': 'row', 'flex-wrap': 'nowrap', 'margin-top': '0px', 'margin-left': '0px',
+  'padding-top': '0px', 'padding-left': '12px', width: 'auto', height: 'auto',
+  overflow: 'visible', 'overflow-x': 'visible', visibility: 'visible', opacity: '1', transform: 'none',
+}
+
+function layoutElements(n: number, section = 'Pricing plans') {
+  return Array.from({ length: n }, (_, i) => ({
+    stableId: `e${i + 1}`,
+    tagName: i % 3 === 0 ? 'SECTION' : 'DIV',
+    classList: ['card', 'wide'],
+    depth: 2,
+    section,
+    rect: { x: 16 + i, y: 84 + i * 10, width: 300, height: 120 },
+    textSnippet: `Pricing card number ${i + 1} with some copy in it`,
+    computedStyles: { ...DEFAULT_HEAVY_STYLES, ...(i === 0 ? { display: 'flex', gap: '16px' } : {}) },
+  }))
+}
+
+function layoutMsg(id: string, elements: unknown[]): Msg {
+  return toolMsg(id, 'layout-snapshot', {
+    type: 'json',
+    value: { viewport: { width: 1280, height: 800 }, elements, analysis: { overlaps: [] } },
+  })
+}
+
+describe('layout-snapshot payload diet (fresh results)', () => {
+  it('serializes fresh layout elements as legend + rows and drops default styles', () => {
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'fix the pricing layout' }] },
+      call('a', 'layout-snapshot'),
+      layoutMsg('a', layoutElements(14)),
+    ]
+    const before = partText(prompt[2])
+    const { prompt: next, stats, changed } = trimPrompt(prompt)
+    assert.equal(changed, true)
+    assert.equal(stats.dieted, 1)
+    assert.equal(stats.trimmed, 0)
+    const after = partText(next[2])
+    assert.ok(after.length < before.length * 0.6, `diet should cut >40% (${before.length} -> ${after.length})`)
+    assert.ok(after.includes('elements as rows'), 'legend present')
+    assert.ok(after.includes('## Pricing plans'), 'section header present')
+    assert.ok(after.includes('e1 section.card.wide 2 16,84 300x120'), 'row shape: id tag.classes depth rect')
+    assert.ok(after.includes('display:flex') && after.includes('gap:16px'), 'non-default styles kept')
+    assert.ok(after.includes('padding-left:12px'), 'non-default padding kept')
+    assert.equal(after.includes('position:static'), false, 'default styles dropped')
+    assert.equal(after.includes('overflow:visible'), false)
+    assert.equal(after.includes('"computedStyles"'), false, 'no per-element JSON keys remain')
+  })
+
+  it('an older layout result still folds to a summary instead of dieting', () => {
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'fix it' }] },
+      call('a', 'layout-snapshot'),
+      layoutMsg('a', layoutElements(14)),
+      call('b', 'grep'),
+      toolMsg('b', 'grep', { type: 'json', value: { hits: [], count: 0 } }),
+    ]
+    const { prompt: next, stats } = trimPrompt(prompt)
+    assert.equal(stats.trimmed, 1)
+    assert.equal(stats.dieted || 0, 0)
+    assert.ok(partText(next[2]).includes('[trimmed: layout-snapshot'))
+  })
+
+  it('a small layout result stays in full JSON', () => {
+    const tiny = [
+      { stableId: 'a', tagName: 'DIV', rect: { x: 0, y: 0, width: 10, height: 10 } },
+      { stableId: 'b', tagName: 'P', rect: { x: 0, y: 12, width: 10, height: 8 } },
+    ]
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'peek' }] },
+      call('a', 'layout-snapshot'),
+      layoutMsg('a', tiny),
+    ]
+    assert.ok(partText(prompt[2]).length <= DIET_MIN_CHARS)
+    const { prompt: next, stats, changed } = trimPrompt(prompt)
+    assert.equal(changed, false)
+    assert.equal(stats.dieted || 0, 0)
+    assert.equal(partText(next[2]), partText(prompt[2]))
+  })
+
+  it('the diet drops empty style values and engine-flavoured initial values', () => {
+    // Real captures carry '' for n/a properties (e.g. on #document),
+    // inset:auto, and min-width/min-height as 0px — all no-information.
+    const elements = Array.from({ length: 10 }, (_, i) => ({
+      stableId: `s${i}`, tagName: 'DIV', depth: 1,
+      rect: { x: 0, y: i * 20, width: 100, height: 20 },
+      computedStyles: {
+        display: '', position: '', inset: 'auto', top: 'auto',
+        'min-width': '0px', 'min-height': '0px', width: '100px',
+      },
+    }))
+    const out = dietLayoutResult({ elements })
+    assert.ok(out, 'diet should still win on ten elements')
+    const rows = String(out.value.elements)
+    assert.ok(rows.includes('width:100px'), 'the one real value survives')
+    assert.equal(rows.includes('min-width'), false)
+    assert.equal(rows.includes('inset'), false)
+    assert.equal(rows.includes('display:'), false, 'empty values never reach a row')
+    assert.equal(rows.includes('{}'), false, 'no empty style braces')
+  })
+
+  it('dietLayoutResult refuses non-layout values and no-win diets', () => {
+    assert.equal(dietLayoutResult({ hits: [] }), null)
+    assert.equal(dietLayoutResult({ elements: [] }), null)
+    assert.equal(dietLayoutResult('not json'), null)
+    // One tiny element: the legend costs more than the JSON keys save.
+    assert.equal(dietLayoutResult({ elements: [{ stableId: 'x', tagName: 'DIV', rect: { x: 0, y: 0, width: 1, height: 1 } }] }), null)
+  })
+})
+
+
+function grepMsg(id: string, hits: unknown[]): Msg {
+  return toolMsg(id, 'grep', { type: 'json', value: { hits, count: hits.length, truncated: false } })
+}
+
+function bigHits() {
+  const hits: Array<{ path: string, line: number, text: string }> = []
+  for (let f = 0; f < 4; f++) {
+    for (let i = 0; i < 6; i++) {
+      hits.push({
+        path: `src/module${f}/file.ts`,
+        line: 10 + i * 7,
+        text: `  const value${f}${i} = computeSomething(argumentOne, argumentTwo) // call site number ${i}`,
+      })
+    }
+  }
+  return hits
+}
+
+describe('grep + find-component payload diet (fresh results)', () => {
+  it('serializes fresh grep hits as rows grouped by file', () => {
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'find computeSomething' }] },
+      call('a', 'grep'),
+      grepMsg('a', bigHits()),
+    ]
+    const before = partText(prompt[2])
+    assert.ok(before.length > TRIM_THRESHOLD_CHARS)
+    const { prompt: next, stats, changed } = trimPrompt(prompt)
+    assert.equal(changed, true)
+    assert.equal(stats.dieted, 1)
+    const after = partText(next[2])
+    assert.ok(after.length < before.length * 0.8, `diet should cut >20% (${before.length} -> ${after.length})`)
+    assert.ok(after.includes('hits as rows'))
+    assert.equal(after.split('src/module0/file.ts').length - 1, 1, 'path paid once for its run of hits')
+    assert.ok(after.includes('  10 const value00 = computeSomething'), 'row: line + text (whitespace collapsed)')
+    assert.equal(after.includes('"path"'), false, 'per-hit JSON keys are gone')
+  })
+
+  it('an older grep result folds generically instead of dieting', () => {
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'find it' }] },
+      call('a', 'grep'),
+      grepMsg('a', bigHits()),
+      call('b', 'grep'),
+      toolMsg('b', 'grep', { type: 'json', value: { hits: [], count: 0, truncated: false } }),
+    ]
+    const { prompt: next, stats } = trimPrompt(prompt)
+    assert.equal(stats.trimmed, 1)
+    assert.equal(stats.dieted || 0, 0)
+    assert.ok(partText(next[2]).includes('[trimmed: grep result'))
+  })
+
+  it('dietGrepResult refuses errors, empty hits, and malformed hits', () => {
+    assert.equal(dietGrepResult({ error: 'invalid pattern' }), null)
+    assert.equal(dietGrepResult({ hits: [], count: 0 }), null)
+    assert.equal(dietGrepResult({ hits: [{ line: 3, text: 'x' }] }), null)
+  })
+
+  // Descriptions sized like the real one-liners (the catalog's
+  // oneLiner caps at 120 chars; a 6-summary search runs ~1.7k chars).
+  const SUMMARIES = [
+    { tag: 'button', category: 'inputs', description: 'A clickable button with variant and size styling for primary actions, secondary actions and form submission.', props: ['variant', 'size', 'asChild', 'disabled'], stock: 'shadcn' },
+    { tag: 'dialog', category: 'overlays', description: 'A modal dialog that traps focus, closes on Escape and renders its content in a portal above the page.', props: ['open', 'onOpenChange', 'title', 'description'], stock: 'shadcn' },
+    { tag: 'noct-app-shell', category: 'layout', description: 'Application shell with a title bar, a sidebar region, a status bar and a scrolling content area.', props: ['title', 'sidebarWidth', 'statusText'], runtime: 'lit', stock: 'appkit' },
+    { tag: 'data-table', category: 'data', description: 'A sortable, paginated table over row data with column definitions, row selection and empty states.', props: ['columns', 'rows', 'pageSize', 'onSelect'], stock: 'shadcn' },
+    { tag: 'tabs', category: 'navigation', description: 'Tabbed panels with full keyboard navigation following the WAI-ARIA tabs design pattern.', props: ['value', 'onValueChange', 'orientation'], stock: 'shadcn' },
+    { tag: 'settings-row', category: 'forms', description: 'One settings line: a label, a short description and a control slot, aligned in a two-column grid.', props: ['label', 'description', 'controlId'], stock: 'shadcn' },
+  ]
+
+  it('serializes a fresh find-component summary result as one row per component', () => {
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'need a dialog' }] },
+      call('a', 'find-component'),
+      toolMsg('a', 'find-component', {
+        type: 'json',
+        value: { ok: true, tier: 'summary', components: SUMMARIES, note: 'Summaries only (names + prop names).' },
+      }),
+    ]
+    const before = partText(prompt[2])
+    assert.ok(before.length > DIET_MIN_CHARS, `fixture must cross the diet floor (${before.length})`)
+    const { prompt: next, stats } = trimPrompt(prompt)
+    assert.equal(stats.dieted, 1)
+    const after = partText(next[2])
+    // Descriptions dominate these payloads, so the win is bounded
+    // (~16% on this fixture) — the keys are a minority of the chars,
+    // unlike layout elements. Assert a real but honest cut.
+    assert.ok(after.length < before.length * 0.87, `diet should cut >13% (${before.length} -> ${after.length})`)
+    assert.ok(after.includes('components as rows'))
+    assert.ok(after.includes('button [shadcn/inputs] — A clickable button'), 'row: tag [stock/category] — description')
+    assert.ok(after.includes('(props: variant, size, asChild, disabled)'), 'prop names kept')
+    assert.ok(after.includes('noct-app-shell [appkit/layout · lit]'), 'runtime shown when present')
+    assert.ok(after.includes('Summaries only'), 'the note survives as JSON')
+    assert.equal(after.includes('"description"'), false)
+  })
+
+  it('never diets a full catalog entry, however big', () => {
+    const full = {
+      ok: true, tier: 'full',
+      component: { tag: 'dialog', description: 'x'.repeat(2400), props: [{ name: 'open', type: 'boolean' }] },
+    }
+    assert.equal(dietFindComponentResult(full), null)
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'show me the dialog entry' }] },
+      call('a', 'find-component'),
+      toolMsg('a', 'find-component', { type: 'json', value: full }),
+    ]
+    const { prompt: next, stats, changed } = trimPrompt(prompt)
+    assert.equal(changed, false)
+    assert.equal(stats.dieted || 0, 0)
+    assert.equal(partText(next[2]), partText(prompt[2]))
+  })
+
+  it('dietFindComponentResult refuses non-summary shapes', () => {
+    assert.equal(dietFindComponentResult({ ok: false, error: 'Pass a query or a tag' }), null)
+    assert.equal(dietFindComponentResult({ ok: true, tier: 'summary', components: [] }), null)
+    assert.equal(dietFindComponentResult({ ok: true, tier: 'summary', components: [{ category: 'x' }] }), null)
   })
 })

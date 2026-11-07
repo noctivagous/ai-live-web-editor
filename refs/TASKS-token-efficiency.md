@@ -33,45 +33,60 @@ Phase-11-05 §8 Rungs 1–2. No `codebase-map` tool, no
 Every run still re-greps to answer "where is X rendered / who
 imports Y."
 
-- [ ] Rung 1 extractor: regex-lite parse of `.js/.jsx` (and
+Landed 2026-11-06 (branch feat/token-efficiency-map): extractor +
+map + registry in `src/codebaseMap/` (extract / codebaseMap /
+mapStore), tools `codebase-map` / `adopt-registry` /
+`install-catalog-component` in the Files set, API at
+`/api/codebase-map` (+ /adopt, /install) on both servers, watcher
+rebuild in the launcher, Rung 2 injection in chatStream. 23 new
+tests; suite 258/258, tsc + ui:build clean. Live smoke: lumen map
+is 37 tokens (no injection, below threshold); the editor repo
+itself maps 217 files in 947 tokens with injection on.
+
+- [x] Rung 1 extractor: regex-lite parse of `.js/.jsx` (and
   `.ts/.tsx` when present) building
   `file → imports, exports, components`; fixture tests (component
   defined, re-exported, imported across files)
-- [ ] `codebase-map` tool: budgeted signature output (~≤1k tokens,
+- [x] `codebase-map` tool: budgeted signature output (~≤1k tokens,
   like Aider's `--map-tokens`), in-degree ranking (most-imported
   first), explicit truncation note; add to the Files tool set.
   Acceptance on a 20-file fixture: map fits budget and names the
   entry component first
-- [ ] Generated marker data, never hand-written comments: persist
+- [x] Generated marker data, never hand-written comments: persist
   the map to `.ai-live/map.json` in the project dir; models read
   the map, source stays clean
-- [ ] Watcher invalidation: map rebuilds on add/change/unlink under
+- [x] Watcher invalidation: map rebuilds on add/change/unlink under
   the active root (reuse the launcher chokidar watcher; debounce)
-- [ ] Rung 2 injection: inject top-N map signatures into Files-turn
+- [x] Rung 2 injection: inject top-N map signatures into Files-turn
   context only above a measured file-count threshold (below it,
   injection is wasted tokens — set the threshold from §5 yardstick
   data and record the decision here)
-- [ ] Registry loader: merge declared components (our catalog
+  Decision (2026-11-06, provisional pending §5): threshold is 15
+  project files (`MAP_INJECTION_THRESHOLD` in
+  `src/codebaseMap/codebaseMap.ts`) — lumen-scale starters (2–6
+  files) stay silent; replace with the measured value when the
+  yardstick lands
+- [x] Registry loader: merge declared components (our catalog
   manifest, then shadcn files under its components dir — note
   `components.json` is config, not an installed-component list)
   with inferred components, deduped by file, each entry carrying
   `origin` + `confidence`. Fixtures: catalog project, shadcn
   project, bare imported project
-- [ ] Inferred registry: capitalised component definitions/exports
+- [x] Inferred registry: capitalised component definitions/exports
   under `src/components/**` (then anywhere), props from
   destructured parameters / TS prop types, ranked by used-by count.
   Entries that cannot be parsed are listed by file only — never
   fabricate props or when-to-use prose
-- [ ] Adopt action (opt-in, UI + agent-visible): write the inferred
+- [x] Adopt action (opt-in, UI + agent-visible): write the inferred
   registry to `.ai-live/components.json`; watcher treats it as
   declared thereafter. Never write it silently on import/open
-- [ ] Install catalog alongside (never replacing) the project's own
+- [x] Install catalog alongside (never replacing) the project's own
   components, so installed components appear in the project
   registry/map and the agent imports by name in one lookup
-- [ ] Agent contract test: on an imported project, a "use the
+- [x] Agent contract test: on an imported project, a "use the
   existing button/card if there is one" ask reuses the inferred
   component (check imports in the edit) instead of inventing one
-- [ ] Map speaks our vocabulary: catalog components, templates,
+- [x] Map speaks our vocabulary: catalog components, templates,
   route entry (`main.jsx` → `App`), CSS/token files — e.g.
   "App renders <PricingGrid> (template multi-column-3)"
 

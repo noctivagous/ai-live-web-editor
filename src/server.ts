@@ -17,6 +17,8 @@ import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
+import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
+import { buildAndPersistMap, createMapRebuilder } from './codebaseMap/mapStore.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
 import chokidar from 'chokidar'
@@ -61,8 +63,10 @@ mountProjectConfigApi(app)
 mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)
+mountCodebaseMapApi(app)
 
 ensureWorkspace()
+try { buildAndPersistMap() } catch { /* map is generated lazily by the tool too */ }
 markLauncherOwner()
 
 // Self mode (phase-11-06 §L): boot straight into the editor-as-
@@ -548,6 +552,9 @@ app.get('*', (req, res) => {
 // watcher: log file edits + refresh the 4112 project list when folders appear/disappear
 const watcher = chokidar.watch(WORKSPACE_ROOT, { ignored: /(^|[\/\\])\../, persistent: true, ignoreInitial: true })
 watcher.on('change', p => console.log('[fs] changed', path.relative(WORKSPACE_ROOT, p)))
+// Codebase map (§1): keep the active project's .ai-live/map.json fresh.
+const mapRebuilder = createMapRebuilder(() => getFsRoot())
+const scheduleMapRebuild = (p: string) => { if (p.startsWith(getFsRoot())) mapRebuilder.schedule(p) }
 let projectPushTimer: ReturnType<typeof setTimeout> | undefined
 function scheduleProjectPush() {
   if (projectPushTimer) clearTimeout(projectPushTimer)
@@ -557,9 +564,10 @@ function scheduleProjectPush() {
   }, 400)
 }
 watcher.on('addDir', scheduleProjectPush)
+watcher.on('change', scheduleMapRebuild)
 watcher.on('unlinkDir', scheduleProjectPush)
-watcher.on('add', (p) => { if (path.basename(p) === 'package.json') scheduleProjectPush() })
-watcher.on('unlink', (p) => { if (path.basename(p) === 'package.json') scheduleProjectPush() })
+watcher.on('add', (p) => { scheduleMapRebuild(p); if (path.basename(p) === 'package.json') scheduleProjectPush() })
+watcher.on('unlink', (p) => { scheduleMapRebuild(p); if (path.basename(p) === 'package.json') scheduleProjectPush() })
 
 const server = app.listen(PORT, () => {
   console.log(`[launcher] running at http://localhost:${PORT}`)

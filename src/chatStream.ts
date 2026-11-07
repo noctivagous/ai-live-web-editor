@@ -409,6 +409,17 @@ export async function pipeAgentChatStream(
   // every agent turn knows what kind of project it is building.
   const { projectBrief } = await import('./projectConfig.js')
   payload = withSystemPreamble(projectBrief(), payload)
+  // Rung 2 (§1): inject top map signatures on Files turns only above
+  // the file-count threshold — below it the greps are cheaper than
+  // the map. Best-effort: a map failure never breaks the turn.
+  if (mode === 'files') {
+    try {
+      const { buildMapForRoot } = await import('./codebaseMap/mapStore.js')
+      const { mapInjectionText } = await import('./codebaseMap/codebaseMap.js')
+      const injection = mapInjectionText(buildMapForRoot())
+      if (injection) payload = withSystemPreamble(injection, payload)
+    } catch { /* map injection is an optimisation, not a requirement */ }
+  }
   // Self mode (§L): snapshot the editor tree before a Files turn
   // can touch it, so the turn is always revertible from the
   // recovery page. Best-effort — a snapshot failure never breaks

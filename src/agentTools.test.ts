@@ -7,6 +7,8 @@ describe('activeToolsForMode', () => {
     const files = activeToolsForMode('files')
     const sketch = activeToolsForMode('sketch')
     assert.ok(files.includes('str-replace'))
+    assert.ok(files.includes('codebase-map'))
+    assert.equal(sketch.includes('codebase-map'), false)
     assert.ok(files.includes('inspect-dom'))
     assert.ok(files.includes('take-snapshot'))
     assert.equal(files.includes('patch-dom'), false)

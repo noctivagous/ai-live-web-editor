@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import {
-  getAgentSettings, getProjectConfig, postAgentSettings, postProjectConfig, setPlaywrightPool,
-  type AgentSettings, type LauncherConfig, type ProjectConfig,
+  getAgentSettings, getProjectConfig, getWorkflow, postAgentSettings, postProjectConfig, postWorkflow, setPlaywrightPool,
+  type AgentSettings, type LauncherConfig, type ProjectConfig, type SearchBackendId, type SearchOption,
 } from '../lib/api'
+import { parseWorkflowSnapshot } from '../lib/workflowSync'
 import {
   loadUiPrefs, replaceUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, UI_PREFS_DEFAULTS, UI_PREFS_KEY, type UiPrefs,
 } from '../lib/uiPrefs'
@@ -46,6 +47,14 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const [designated, setDesignated] = useState(false)
   const [prefs, setPrefs] = useState<UiPrefs>(() => loadUiPrefs())
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(null)
+  const [searchSnap, setSearchSnap] = useState<{ backend: SearchBackendId, options: SearchOption[] } | null>(null)
+
+  const refreshSearchSnap = useCallback(async () => {
+    try {
+      const snap = parseWorkflowSnapshot(await getWorkflow())
+      if (snap) setSearchSnap({ backend: snap.searchBackend || 'off', options: snap.searchOptions || [] })
+    } catch { /* launcher unreachable — the section shows its loading state */ }
+  }, [])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [poolOn, setPoolOn] = useState(false)
   const [poolSaving, setPoolSaving] = useState(false)
@@ -142,6 +151,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     let live = true
     void getProjectConfig().then(r => { if (live) { setProjectCfg(r.config); setDesignated(r.designated) } }).catch(() => {})
     void getAgentSettings().then(s => { if (live) setAgentSettings(s) }).catch(() => {})
+    void refreshSearchSnap()
     return () => { live = false }
   }, [])
 
@@ -406,9 +416,73 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     </div>
   )
 
+  const searchSection = () => {
+    const provider = searchSnap?.options.find(o => o.id === 'provider')
+    const brave = searchSnap?.options.find(o => o.id === 'brave')
+    const available = (searchSnap?.options || []).filter(o => o.available)
+    const backend = searchSnap?.backend || 'off'
+    const resolvedLabel = backend === 'provider' ? provider?.label
+      : backend === 'brave' ? (brave?.label || 'Brave Search')
+      : null
+    const pickBackend = async (id: SearchBackendId) => {
+      try {
+        await postWorkflow({ searchBackend: id })
+      } catch { /* ignore — refresh shows what stuck */ }
+      await refreshSearchSnap()
+    }
+    return (
+      <div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <div className="set-row-label">Web search</div>
+            <div className="field-hint">
+              {searchSnap === null && 'Checking what can serve search…'}
+              {searchSnap !== null && backend !== 'off' && resolvedLabel && (
+                <>Searches will use <b>{resolvedLabel}</b>. This is the same setting as the Search control in the chat header.</>
+              )}
+              {searchSnap !== null && backend === 'off' && available.length > 0 && (
+                <>Web search is turned off. Turn it back on here or in the chat header.</>
+              )}
+              {searchSnap !== null && backend === 'off' && available.length === 0 && (
+                <>Web search and research are off: nothing is set up to serve them yet.</>
+              )}
+            </div>
+          </div>
+          <div className="set-row-control">
+            {available.length > 0 ? (
+              <select
+                className="deck-select" value={backend} aria-label="Web search backend"
+                onChange={e => void pickBackend(e.target.value as SearchBackendId)}
+              >
+                {available.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                <option value="off">Search off</option>
+              </select>
+            ) : (
+              <span className="set-note">Not available</span>
+            )}
+          </div>
+        </div>
+
+        <div className="field-hint" style={{ margin: '10px 0 14px' }}>
+          {provider?.available
+            ? <><b>{provider.label}</b> is available through your active provider connection — it needs no extra key or setup. It stays available here and in the chat header as long as that connection is active.</>
+            : <>None of your connected providers offer built-in web search. (Providers that do — such as Meta and OpenAI — show their search here automatically once connected.)</>}
+        </div>
+
+        <div className="set-group-label">{provider?.available ? 'Brave Search — an alternative' : 'Brave Search'}</div>
+        <div className="field-hint" style={{ marginBottom: 10 }}>
+          {provider?.available
+            ? 'Brave also works as a search backend: save a key and it joins the list above, selectable here or in the chat header.'
+            : 'Brave Search is an option: save a key below and web search and research turn on, served by Brave.'}
+        </div>
+        <SearchSetup onStatus={() => void refreshSearchSnap()} />
+      </div>
+    )
+  }
+
   const sectionBody = (s: SettingSection) => {
     if (s.custom === 'providers') return providersSection()
-    if (s.custom === 'search') return <SearchSetup />
+    if (s.custom === 'search') return searchSection()
     if (s.custom === 'preview') return previewSection()
     if (s.custom === 'data') return dataSection()
     if (s.custom === 'shortcuts') return shortcutsSection()

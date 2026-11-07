@@ -1,6 +1,53 @@
 
 - ai live editor
 
+---
+
+in the past, an app that built apps had functions.
+This was never recognized and what was left
+as finished was interacting with the AI directly with
+the text box, typing one thing after another. in other
+words, no work was actually done to make an app
+the way it used to be.  the new opportunities and conditions
+brought about by the AI agent were not processed in
+terms of a consumer product feature set.  in some ways
+it was just an AI chat engineered for code placed inside
+code editors. but we have an
+opportunity to restore the consumer product 
+by recognizing that we have AI agent actions.
+Then AI agents would be, to start, available
+in an app menu.  So what I am saying is
+the difference between the user always having
+to come up with commands and having access
+lists and menu trees commands in the app menu,
+just like has existed in photo editing and vector drawing programs 
+and possibles.  but this time there can be palettes
+of commands for different purposes, to control the AI
+by clicking buttons and going through panels, but
+getting there can go through UI that is more like
+authoring programs or 3D programs where the user
+is accessing functions and command palettes.
+ the app will have
+more of an appearance and feature set an authoring program,
+like Macromedia Flash, but now is incorporating
+AI and making use of it.  it will not be so raw like now
+that everything has to be typed out from scratch
+by the user.  there will be a Wizards menu where the
+user can execute different wizards for tasks in
+different areas and it will reuse our form system
+(that may need to be extended) that we made
+for planning.  There can be an Agent Actions app menu
+in the app menu bar.  The user then has starting
+points.
+
+----
+
+the software project can have facets, are often 
+  - architecture
+  - features
+  - styles
+
+
 ----
 
 separate agent tools for separate agent work
@@ -56,9 +103,32 @@ Conversions like master detail.
 
 ----
 
+
+Let’s say we wanted to make a shopping cart web app for
+people to configure online stores.  
+This is an extensive piece of software and it has many facets.
+It has been done many times but it is a place where
+we can derive many higher level, premade components
+so that it can be pieced together quickly and the components 
+configured.  When making software it always looks simpler 
+than the job.  Though this type of software has been made
+many times, the software development frameworks haven't
+made it any easier to build them because they are not
+looking for any patterns and then generalizing components
+in this way.  This is the role that the catalog and planner
+should play, to plan out networks of components on a graph
+in some cases or for simpler apps just to plan out what
+gui controls and components to use from the catalog.
+
+Many apps have shared features.  They have settings.
+apps that print have printing features.
+
+
 Feature Graph
 
-
+probably a part of the planning section of our
+app, feature graphs would allow generating
+and tracking progress of deep software graphs. 
 the AI, when it is planning execution,
 could construct a graph with nodes
 as it constructs it plan and then be

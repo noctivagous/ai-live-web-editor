@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { loadUiPrefs, saveUiPrefs, validateUiPrefs, UI_PREFS_DEFAULTS } from './uiPrefs.js'
+import { loadUiPrefs, replaceUiPrefs, saveUiPrefs, validateUiPrefs, UI_PREFS_DEFAULTS } from './uiPrefs.js'
 
 function fakeStore(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial))
@@ -34,5 +34,30 @@ describe('uiPrefs', () => {
     const partial = validateUiPrefs({ chatView: 'panel', fileSort: 'bogus' })
     assert.equal(partial.chatView, 'panel')
     assert.equal(partial.fileSort, 'name')
+  })
+})
+
+describe('uiPrefs editor fields + replace', () => {
+  it('validates editor options with clamps and current-behavior defaults', () => {
+    const p = validateUiPrefs({ editorFontSize: 99, editorTabSize: 3, editorWordWrap: false, editorMinimap: true, editorLineNumbers: false })
+    assert.equal(p.editorFontSize, 20)
+    assert.equal(p.editorTabSize, 4)
+    assert.equal(p.editorWordWrap, false)
+    assert.equal(p.editorMinimap, true)
+    assert.equal(p.editorLineNumbers, false)
+    const d = validateUiPrefs({})
+    assert.equal(d.editorFontSize, 13)
+    assert.equal(d.editorWordWrap, true)
+    assert.equal(d.editorMinimap, false)
+  })
+
+  it('replaceUiPrefs writes a whole validated record', () => {
+    const store = fakeStore()
+    saveUiPrefs({ chatView: 'panel' }, store)
+    const next = replaceUiPrefs({ fileSort: 'modified', editorFontSize: 16 }, store)
+    assert.equal(next.chatView, 'chat')
+    assert.equal(next.fileSort, 'modified')
+    assert.equal(next.editorFontSize, 16)
+    assert.deepEqual(loadUiPrefs(store), next)
   })
 })

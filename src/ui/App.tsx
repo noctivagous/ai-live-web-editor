@@ -8,6 +8,7 @@ import { Chat } from './components/Chat'
 import { NoticeDialog } from './components/Modal'
 import { SettingsWindow } from './components/SettingsWindow'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
+import { loadUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
 import { ImportProgressDialog, ImportReportDialog, OverLimitDialog, ReimportButton } from './components/FolderImport'
 import { SyncConflictsDialog, SyncStatusBar, type ConflictChoice, type ConflictItem } from './components/FolderSync'
 import {
@@ -76,6 +77,12 @@ export default function App() {
   }, [settingsMenuOpen])
   const [config, setConfig] = useState<LauncherConfig | null>(null)
   const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem(EDITOR_THEME_KEY) || 'vs-dark')
+  const [uiPrefsState, setUiPrefsState] = useState<UiPrefs>(() => loadUiPrefs())
+  useEffect(() => {
+    const onPrefs = () => setUiPrefsState(loadUiPrefs())
+    window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+    return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+  }, [])
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
   // skip autosave for placeholder content and right after a file loads
   const skipSave = useRef(true)
@@ -978,7 +985,7 @@ export default function App() {
           </div>
           {!collapse.editor && (
             <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>
-              <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} />
+              <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} editorPrefs={uiPrefsState} />
             </div>
           )}
           {!collapse.editor && !collapse.preview && (

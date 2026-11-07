@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import Editor from '@monaco-editor/react'
+import type { UiPrefs } from '../lib/uiPrefs'
 
 function getLang(path: string) {
   if (path.endsWith('.tsx') || path.endsWith('.ts')) return 'typescript'
@@ -11,8 +12,10 @@ function getLang(path: string) {
   return 'javascript'
 }
 
-export function MonacoEditor({ path, value, onChange, theme }: {
-  path: string, value: string, onChange: (v:string)=>void, theme?: string
+type EditorOptionPrefs = Pick<UiPrefs, 'editorFontSize' | 'editorTabSize' | 'editorWordWrap' | 'editorMinimap' | 'editorLineNumbers'>
+
+export function MonacoEditor({ path, value, onChange, theme, editorPrefs }: {
+  path: string, value: string, onChange: (v: string) => void, theme?: string, editorPrefs?: EditorOptionPrefs
 }) {
   return (
     <Editor
@@ -21,13 +24,15 @@ export function MonacoEditor({ path, value, onChange, theme }: {
       language={getLang(path)}
       value={value}
       theme={theme || 'vs-dark'}
-      onChange={(v)=> onChange(v||'')}
+      onChange={(v) => onChange(v || '')}
       options={{
-        minimap:{enabled:false},
-        fontSize:13,
-        wordWrap:'on',
-        scrollBeyondLastLine:false,
-        automaticLayout:true
+        minimap: { enabled: editorPrefs?.editorMinimap ?? false },
+        fontSize: editorPrefs?.editorFontSize ?? 13,
+        wordWrap: (editorPrefs?.editorWordWrap ?? true) ? 'on' : 'off',
+        tabSize: editorPrefs?.editorTabSize ?? 4,
+        lineNumbers: (editorPrefs?.editorLineNumbers ?? true) ? 'on' : 'off',
+        scrollBeyondLastLine: false,
+        automaticLayout: true
       }}
     />
   )

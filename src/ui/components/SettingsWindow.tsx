@@ -4,7 +4,10 @@ import {
   getProjectConfig, postProjectConfig, setPlaywrightPool,
   type LauncherConfig, type ProjectConfig,
 } from '../lib/api'
-import { loadUiPrefs, saveUiPrefs, type UiPrefs } from '../lib/uiPrefs'
+import {
+  loadUiPrefs, replaceUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, UI_PREFS_DEFAULTS, UI_PREFS_KEY, type UiPrefs,
+} from '../lib/uiPrefs'
+import { buildSettingsExport, chatSessionKeys, parseSettingsImport } from '../lib/settingsData'
 import {
   SETTING_SECTIONS, fieldsForSection, searchSettings, sectionById,
   type SettingField, type SettingSection,
@@ -41,6 +44,9 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const [saveError, setSaveError] = useState<string | null>(null)
   const [poolOn, setPoolOn] = useState(false)
   const [poolSaving, setPoolSaving] = useState(false)
+  const [dataNotice, setDataNotice] = useState<string | null>(null)
+  const [dataConfirm, setDataConfirm] = useState<'reset' | 'clearChats' | null>(null)
+  const importRef = React.useRef<HTMLInputElement>(null)
 
   useEffect(() => { setSection(initialSection) }, [initialSection])
   useEffect(() => { void reload() }, [reload])
@@ -106,7 +112,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
           {f.control === 'slider' && (
             <span className="set-slider">
               <input id={`set-${f.id}`} type="range" min={f.min} max={f.max} step={1} value={v as string} onChange={e => void applyField(f, e.target.value)} />
-              <span className="set-slider-val">{v as string}/10</span>
+              <span className="set-slider-val">{v as string}{f.id === 'planMutability' ? '/10' : ''}</span>
             </span>
           )}
           {f.control === 'text' && (
@@ -188,6 +194,106 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     </div>
   )
 
+  const dataSection = () => {
+    let chatCount = 0
+    try { chatCount = chatSessionKeys(Object.keys(globalThis.localStorage)).length } catch { /* no storage */ }
+    const doExport = async () => {
+      setDataNotice(null)
+      try {
+        const pc = await getProjectConfig()
+        const data = buildSettingsExport(prefs, pc.config)
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'ai-live-settings.json'
+        a.click()
+        URL.revokeObjectURL(url)
+        setDataNotice('Exported device settings and the active project’s settings. API keys are never included — they stay on the launcher.')
+      } catch (e) { setDataNotice(e instanceof Error ? e.message : String(e)) }
+    }
+    const doImportFile = async (file: File) => {
+      setDataNotice(null)
+      try {
+        const parsed = parseSettingsImport(await file.text())
+        setPrefs(replaceUiPrefs(parsed.prefs))
+        let note = 'Imported device settings.'
+        if (parsed.project) {
+          const r = await postProjectConfig(parsed.project)
+          setProjectCfg(r.config)
+          setDesignated(r.designated)
+          note += ' Project settings were applied to the active project.'
+        }
+        setDataNotice(note)
+      } catch (e) { setDataNotice(e instanceof Error ? e.message : String(e)) }
+    }
+    const doReset = () => {
+      try { globalThis.localStorage.removeItem(UI_PREFS_KEY) } catch { /* ignore */ }
+      setPrefs({ ...UI_PREFS_DEFAULTS })
+      try { globalThis.dispatchEvent(new CustomEvent(UI_PREFS_CHANGED_EVENT)) } catch { /* ignore */ }
+      setDataConfirm(null)
+      setDataNotice('Device settings reset to defaults.')
+    }
+    const doClearChats = () => {
+      let removed = 0
+      try {
+        for (const k of chatSessionKeys(Object.keys(globalThis.localStorage))) { globalThis.localStorage.removeItem(k); removed++ }
+      } catch { /* ignore */ }
+      setDataConfirm(null)
+      setDataNotice(`Cleared ${removed} saved chat session${removed === 1 ? '' : 's'}. Open chats keep their in-memory state until the page reloads.`)
+    }
+    const confirmRow = (kind: 'reset' | 'clearChats', text: string, action: () => void) => dataConfirm === kind ? (
+      <span className="set-confirm">
+        <span>{text}</span>
+        <button type="button" className="deck-btn danger" onClick={action}>Confirm</button>
+        <button type="button" className="deck-btn" onClick={() => setDataConfirm(null)}>Cancel</button>
+      </span>
+    ) : null
+    return (
+      <div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <div className="set-row-label">Export settings</div>
+            <div className="field-hint">Downloads a JSON file with this device’s settings and the active project’s settings. API keys and connections stay on the launcher and are never exported.</div>
+          </div>
+          <div className="set-row-control"><button type="button" className="deck-btn" onClick={() => void doExport()}>Export</button></div>
+        </div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <div className="set-row-label">Import settings</div>
+            <div className="field-hint">Reads a settings export. Device settings replace this device’s; project settings apply to the active project.</div>
+          </div>
+          <div className="set-row-control">
+            <input ref={importRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void doImportFile(f); e.target.value = '' }} />
+            <button type="button" className="deck-btn" onClick={() => importRef.current?.click()}>Import…</button>
+          </div>
+        </div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <div className="set-row-label">Reset device settings</div>
+            <div className="field-hint">Chat view, file pane, and editor options on this device go back to their defaults. Project settings and providers are untouched.</div>
+          </div>
+          <div className="set-row-control">
+            {confirmRow('reset', 'Reset device settings?', doReset) ?? (
+              <button type="button" className="deck-btn" onClick={() => setDataConfirm('reset')}>Reset…</button>
+            )}
+          </div>
+        </div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <div className="set-row-label">Clear saved chat sessions</div>
+            <div className="field-hint">{chatCount} saved session{chatCount === 1 ? '' : 's'} on this device. Transcripts saved per project are removed; files are untouched.</div>
+          </div>
+          <div className="set-row-control">
+            {confirmRow('clearChats', `Clear ${chatCount} saved sessions?`, doClearChats) ?? (
+              <button type="button" className="deck-btn" disabled={chatCount === 0} onClick={() => setDataConfirm('clearChats')}>Clear…</button>
+            )}
+          </div>
+        </div>
+        {dataNotice && <div className="field-hint" style={{ marginTop: 10 }}>{dataNotice}</div>}
+      </div>
+    )
+  }
+
   const aboutSection = () => (
     <div>
       <dl className="set-facts">
@@ -206,6 +312,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     if (s.custom === 'providers') return providersSection()
     if (s.custom === 'search') return <SearchSetup />
     if (s.custom === 'preview') return previewSection()
+    if (s.custom === 'data') return dataSection()
     if (s.custom === 'about') return aboutSection()
     return (
       <div>

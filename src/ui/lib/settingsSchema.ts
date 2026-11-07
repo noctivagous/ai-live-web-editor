@@ -42,17 +42,20 @@ export interface SettingSection {
   title: string
   scope: SettingScope
   /** Set for sections rendered by a dedicated component, not fields. */
-  custom?: 'providers' | 'search' | 'preview' | 'about'
+  custom?: 'providers' | 'search' | 'preview' | 'data' | 'about'
   keywords?: string
 }
 
 export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'providers', title: 'AI Providers & Models', scope: 'global', custom: 'providers', keywords: 'api key connection model provider modality openai meta' },
   { id: 'search', title: 'Search & Research', scope: 'global', custom: 'search', keywords: 'brave web search research backend' },
-  { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'theme chat view panel deck file pane sort hidden' },
+  { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'theme chat view panel deck' },
+  { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
+  { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
   { id: 'project', title: 'Project', scope: 'project', keywords: 'type format device targets style appkit catalog manifest' },
   { id: 'plans', title: 'Plans & Workflow', scope: 'project', keywords: 'plan level mutability default planning' },
   { id: 'preview', title: 'Preview & Live App', scope: 'global', custom: 'preview', keywords: 'playwright pool browser live target preview' },
+  { id: 'data', title: 'Privacy & Data', scope: 'device', custom: 'data', keywords: 'export import reset clear chat sessions privacy data backup' },
   { id: 'about', title: 'About & Launcher', scope: 'global', custom: 'about', keywords: 'version workspace launcher setup wizard replay about' },
 ]
 
@@ -65,15 +68,43 @@ export const SETTING_FIELDS: SettingField[] = [
     keywords: 'deck panel stationary scrolling',
   },
   {
-    id: 'fileSort', section: 'appearance', label: 'File pane sort order', control: 'select', store: 'prefs',
+    id: 'fileSort', section: 'files', label: 'File pane sort order', control: 'select', store: 'prefs',
     hint: 'The file browser pane starts in this order; changing it in the pane updates this.',
     options: [{ value: 'name', label: 'Name' }, { value: 'type', label: 'Type' }, { value: 'modified', label: 'Modified' }],
     keywords: 'files explorer order',
   },
   {
-    id: 'fileShowHidden', section: 'appearance', label: 'Show hidden files', control: 'toggle', store: 'prefs',
+    id: 'fileShowHidden', section: 'files', label: 'Show hidden files', control: 'toggle', store: 'prefs',
     hint: 'Dotfiles and dot-folders in the file browser pane.',
     keywords: 'dotfiles hidden files explorer',
+  },
+  // Editor — device prefs (uiPrefs instance), applied to Monaco live.
+  {
+    id: 'editorFontSize', section: 'editor', label: 'Font size', control: 'slider', store: 'prefs', numeric: true,
+    min: 10, max: 20,
+    hint: 'Code editor font size, in points.',
+    keywords: 'monaco text size',
+  },
+  {
+    id: 'editorTabSize', section: 'editor', label: 'Tab size', control: 'select', store: 'prefs', numeric: true,
+    hint: 'Spaces per indentation level in the code editor.',
+    options: [{ value: '2', label: '2 spaces' }, { value: '4', label: '4 spaces' }],
+    keywords: 'indent spaces monaco',
+  },
+  {
+    id: 'editorWordWrap', section: 'editor', label: 'Word wrap', control: 'toggle', store: 'prefs',
+    hint: 'Wrap long lines instead of scrolling sideways.',
+    keywords: 'monaco lines',
+  },
+  {
+    id: 'editorMinimap', section: 'editor', label: 'Minimap', control: 'toggle', store: 'prefs',
+    hint: 'The miniature code overview at the editor’s right edge.',
+    keywords: 'monaco overview',
+  },
+  {
+    id: 'editorLineNumbers', section: 'editor', label: 'Line numbers', control: 'toggle', store: 'prefs',
+    hint: 'Numbers in the editor gutter.',
+    keywords: 'monaco gutter',
   },
   // Project — project.ai.json instance.
   {

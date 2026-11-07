@@ -80,6 +80,28 @@ describe('themes', () => {
     assert.ok(!isUiThemeId(undefined))
   })
 
+  it('slice-2 tokens: segmented wells and status text adapt per theme', () => {
+    const flat = themeById('dark-2020s').tokens
+    const pro = themeById('dark-pro-classic').tokens
+    const gray = themeById('gray-pro-classic').tokens
+    // Flat theme: no segmented well, no header gradient difference.
+    assert.equal(flat.segBg, 'transparent')
+    assert.equal(flat.segShadow, 'none')
+    // Pro themes: the segmented control sits in a recessed well.
+    assert.equal(pro.segBg, pro.well)
+    assert.match(pro.segShadow, /inset/)
+    assert.equal(gray.segBg, gray.well)
+    assert.match(gray.segShadow, /inset/)
+    assert.match(pro.headBg, /linear-gradient/)
+    assert.match(gray.headBg, /linear-gradient/)
+    // Status text is pastel on the dark themes, dark on gray.
+    assert.notEqual(gray.redText, flat.redText)
+    assert.ok(contrast(gray.redText, gray.card) > 3.5)
+    assert.ok(contrast(gray.greenText, gray.card) > 3.5)
+    assert.ok(contrast(gray.accentSoftText, gray.card) > 3.5)
+    assert.equal(pro.redText, flat.redText)
+  })
+
   it('monaco mapping and font-size scale', () => {
     assert.equal(monacoThemeFor('dark-2020s'), 'vs-dark')
     assert.equal(monacoThemeFor('dark-pro-classic'), 'vs-dark')

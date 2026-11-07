@@ -15,10 +15,14 @@
  * and `none`; the pro themes give them gradients, bevels and inset
  * shadows in the manner of late-2000s professional apps.
  *
- * Slice 1 scope: token-driven surfaces (shell background, panels,
- * buttons, inputs, top bar, scrollbars, all CSS font sizes) respond
- * to a theme; components that still hardcode colors in inline styles
- * keep the dark-2020s values until the token sweep (a later slice).
+ * Slice 1 made the shell token-driven (panels, buttons, inputs, top
+ * bar, scrollbars, all CSS font sizes). Slice 2 extended the token
+ * set (text shades, strong borders, accent-soft and status text,
+ * overlay, segmented-control and header effects) and converted the
+ * remaining stylesheet surfaces — Settings, menus, dialogs, chat and
+ * deck cards, panel view, file tree. Components that still hardcode
+ * colors in TSX inline styles keep the dark-2020s values until the
+ * inline-style sweep (slice 3).
  */
 
 export type UiThemeId = 'dark-2020s' | 'dark-pro-classic' | 'gray-pro-classic'
@@ -57,6 +61,22 @@ export interface UiThemeTokens {
   radiusPanel: string
   radiusControl: string
   fontUi: string
+  /** Slice-2 tokens: the shades the chrome CSS used to hardcode. */
+  textStrong: string
+  textSoft: string
+  borderStrong: string
+  accentSoftBg: string
+  accentSoftBorder: string
+  accentSoftText: string
+  redText: string
+  greenText: string
+  amberText: string
+  violet: string
+  overlayBg: string
+  segBg: string
+  segShadow: string
+  headBg: string
+  onPrimary: string
 }
 
 export interface UiTheme {
@@ -104,6 +124,21 @@ export const UI_THEMES: UiTheme[] = [
       radiusPanel: '12px',
       radiusControl: '8px',
       fontUi: SYSTEM_FONT,
+      textStrong: '#fafafa',
+      textSoft: '#c9c9d1',
+      borderStrong: '#34343e',
+      accentSoftBg: '#0f172a',
+      accentSoftBorder: '#1e293b',
+      accentSoftText: '#bfdbfe',
+      redText: '#fca5a5',
+      greenText: '#86efac',
+      amberText: '#fde68a',
+      violet: '#a78bfa',
+      overlayBg: 'rgba(8, 8, 10, 0.72)',
+      segBg: 'transparent',
+      segShadow: 'none',
+      headBg: 'linear-gradient(180deg, #17171c, #141418)',
+      onPrimary: '#dbeafe',
     },
   },
   {
@@ -137,6 +172,21 @@ export const UI_THEMES: UiTheme[] = [
       radiusPanel: '8px',
       radiusControl: '6px',
       fontUi: PRO_FONT,
+      textStrong: '#ffffff',
+      textSoft: '#d6d6d6',
+      borderStrong: '#000000',
+      accentSoftBg: 'rgba(74, 138, 244, 0.16)',
+      accentSoftBorder: '#2a5cb0',
+      accentSoftText: '#bfdcff',
+      redText: '#fca5a5',
+      greenText: '#86efac',
+      amberText: '#fde68a',
+      violet: '#c4b5fd',
+      overlayBg: 'rgba(5, 5, 6, 0.72)',
+      segBg: '#0f0f10',
+      segShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.9)',
+      headBg: 'linear-gradient(180deg, #3a3b3e, #2a2b2e)',
+      onPrimary: '#ffffff',
     },
   },
   {
@@ -170,6 +220,21 @@ export const UI_THEMES: UiTheme[] = [
       radiusPanel: '8px',
       radiusControl: '6px',
       fontUi: PRO_FONT,
+      textStrong: '#000000',
+      textSoft: '#333336',
+      borderStrong: '#4a4a4c',
+      accentSoftBg: 'rgba(42, 92, 176, 0.14)',
+      accentSoftBorder: '#2a5cb0',
+      accentSoftText: '#1e40af',
+      redText: '#7f1d1d',
+      greenText: '#14532d',
+      amberText: '#92400e',
+      violet: '#5b21b6',
+      overlayBg: 'rgba(38, 38, 40, 0.5)',
+      segBg: '#e9e9e9',
+      segShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.35)',
+      headBg: 'linear-gradient(180deg, #c4c4c6, #a8a8aa)',
+      onPrimary: '#ffffff',
     },
   },
 ]

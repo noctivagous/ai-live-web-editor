@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
 import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
-import { isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
+import { describeRenderer, isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
 import { Markdown } from './Markdown'
 import { FolderSetupWizard } from './FolderSetupWizard'
 import { CssBoxes } from './CssBoxes'
+import { SpreadsheetView } from './SpreadsheetView'
+import { FormatStub } from './FormatStub'
 
 const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site']
 const TARGET_WIDTHS: Record<DeviceTarget, number | null> = { phone: 375, tablet: 768, desktop: null }
@@ -200,7 +202,8 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   const frameSrc = url === STATIC_URL
     ? `${STATIC_URL.replace(/\/$/, '')}${pagePath}`
     : pagePath === '/index.html' ? `${liveUrl}/` : `${liveUrl}${pagePath}`
-  const displayUrl = renderer === 'reading' || renderer === 'image' ? (mark ?? '') : frameSrc
+  const isReading = renderer === 'reading' || renderer === 'markdown'
+  const displayUrl = isReading || renderer === 'image' || renderer === 'spreadsheet' || renderer === 'document' || renderer === 'workbook' ? (mark ?? '') : frameSrc
   const frameMode = renderer === 'page' || renderer === 'host'
 
   // A new mark restarts the frame on the live server for that file.
@@ -217,7 +220,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
 
   // Reading view: fetch the marked document's text.
   useEffect(() => {
-    if (renderer !== 'reading' || !mark) return
+    if (!isReading || !mark) return
     let live = true
     void (async () => {
       try {
@@ -422,7 +425,11 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
       ) : !frameMode ? (
         renderer === 'css' && mark ? (
           <CssBoxes key={mark} path={mark} onSaved={onChanged} />
-        ) : renderer === 'reading' ? (
+        ) : renderer === 'spreadsheet' && mark ? (
+          <SpreadsheetView key={mark} path={mark} />
+        ) : (renderer === 'document' || renderer === 'workbook') && mark ? (
+          <FormatStub key={mark} path={mark} descriptor={describeRenderer(renderer)} />
+        ) : isReading ? (
           <div style={{ flex: 1, overflow: 'auto', background: '#141417', padding: '18px 22px', minHeight: 0 }}>
             <div style={{ maxWidth: 680, margin: '0 auto', color: '#d4d4d8', fontSize: 13.5, lineHeight: 1.65 }}>
               {readFailed

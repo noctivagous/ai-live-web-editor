@@ -20,6 +20,7 @@ import {
   type SyncBaseline, type SyncStatus,
 } from './lib/folderSync'
 import { SetupWizard } from './components/SetupWizard'
+import { PlanOverlay } from './components/PlanOverlay'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
@@ -44,6 +45,16 @@ export default function App() {
   const [status, setStatus] = useState('connecting to :4112...')
   const [notice, setNotice] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  // Planning (§O): the /plan overlay floats over files + middle; chat stays live.
+  const [planOpen, setPlanOpen] = useState<{ level?: number, goal?: string, n: number } | null>(null)
+  useEffect(() => {
+    const onPlanOpen = (e: Event) => {
+      const d = (e as CustomEvent).detail as { level?: number, goal?: string } | undefined
+      setPlanOpen(prev => ({ level: d?.level, goal: d?.goal, n: (prev?.n ?? 0) + 1 }))
+    }
+    window.addEventListener('ai-live:plan-open', onPlanOpen)
+    return () => window.removeEventListener('ai-live:plan-open', onPlanOpen)
+  }, [])
   const [config, setConfig] = useState<LauncherConfig | null>(null)
   const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem(EDITOR_THEME_KEY) || 'vs-dark')
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
@@ -838,7 +849,17 @@ export default function App() {
         />
       )}
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 10, padding: 12 }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 10, padding: 12, position: 'relative' }}>
+        {planOpen && (
+          <PlanOverlay
+            key={`${activeProject}-${planOpen.n}`}
+            initialLevel={planOpen.level}
+            initialGoal={planOpen.goal}
+            onClose={() => setPlanOpen(null)}
+            onOpenPath={(p) => { void loadFile(p) }}
+            style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
+          />
+        )}
         <div className="panel" style={{ width: leftW, flexShrink: 0 }}>
           <div className="panel-head">Files <span className="sub">{files.length}</span></div>
           <FileTree files={files} active={activePath} onSelect={loadFile} onNew={async () => {

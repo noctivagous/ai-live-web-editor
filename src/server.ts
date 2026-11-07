@@ -16,6 +16,7 @@ import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
+import { mountPlanApi } from './plans/planApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
 import chokidar from 'chokidar'
@@ -59,6 +60,7 @@ mountWorkflowApi(app)
 mountProjectConfigApi(app)
 mountConnectionsApi(app)
 mountResearchApi(app)
+mountPlanApi(app)
 
 ensureWorkspace()
 markLauncherOwner()

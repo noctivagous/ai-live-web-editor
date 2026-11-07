@@ -7,6 +7,10 @@ import { getConsoleTool, getNetworkFailuresTool } from '../tools/verifyTools.js'
 import { resolveSourceTool } from '../tools/resolveSourceTool.js'
 import { findComponentTool } from '../tools/catalogTools.js'
 import { fetchPageTool, researchTool, webSearchTool } from '../tools/webTools.js'
+import {
+  planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
+  planReviseQuestionTool, planUpdateTaskTool,
+} from '../tools/planTools.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
@@ -73,6 +77,11 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'web-search': webSearchTool,
     'fetch-page': fetchPageTool,
     'research': researchTool,
+    'plan-add-question': planAddQuestionTool,
+    'plan-remove-question': planRemoveQuestionTool,
+    'plan-revise-question': planReviseQuestionTool,
+    'plan-update-task': planUpdateTaskTool,
+    'plan-finish': planFinishTool,
     'get-console': getConsoleTool,
     'get-network-failures': getNetworkFailuresTool,
   }

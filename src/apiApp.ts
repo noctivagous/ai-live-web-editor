@@ -12,6 +12,7 @@ import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
+import { mountPlanApi } from './plans/planApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { activeToolsForMode } from './agentTools.js'
 import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard, withSketchPreamble } from './sketchSession.js'
@@ -64,6 +65,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountProjectConfigApi(app)
   mountConnectionsApi(app)
 mountResearchApi(app)
+mountPlanApi(app)
 
   app.get('/api/fs/health', (_req, res) => {
     const root = getFsRoot()

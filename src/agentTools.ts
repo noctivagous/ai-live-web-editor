@@ -19,6 +19,11 @@ export const FILE_ACTIVE_TOOLS = [
   'web-search',
   'fetch-page',
   'research',
+  'plan-add-question',
+  'plan-remove-question',
+  'plan-revise-question',
+  'plan-update-task',
+  'plan-finish',
   'get-console',
   'get-network-failures',
 ] as const

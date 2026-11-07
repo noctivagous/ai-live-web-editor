@@ -232,7 +232,7 @@ function CardEditor({ preset, conn, onClose, onSaved }: EditorProps) {
 
       {probe === 'probing' && <div className="field-hint">Validating…</div>}
       {probe === 'error' && probeError && (
-        <div className="field-hint" style={{ color: '#fca5a5' }}>
+        <div className="field-hint" style={{ color: 'var(--red-text)' }}>
           {PROBE_ERROR_TEXT[probeError.kind]}
           {probeError.kind === 'unknown' && probeError.message ? ` (${probeError.message})` : ''}
         </div>
@@ -307,7 +307,7 @@ function CardEditor({ preset, conn, onClose, onSaved }: EditorProps) {
         </div>
       )}
 
-      {saveError && <div className="field-hint" style={{ color: '#fca5a5' }}>{saveError}</div>}
+      {saveError && <div className="field-hint" style={{ color: 'var(--red-text)' }}>{saveError}</div>}
 
       <div className="peditor-actions">
         <button className="deck-btn primary" disabled={!canSave || saving} onClick={() => void save()}>
@@ -456,8 +456,8 @@ export function ProviderSetup({ payload, reload, onChanged }: {
         {customConns.map(conn => (
           <div key={conn.id} className="pcustom-row">
             <span className="mono" style={{ fontWeight: 550 }}>{conn.name}</span>
-            <span className="mono" style={{ color: '#a1a1aa' }}>{conn.baseUrl}</span>
-            <span className="mono" style={{ color: '#a1a1aa' }}>{conn.model}</span>
+            <span className="mono" style={{ color: 'var(--muted)' }}>{conn.baseUrl}</span>
+            <span className="mono" style={{ color: 'var(--muted)' }}>{conn.model}</span>
             {conn.active && <span className="pbadge">Active</span>}
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
               {!conn.active && (
@@ -530,7 +530,7 @@ export function ModalityPanel({ payload, reload, onChanged }: {
           <div key={modality} style={{ marginBottom: 10 }}>
             <label className="field-label">
               {MODALITY_LABELS[modality]}
-              {modality === 'text' && <span style={{ color: '#a1a1aa', fontWeight: 400 }}> — used by the editor agent</span>}
+              {modality === 'text' && <span style={{ color: 'var(--muted)', fontWeight: 400 }}> — used by the editor agent</span>}
             </label>
             <select
               className="deck-select"
@@ -551,7 +551,7 @@ export function ModalityPanel({ payload, reload, onChanged }: {
           </div>
         )
       })}
-      {error && <div className="field-hint" style={{ color: '#fca5a5' }}>{error}</div>}
+      {error && <div className="field-hint" style={{ color: 'var(--red-text)' }}>{error}</div>}
       <button className="deck-btn primary" disabled={saving} onClick={() => void save()}>
         {saving ? 'Saving…' : 'Save defaults'}
       </button>

@@ -322,10 +322,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     }
   }
 
-  const smallBtn = { padding: '2px 8px', fontSize: 11 } as const
+  const smallBtn = { padding: '2px 8px', fontSize: 'calc(11px * var(--ui-scale, 1))' } as const
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#141417', borderRadius: '0 0 11px 11px', overflow: 'hidden' }}>
-      <div style={{ padding: '5px 10px', fontSize: 11, color: '#a1a1aa', display: 'flex', gap: 8, alignItems: 'center', background: '#141417', borderBottom: '1px solid #1e1e23', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--panel)', borderRadius: '0 0 11px 11px', overflow: 'hidden' }}>
+      <div style={{ padding: '5px 10px', fontSize: 'calc(11px * var(--ui-scale, 1))', color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center', background: 'var(--panel)', borderBottom: '1px solid var(--border-soft)', flexShrink: 0 }}>
         {onToggleCollapse && (
           <button type="button" className="deck-btn" style={smallBtn} onClick={onToggleCollapse} title={collapsed ? 'Expand preview' : 'Collapse preview'}>
             {collapsed ? '▸' : '▾'}
@@ -336,7 +336,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
         {renderer === 'page' && location && mark && location !== mark && (
           <span className="pill" title="You followed a link inside the preview">
             viewing {location}
-            <button type="button" className="deck-btn" style={{ marginLeft: 6, padding: '0 6px', fontSize: 10.5 }} onClick={() => void returnToMark()}>Return to {mark}</button>
+            <button type="button" className="deck-btn" style={{ marginLeft: 6, padding: '0 6px', fontSize: 'calc(10.5px * var(--ui-scale, 1))' }} onClick={() => void returnToMark()}>Return to {mark}</button>
           </span>
         )}
         {onHmr && (noSetup ? (
@@ -360,7 +360,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             value={projectType}
             onChange={(e) => void chooseType(e.target.value)}
             title="Project type (project.ai.json). Undesignated projects build generically."
-            style={{ fontSize: 11, background: '#1e1e23', color: '#d4d4d8', border: '1px solid #2e2e36', borderRadius: 6, padding: '2px 4px' }}
+            style={{ fontSize: 'calc(11px * var(--ui-scale, 1))', background: 'var(--well)', color: 'var(--text)', border: '1px solid var(--border-strong)', borderRadius: 6, padding: '2px 4px' }}
           >
             <option value="">No type</option>
             {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -370,7 +370,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             value={projectFormat}
             onChange={(e) => void chooseFormat(e.target.value)}
             title="Project format: App shell = viewport-fit SPA (page never scrolls). Page flow = document that scrolls and grows. Default follows the project type."
-            style={{ fontSize: 11, background: '#1e1e23', color: '#d4d4d8', border: '1px solid #2e2e36', borderRadius: 6, padding: '2px 4px' }}
+            style={{ fontSize: 'calc(11px * var(--ui-scale, 1))', background: 'var(--well)', color: 'var(--text)', border: '1px solid var(--border-strong)', borderRadius: 6, padding: '2px 4px' }}
           >
             <option value="">Format: type default</option>
             <option value="app">App shell</option>
@@ -387,7 +387,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           <button
             type="button"
             className="deck-btn"
-            style={annotating ? { ...smallBtn, borderColor: 'rgba(34,197,94,.5)', color: '#bbf7d0' } : smallBtn}
+            style={annotating ? { ...smallBtn, borderColor: 'rgba(34,197,94,.5)', color: 'var(--green-text)' } : smallBtn}
             onClick={() => void toggleAnnotate()}
             title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
             disabled={onHmr}
@@ -409,10 +409,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           onDismiss={() => setWizardDismissed(true)}
         />
       ) : noSetup ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>No preview set up yet</div>
-            <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+            <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>No preview set up yet</div>
+            <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6 }}>
               {setup.kind === 'loose'
                 ? <>This folder has no HTML page, so there is nothing to preview yet. Its files are open in the editor.</>
                 : <>This folder is empty, so there is nothing to preview yet.</>}
@@ -430,26 +430,26 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
         ) : (renderer === 'document' || renderer === 'workbook') && mark ? (
           <FormatStub key={mark} path={mark} descriptor={describeRenderer(renderer)} />
         ) : isReading ? (
-          <div style={{ flex: 1, overflow: 'auto', background: '#141417', padding: '18px 22px', minHeight: 0 }}>
-            <div style={{ maxWidth: 680, margin: '0 auto', color: '#d4d4d8', fontSize: 13.5, lineHeight: 1.65 }}>
+          <div style={{ flex: 1, overflow: 'auto', background: 'var(--panel)', padding: '18px 22px', minHeight: 0 }}>
+            <div style={{ maxWidth: 680, margin: '0 auto', color: 'var(--text)', fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.65 }}>
               {readFailed
-                ? <div style={{ color: '#a1a1aa' }}>Could not read {mark}.</div>
+                ? <div style={{ color: 'var(--muted)' }}>Could not read {mark}.</div>
                 : readContent === null
-                  ? <div style={{ color: '#a1a1aa' }}>Loading {mark}…</div>
+                  ? <div style={{ color: 'var(--muted)' }}>Loading {mark}…</div>
                   : /\.md$/i.test(mark || '')
                     ? <Markdown text={readContent} />
                     : <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{readContent}</div>}
             </div>
           </div>
         ) : renderer === 'image' ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 16, minHeight: 0, overflow: 'auto' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 16, minHeight: 0, overflow: 'auto' }}>
             <img src={`${staticPreviewUrl().replace(/\/?$/, '')}${mark}`} alt={mark || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
           </div>
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center' }}>
             <div style={{ maxWidth: 420 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>{mark ? 'No rendering for this file' : 'No file marked for preview'}</div>
-              <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+              <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>{mark ? 'No rendering for this file' : 'No file marked for preview'}</div>
+              <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6 }}>
                 {mark
                   ? <><span className="mono">{mark}</span> has no preview rendering. Mark a page, document or image in the file pane instead.</>
                   : setup?.kind === 'html'
@@ -465,10 +465,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </div>
         )
       ) : showDown ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Preview server not running</div>
-            <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+            <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>Preview server not running</div>
+            <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6 }}>
               Nothing is listening on <span className="mono">{liveUrl.replace(/^https?:\/\//, '')}</span>.
               Start the launcher with <span className="mono">npm run dev</span>, then press Reload —
               or switch to Static, which is only raw files (a Vite app will be blank).
@@ -480,10 +480,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </div>
         </div>
       ) : showWaiting ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Starting preview server…</div>
-            <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+            <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>Starting preview server…</div>
+            <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6 }}>
               Waiting for <span className="mono">{liveUrl.replace(/^https?:\/\//, '')}</span> to
               answer (the server restarts when you switch projects). The preview loads on its own.
             </div>
@@ -492,7 +492,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
       ) : (
         <>
           {renderer === 'host' && (
-            <div style={{ padding: '5px 10px', fontSize: 11.5, color: '#a1a1aa', background: '#17171b', borderBottom: '1px solid #1e1e23' }}>
+            <div style={{ padding: '5px 10px', fontSize: 'calc(11.5px * var(--ui-scale, 1))', color: 'var(--muted)', background: 'var(--card)', borderBottom: '1px solid var(--border-soft)' }}>
               <span className="mono">{mark}</span> is shown in <span className="mono">{hostPath}</span>, the page that renders it.
             </div>
           )}
@@ -509,7 +509,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             background: 'white',
             minHeight: 0,
             alignSelf: 'center',
-            boxShadow: TARGET_WIDTHS[deviceTarget] ? '0 0 0 1px #2e2e36' : undefined,
+            boxShadow: TARGET_WIDTHS[deviceTarget] ? '0 0 0 1px var(--border-strong)' : undefined,
             transition: 'width 200ms ease',
           }}
           title="preview"

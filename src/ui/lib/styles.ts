@@ -1,20 +1,25 @@
 import type { CSSProperties } from 'react'
 
-/** Deck design tokens (mirrors :root in index.css) for dynamic inline styles. */
+/**
+ * Theme tokens for dynamic inline styles. The values are CSS custom
+ * properties (defined per theme in index.css, sourced from
+ * lib/themes.ts), so inline styles follow the selected UI theme and
+ * the UI font-size scale just like the stylesheet does.
+ */
 export const theme = {
-  bg: '#0e0e10',
-  panel: '#141417',
-  card: '#1a1a1e',
-  cardHover: '#1f1f24',
-  border: '#26262c',
-  borderSoft: '#1e1e23',
-  text: '#e4e4e7',
-  muted: '#a1a1aa',
-  faint: '#71717a',
-  blue: '#3b82f6',
-  green: '#22c55e',
-  amber: '#f59e0b',
-  red: '#ef4444',
+  bg: 'var(--bg)',
+  panel: 'var(--panel)',
+  card: 'var(--card)',
+  cardHover: 'var(--card-hover)',
+  border: 'var(--border)',
+  borderSoft: 'var(--border-soft)',
+  text: 'var(--text)',
+  muted: 'var(--muted)',
+  faint: 'var(--faint)',
+  blue: 'var(--blue)',
+  green: 'var(--green)',
+  amber: 'var(--amber)',
+  red: 'var(--red)',
 } as const
 
 export type PillTone = 'ok' | 'good' | 'bad' | 'warn' | undefined
@@ -25,7 +30,7 @@ export const btn: CSSProperties = {
   color: theme.text,
   borderRadius: 8,
   padding: '7px 11px',
-  fontSize: 12.5,
+  fontSize: 'calc(12.5px * var(--ui-scale, 1))',
   fontWeight: 500,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
@@ -33,9 +38,9 @@ export const btn: CSSProperties = {
 
 export const btnPrimary: CSSProperties = {
   ...btn,
-  background: '#16283f',
-  borderColor: '#2a4a6f',
-  color: '#dbeafe',
+  background: 'var(--button-bg-primary)',
+  borderColor: 'var(--accent-soft-border)',
+  color: 'var(--on-primary)',
 }
 
 export const SETUP_DONE_KEY = 'ai-live-editor.setupDone'

@@ -607,7 +607,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
             ))}
           </nav>
           <div className="set-content">
-            {saveError && <div className="field-hint" style={{ color: '#fca5a5', marginBottom: 8 }}>{saveError}</div>}
+            {saveError && <div className="field-hint" style={{ color: 'var(--red-text)', marginBottom: 8 }}>{saveError}</div>}
             {query ? (
               <div>
                 {results.sections.map(s => (

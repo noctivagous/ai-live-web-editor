@@ -58,23 +58,23 @@ export function Library({ onOpenPath, onNotice }: {
     }
   }
 
-  const rowStyle: React.CSSProperties = { padding: '9px 10px', borderBottom: '1px solid #232329', display: 'flex', flexDirection: 'column', gap: 4 }
-  const nameStyle: React.CSSProperties = { fontWeight: 600, fontSize: 13, display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }
-  const chipStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 500, opacity: 0.6, border: '1px solid #3a3a42', borderRadius: 8, padding: '0 6px' }
-  const descStyle: React.CSSProperties = { fontSize: 12, opacity: 0.75, lineHeight: 1.45 }
-  const propsStyle: React.CSSProperties = { fontSize: 11, opacity: 0.55, fontFamily: 'monospace' }
+  const rowStyle: React.CSSProperties = { padding: '9px 10px', borderBottom: '1px solid var(--border-soft)', display: 'flex', flexDirection: 'column', gap: 4 }
+  const nameStyle: React.CSSProperties = { fontWeight: 600, fontSize: 'calc(13px * var(--ui-scale, 1))', display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }
+  const chipStyle: React.CSSProperties = { fontSize: 'calc(10.5px * var(--ui-scale, 1))', fontWeight: 500, opacity: 0.6, border: '1px solid var(--border-strong)', borderRadius: 8, padding: '0 6px' }
+  const descStyle: React.CSSProperties = { fontSize: 'calc(12px * var(--ui-scale, 1))', opacity: 0.75, lineHeight: 1.45 }
+  const propsStyle: React.CSSProperties = { fontSize: 'calc(11px * var(--ui-scale, 1))', opacity: 0.55, fontFamily: 'monospace' }
   const btnRow: React.CSSProperties = { display: 'flex', gap: 6, marginTop: 2 }
 
   return (
     <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid #232329' }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-soft)' }}>
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Search the catalog…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', fontSize: 12.5 }}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', fontSize: 'calc(12.5px * var(--ui-scale, 1))' }}
         />
-        {error && <div style={{ color: '#e5534b', fontSize: 12, marginTop: 6 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--red-text)', fontSize: 'calc(12px * var(--ui-scale, 1))', marginTop: 6 }}>{error}</div>}
       </div>
 
       <div className="panel-head">Components <span className="sub">{components.length}</span></div>
@@ -100,7 +100,7 @@ export function Library({ onOpenPath, onNotice }: {
           </div>
         </div>
       ))}
-      {!components.length && !error && <div style={{ padding: '10px', fontSize: 12, opacity: 0.6 }}>No components match.</div>}
+      {!components.length && !error && <div style={{ padding: '10px', fontSize: 'calc(12px * var(--ui-scale, 1))', opacity: 0.6 }}>No components match.</div>}
 
       <div className="panel-head">Templates <span className="sub">{templates.length}</span></div>
       {templates.map(item => (

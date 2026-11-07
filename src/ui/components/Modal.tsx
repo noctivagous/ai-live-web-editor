@@ -6,7 +6,7 @@ function Overlay({ onClose, children }: {
 }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(8,8,10,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#141417', border: '1px solid #26262c', borderRadius: 12, padding: 18, maxWidth: 900, width: '100%', maxHeight: '85vh', overflow: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: 18, maxWidth: 900, width: '100%', maxHeight: '85vh', overflow: 'auto' }}>
         {children}
       </div>
     </div>
@@ -30,7 +30,7 @@ export function NoticeDialog({ notice, onClose }: {
   return (
     <Overlay onClose={onClose}>
       <Header title="Inspect result" onClose={onClose} />
-      <pre style={{ overflow: 'auto', fontSize: 12, color: '#ccc', margin: 0, fontFamily: 'ui-monospace,Menlo,Consolas,monospace' }}>{notice}</pre>
+      <pre style={{ overflow: 'auto', fontSize: 'calc(12px * var(--ui-scale, 1))', color: '#ccc', margin: 0, fontFamily: 'ui-monospace,Menlo,Consolas,monospace' }}>{notice}</pre>
     </Overlay>
   )
 }

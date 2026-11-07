@@ -588,7 +588,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           <TurnStrip turns={turns} pricing={pricing} onJump={(turn) => {
             document.getElementById(turnAnchor(turn.index))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
           }} />
-          <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 12.5, minHeight: 0 }}>
+          <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 'calc(12.5px * var(--ui-scale, 1))', minHeight: 0 }}>
             {turns.map(turn => (
               <TurnView key={turn.index} turn={turn} anchorId={turnAnchor(turn.index)} onNeedSetup={onNeedSetup} embed={embed} />
             ))}

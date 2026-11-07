@@ -1040,7 +1040,7 @@ export default function App() {
           {!collapse.editor && !collapse.preview && (
             <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
           )}
-          <div style={{ flex: collapse.preview ? '0 0 auto' : collapse.editor ? '1 1 0' : `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid #1e1e23', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: collapse.preview ? '0 0 auto' : collapse.editor ? '1 1 0' : `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid var(--border-soft)', display: 'flex', flexDirection: 'column' }}>
             <Preview
               key={activeProject}
               setup={projects.find(p => p.id === activeProject)?.setup}

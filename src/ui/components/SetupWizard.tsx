@@ -96,8 +96,8 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
   return (
     <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Setup wizard">
       <div className={`wizard-card ${wide ? 'wide' : ''}`}>
-        <div style={{ fontSize: 17, fontWeight: 650 }}>Set up your AI provider</div>
-        <div style={{ fontSize: 13, color: '#a1a1aa', marginTop: 4 }}>
+        <div style={{ fontSize: 'calc(17px * var(--ui-scale, 1))', fontWeight: 650 }}>Set up your AI provider</div>
+        <div style={{ fontSize: 'calc(13px * var(--ui-scale, 1))', color: 'var(--muted)', marginTop: 4 }}>
           Step {step + 1} of {STEPS.length} — {STEPS[step]}
         </div>
         <div className="wizard-steps" aria-hidden="true">
@@ -105,7 +105,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
         </div>
 
         {step === 0 && (
-          <div style={{ fontSize: 13.5, lineHeight: 1.65, color: '#d4d4d8' }}>
+          <div style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.65, color: 'var(--text)' }}>
             <p style={{ margin: '0 0 10px' }}>
               This editor lets an AI agent write and change the files in your
               project while you watch the result update live. For the AI to
@@ -124,7 +124,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
 
         {step === 2 && (
           <div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#d4d4d8', margin: '0 0 12px' }}>
+            <p style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.6, color: 'var(--text)', margin: '0 0 12px' }}>
               Choose which model to use for each kind of work. Only models your
               keys actually unlocked are listed.
             </p>
@@ -134,7 +134,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
 
         {step === 3 && (
           <div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#d4d4d8', margin: '0 0 12px' }}>
+            <p style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.6, color: 'var(--text)', margin: '0 0 12px' }}>
               Optional: web search for the agent. If your provider's card
               shows a Web search chip, it already searches on its own —
               choose that source in the chat header and skip this step.
@@ -166,7 +166,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
         )}
 
         {step === 6 && (
-          <div style={{ fontSize: 13.5, lineHeight: 1.65 }}>
+          <div style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.65 }}>
             <CheckRow check={providerCheck} title="AI provider" />
             <CheckRow
               check={brave?.configured
@@ -176,7 +176,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
             />
             <CheckRow check={fsCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 5.' } : fsCheck} title="Project files" />
             <CheckRow check={hmrCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 6.' } : hmrCheck} title="Preview" />
-            <p style={{ color: '#a1a1aa', fontSize: 12.5 }}>
+            <p style={{ color: 'var(--muted)', fontSize: 'calc(12.5px * var(--ui-scale, 1))' }}>
               Ask the agent to edit or generate files from the chat panel. Providers
               and models can be changed any time in Settings.
             </p>

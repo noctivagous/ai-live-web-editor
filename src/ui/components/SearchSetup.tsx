@@ -113,7 +113,7 @@ export function SearchSetup({ onStatus }: { onStatus?: (status: BraveStatus) => 
       </div>
 
       {note && (
-        <div className="field-hint" style={{ marginTop: 8, color: note.ok ? '#86efac' : '#fca5a5' }}>{note.text}</div>
+        <div className="field-hint" style={{ marginTop: 8, color: note.ok ? 'var(--green-text)' : 'var(--red-text)' }}>{note.text}</div>
       )}
       <div className="field-hint" style={{ marginTop: 8 }}>
         Get a free key at <a href="https://brave.com/search/api" target="_blank" rel="noreferrer">brave.com/search/api</a>.

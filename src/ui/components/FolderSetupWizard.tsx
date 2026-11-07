@@ -57,22 +57,22 @@ export function FolderSetupWizard({ setup, files, onApplied, onDismiss }: {
       : 'This folder has files but no page to preview. Turn a text file into a page, or start from a template.'
 
   const optionBtn: React.CSSProperties = {
-    display: 'block', width: '100%', textAlign: 'left', background: '#1b1b20', border: '1px solid #2a2a31',
-    borderRadius: 10, padding: '10px 12px', cursor: 'pointer', color: '#e4e4e7',
+    display: 'block', width: '100%', textAlign: 'left', background: 'var(--card)', border: '1px solid var(--border)',
+    borderRadius: 10, padding: '10px 12px', cursor: 'pointer', color: 'var(--text)',
   }
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', background: '#141417', padding: 20, minHeight: 0 }}>
+    <div style={{ flex: 1, overflow: 'auto', background: 'var(--panel)', padding: 20, minHeight: 0 }}>
       <div style={{ maxWidth: 460, margin: '0 auto' }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 6 }}>Set up this folder</div>
-        <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6, marginBottom: 14 }}>{detection}</div>
+        <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Set up this folder</div>
+        <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6, marginBottom: 14 }}>{detection}</div>
 
         {isMulti && (
           <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
             {setup.htmlFiles.map((f) => (
               <label key={f} style={{ ...optionBtn, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
                 <input type="radio" name="start-page" checked={chosen === f} onChange={() => setChosen(f)} />
-                <span className="mono" style={{ fontSize: 12.5 }}>{f}</span>
+                <span className="mono" style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))' }}>{f}</span>
               </label>
             ))}
             <button
@@ -99,8 +99,8 @@ export function FolderSetupWizard({ setup, files, onApplied, onDismiss }: {
                 disabled={busy !== null}
                 onClick={() => void run(f, () => convertToPage(f))}
               >
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{busy === f ? 'Turning…' : `Turn ${f.slice(1)} into a page`}</div>
-                <div style={{ fontSize: 11.5, color: '#a1a1aa', marginTop: 2, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', fontWeight: 600 }}>{busy === f ? 'Turning…' : `Turn ${f.slice(1)} into a page`}</div>
+                <div style={{ fontSize: 'calc(11.5px * var(--ui-scale, 1))', color: 'var(--muted)', marginTop: 2, lineHeight: 1.5 }}>
                   Creates {f.replace(CONVERTIBLE, '.html').slice(1)} from its text and sets it as the start page. The original file stays as it is.
                 </div>
               </button>
@@ -118,14 +118,14 @@ export function FolderSetupWizard({ setup, files, onApplied, onDismiss }: {
                 disabled={busy !== null}
                 onClick={() => void run(t.id, () => applyProjectTemplate(t.id))}
               >
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{busy === t.id ? 'Setting up…' : t.name}</div>
-                <div style={{ fontSize: 11.5, color: '#a1a1aa', marginTop: 2, lineHeight: 1.5 }}>{t.detail}</div>
+                <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', fontWeight: 600 }}>{busy === t.id ? 'Setting up…' : t.name}</div>
+                <div style={{ fontSize: 'calc(11.5px * var(--ui-scale, 1))', color: 'var(--muted)', marginTop: 2, lineHeight: 1.5 }}>{t.detail}</div>
               </button>
             ))}
           </div>
         )}
 
-        {error && <div style={{ fontSize: 12, color: '#fca5a5', marginTop: 12, lineHeight: 1.5 }}>{error}</div>}
+        {error && <div style={{ fontSize: 'calc(12px * var(--ui-scale, 1))', color: 'var(--red-text)', marginTop: 12, lineHeight: 1.5 }}>{error}</div>}
 
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
           <button type="button" className="deck-btn" onClick={onDismiss} disabled={busy !== null}>Not now</button>

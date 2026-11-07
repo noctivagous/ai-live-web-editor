@@ -1,7 +1,7 @@
 import React from 'react'
 
 function hoverable(e: React.MouseEvent<HTMLDivElement>, on: boolean) {
-  e.currentTarget.style.background = on ? '#2a4a6f' : '#17171b'
+  e.currentTarget.style.background = on ? 'var(--accent-soft-border)' : 'var(--card)'
 }
 
 export function VDivider({ onMouseDown, title }: {
@@ -10,7 +10,7 @@ export function VDivider({ onMouseDown, title }: {
 }) {
   return (
     <div onMouseDown={onMouseDown} title={title}
-      style={{ width: 5, cursor: 'col-resize', background: '#17171b', flexShrink: 0, borderRadius: 3 }}
+      style={{ width: 5, cursor: 'col-resize', background: 'var(--card)', flexShrink: 0, borderRadius: 3 }}
       onMouseEnter={e => hoverable(e, true)}
       onMouseLeave={e => hoverable(e, false)} />
   )
@@ -22,7 +22,7 @@ export function HDivider({ onMouseDown, title }: {
 }) {
   return (
     <div onMouseDown={onMouseDown} title={title}
-      style={{ height: 5, cursor: 'row-resize', background: '#17171b', flexShrink: 0, borderRadius: 3 }}
+      style={{ height: 5, cursor: 'row-resize', background: 'var(--card)', flexShrink: 0, borderRadius: 3 }}
       onMouseEnter={e => hoverable(e, true)}
       onMouseLeave={e => hoverable(e, false)} />
   )

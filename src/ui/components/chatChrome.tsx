@@ -33,7 +33,7 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
 }) {
   const availableSearch = (searchOptions || []).filter(o => o.available)
   return (
-    <div style={{ padding: '9px 12px', borderBottom: '1px solid #1e1e23', fontSize: 12, fontWeight: 600, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+    <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-soft)', fontSize: 'calc(12px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
       AI Chat
       <div className="seg" role="group" aria-label="Chat workflow">
         <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('files')}><Folder size={12} />Files</button>
@@ -49,7 +49,7 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
           <Search size={13} />
           <select
             className="deck-select"
-            style={{ fontSize: 12, padding: '2px 6px' }}
+            style={{ fontSize: 'calc(12px * var(--ui-scale, 1))', padding: '2px 6px' }}
             value={searchBackend || 'off'}
             disabled={sending}
             onChange={e => onSearchBackend?.(e.target.value as SearchBackendId)}
@@ -137,7 +137,7 @@ export function ChatComposer({ input, sending, workflow, annot, inIframe, onInpu
       <div className="ws-chips" title="Page annotations from the live page — click a chip to insert it">
         <span className="ws-label">Annotate</span>
         {inIframe && (
-          <button type="button" className="deck-btn btn-icon" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={onPick} title="Pick an element on the live page">
+          <button type="button" className="deck-btn btn-icon" style={{ padding: '2px 8px', fontSize: 'calc(11px * var(--ui-scale, 1))' }} disabled={sending} onClick={onPick} title="Pick an element on the live page">
             <MousePointerClick size={12} />Pick
           </button>
         )}
@@ -174,12 +174,12 @@ export function ChatComposer({ input, sending, workflow, annot, inIframe, onInpu
           </span>
         )}
         {inIframe && (annot.selection || annot.annotations.length || annot.pageNote.present) && (
-          <button type="button" className="deck-btn primary btn-icon" style={{ padding: '2px 8px', fontSize: 11 }} disabled={sending} onClick={onSubmit} title="Send page notes to the AI">
+          <button type="button" className="deck-btn primary btn-icon" style={{ padding: '2px 8px', fontSize: 'calc(11px * var(--ui-scale, 1))' }} disabled={sending} onClick={onSubmit} title="Send page notes to the AI">
             <MessageSquarePlus size={12} />Submit
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #1e1e23', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid var(--border-soft)', flexShrink: 0 }}>
         <input
           value={input}
           onChange={e => onInput(e.target.value)}

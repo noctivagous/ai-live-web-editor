@@ -10,10 +10,10 @@ import type { RendererDescriptor } from '../lib/previewRender'
 export function FormatStub({ path, descriptor }: { path: string; descriptor: RendererDescriptor }) {
   const name = path.split('/').pop() || path
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center', minHeight: 0 }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center', minHeight: 0 }}>
       <div style={{ maxWidth: 420 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Not readable here yet</div>
-        <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>Not readable here yet</div>
+        <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6 }}>
           <span className="mono">{name}</span> — {descriptor.summary} The file is unchanged.
         </div>
       </div>

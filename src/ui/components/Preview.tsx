@@ -5,6 +5,7 @@ import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
 import { isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
 import { Markdown } from './Markdown'
 import { FolderSetupWizard } from './FolderSetupWizard'
+import { CssBoxes } from './CssBoxes'
 
 const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site']
 const TARGET_WIDTHS: Record<DeviceTarget, number | null> = { phone: 375, tablet: 768, desktop: null }
@@ -419,7 +420,9 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </div>
         </div>
       ) : !frameMode ? (
-        renderer === 'reading' ? (
+        renderer === 'css' && mark ? (
+          <CssBoxes key={mark} path={mark} onSaved={onChanged} />
+        ) : renderer === 'reading' ? (
           <div style={{ flex: 1, overflow: 'auto', background: '#141417', padding: '18px 22px', minHeight: 0 }}>
             <div style={{ maxWidth: 680, margin: '0 auto', color: '#d4d4d8', fontSize: 13.5, lineHeight: 1.65 }}>
               {readFailed

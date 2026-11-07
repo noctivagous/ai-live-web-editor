@@ -7,12 +7,14 @@
  *   page    — an HTML file, served and shown as itself
  *   reading — markdown / plain text, rendered as a readable document
  *   image   — shown as an image
+ *   css     — a stylesheet, shown as editable boxes over its
+ *             declarations (slice D; the file text stays canonical)
  *   host    — a component file: shown through the page that renders
  *             it (the start page), never as raw code
  *   none    — no rendering; the preview stays where it is
  */
 
-export type PreviewRenderer = 'page' | 'reading' | 'image' | 'host' | 'none'
+export type PreviewRenderer = 'page' | 'reading' | 'image' | 'css' | 'host' | 'none'
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'ico'])
 const READING_EXTS = new Set(['md', 'markdown', 'txt', 'text'])
@@ -27,6 +29,7 @@ function extension(path: string): string {
 export function rendererFor(path: string): PreviewRenderer {
   const ext = extension(path)
   if (ext === 'html' || ext === 'htm') return 'page'
+  if (ext === 'css') return 'css'
   if (READING_EXTS.has(ext)) return 'reading'
   if (IMAGE_EXTS.has(ext)) return 'image'
   if (VIEW_EXTS.has(ext)) return 'host'

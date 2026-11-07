@@ -9,6 +9,7 @@ import { applyStrReplace, compileGrep, GREP_MAX_HITS, grepText, isPlaceholderWri
 import { sketchWriteGuard } from '../../sketchSession.js'
 import { selfWriteGuard } from '../../selfMode.js'
 import { resolveProjectPath } from '../../projectPath.js'
+import { deletePath, mkdirPath, renamePath } from '../../fsOps.js'
 
 const SKIP_DIR = new Set(['node_modules', '.vite', '.chrome-data'])
 
@@ -161,6 +162,68 @@ export const writeRealFileTool = createTool({
     fs.writeFileSync(r.full, content, 'utf-8')
     return { ok: true, path: r.rel, created, bytes: content.length, mode: 'real-fs', elapsedMs: 1 }
   }
+})
+
+export const deleteFileTool = createTool({
+  id: 'delete-file',
+  description: 'Delete a file, or a folder with recursive:true (a folder with contents is refused without it, with the entry count). Paths may be /src/x, src/x, or ./src/x.',
+  inputSchema: z.object({ path: z.string(), recursive: z.boolean().optional() }),
+  execute: async ({ path: p, recursive }) => {
+    const blocked = sketchWriteGuard()
+    if (blocked) return blocked
+    const r = toolPath(p)
+    if (r.ok === false) return { error: r.error, path: p }
+    const selfBlocked = selfWriteGuard(r.full)
+    if (selfBlocked) return selfBlocked
+    try {
+      const res = deletePath(getFsRoot(), r.rel, recursive === true)
+      return { ok: true, path: res.path, isDir: res.isDir, mode: 'delete' }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e), path: r.rel }
+    }
+  },
+})
+
+export const renameFileTool = createTool({
+  id: 'rename-file',
+  description: 'Rename or move a file or folder. The target must not exist yet; missing target folders are created. Paths may be /src/x, src/x, or ./src/x.',
+  inputSchema: z.object({ from: z.string(), to: z.string() }),
+  execute: async ({ from, to }) => {
+    const blocked = sketchWriteGuard()
+    if (blocked) return blocked
+    const rFrom = toolPath(from)
+    if (rFrom.ok === false) return { error: rFrom.error, path: from }
+    const rTo = toolPath(to)
+    if (rTo.ok === false) return { error: rTo.error, path: to }
+    const selfBlocked = selfWriteGuard(rFrom.full) ?? selfWriteGuard(rTo.full)
+    if (selfBlocked) return selfBlocked
+    try {
+      const res = renamePath(getFsRoot(), rFrom.rel, rTo.rel)
+      return { ok: true, from: res.from, to: res.to, isDir: res.isDir, mode: 'rename' }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e), from: rFrom.rel, to: rTo.rel }
+    }
+  },
+})
+
+export const makeDirTool = createTool({
+  id: 'make-dir',
+  description: 'Create a folder (and any missing parents). Refused when a file or folder already exists at the path. Paths may be /src/x, src/x, or ./src/x.',
+  inputSchema: z.object({ path: z.string() }),
+  execute: async ({ path: p }) => {
+    const blocked = sketchWriteGuard()
+    if (blocked) return blocked
+    const r = toolPath(p)
+    if (r.ok === false) return { error: r.error, path: p }
+    const selfBlocked = selfWriteGuard(r.full)
+    if (selfBlocked) return selfBlocked
+    try {
+      const res = mkdirPath(getFsRoot(), r.rel)
+      return { ok: true, path: res.path, mode: 'mkdir' }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e), path: r.rel }
+    }
+  },
 })
 
 export const inspectDOMTool = createTool({

@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { setFsRoot } from '../../launcher.js'
-import { grepTool, readRealFileTool, strReplaceTool, writeRealFileTool } from './realFsTools.js'
+import { deleteFileTool, grepTool, makeDirTool, readRealFileTool, renameFileTool, strReplaceTool, writeRealFileTool } from './realFsTools.js'
 
 /**
  * The file tools' execute() paths, exercised directly (basics audit
@@ -67,6 +67,64 @@ describe('write-real-file path forms', () => {
     try {
       const r = await run(writeRealFileTool, { path: '/src', content: 'x' })
       assert.match(String(r.error), /Is a directory/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('delete-file / rename-file / make-dir (slice 2)', () => {
+  it('make-dir creates nested folders and refuses an existing path', async () => {
+    const root = tmpProject()
+    try {
+      const made = await run(makeDirTool, { path: 'src/features/auth' })
+      assert.equal(made.ok, true)
+      assert.equal(made.path, '/src/features/auth')
+      assert.equal(fs.statSync(path.join(root, 'src', 'features', 'auth')).isDirectory(), true)
+      const again = await run(makeDirTool, { path: '/src/features/auth' })
+      assert.match(String(again.error), /already exists/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('rename-file moves a file across folders and refuses an existing target', async () => {
+    const root = tmpProject()
+    try {
+      const moved = await run(renameFileTool, { from: 'src/App.jsx', to: 'src/ui/App.jsx' })
+      assert.equal(moved.ok, true)
+      assert.equal(moved.from, '/src/App.jsx')
+      assert.equal(moved.to, '/src/ui/App.jsx')
+      assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'App.jsx')), true)
+      assert.equal(fs.existsSync(path.join(root, 'src', 'App.jsx')), false)
+      const clash = await run(renameFileTool, { from: '/src/ui/App.jsx', to: '/src/ui/App.jsx' })
+      assert.match(String(clash.error), /same path/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('delete-file removes a file; folders need recursive and say so', async () => {
+    const root = tmpProject()
+    try {
+      fs.mkdirSync(path.join(root, 'src', 'old'), { recursive: true })
+      fs.writeFileSync(path.join(root, 'src', 'old', 'x.js'), 'x')
+      const refused = await run(deleteFileTool, { path: 'src/old' })
+      assert.match(String(refused.error), /not empty \(1 entries\)/)
+      assert.equal(fs.existsSync(path.join(root, 'src', 'old', 'x.js')), true)
+      const gone = await run(deleteFileTool, { path: '/src/old', recursive: true })
+      assert.equal(gone.ok, true)
+      assert.equal(gone.isDir, true)
+      assert.equal(fs.existsSync(path.join(root, 'src', 'old')), false)
+      const file = await run(deleteFileTool, { path: '/src/App.jsx' })
+      assert.equal(file.ok, true)
+      assert.equal(file.isDir, false)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('refuses the project root and escaping paths as error values', async () => {
+    const root = tmpProject()
+    try {
+      const rootDel = await run(deleteFileTool, { path: '/', recursive: true })
+      assert.match(String(rootDel.error), /project root/)
+      const escape = await run(deleteFileTool, { path: '../outside.txt' })
+      assert.match(String(escape.error), /escapes the project root/)
+      const missing = await run(deleteFileTool, { path: '/nope.txt' })
+      assert.match(String(missing.error), /Not found/)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

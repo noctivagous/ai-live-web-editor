@@ -261,10 +261,64 @@ export function inferModalities(modelId: string): Modality[] {
 export interface ModelInfo {
   id: string
   modalities: Modality[]
+  /** Context window in tokens, when the model is in the known table. */
+  contextWindow?: number
+}
+
+/**
+ * Known context windows (tokens) for widely used models — only
+ * well-published figures, kept conservative. Lookup is exact-then-
+ * longest-prefix on the id's basename, so dated snapshots
+ * (gpt-4o-2024-08-06) and aggregator ids (anthropic/claude-sonnet-4.5)
+ * resolve through their family entry. Unknown models return undefined
+ * and callers fall back to a fixed budget — never a guessed window.
+ */
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  'gpt-4o': 128_000,
+  'gpt-4o-mini': 128_000,
+  'gpt-4.1': 1_047_576,
+  'gpt-5': 400_000,
+  'gpt-5-chat': 128_000,
+  'o1': 200_000,
+  'o1-mini': 128_000,
+  'o3': 200_000,
+  'o4-mini': 200_000,
+  'claude-sonnet-4': 200_000,
+  'claude-opus-4': 200_000,
+  'claude-3-7-sonnet': 200_000,
+  'claude-3-5-sonnet': 200_000,
+  'claude-3-5-haiku': 200_000,
+  'gemini-2.5-pro': 1_048_576,
+  'gemini-2.5-flash': 1_048_576,
+  'gemini-2.0-flash': 1_048_576,
+  'gemini-1.5-pro': 2_097_152,
+  'llama-3.3-70b': 128_000,
+  'llama-3.1': 128_000,
+  'deepseek-chat': 128_000,
+  'deepseek-reasoner': 128_000,
+  'qwen3': 128_000,
+  'grok-4': 256_000,
+  'grok-3': 131_072,
+  'mistral-large': 128_000,
+  'command-r': 128_000,
+}
+
+export function contextWindowForModel(id: string): number | undefined {
+  if (!id) return undefined
+  const base = id.split('/').pop() || id
+  let best: string | undefined
+  for (const key of Object.keys(MODEL_CONTEXT_WINDOWS)) {
+    if (base === key) return MODEL_CONTEXT_WINDOWS[key]
+    if (base.startsWith(key) && (!best || key.length > best.length)) best = key
+  }
+  return best ? MODEL_CONTEXT_WINDOWS[best] : undefined
 }
 
 export function tagModels(ids: string[]): ModelInfo[] {
-  return ids.map(id => ({ id, modalities: inferModalities(id) }))
+  return ids.map(id => {
+    const contextWindow = contextWindowForModel(id)
+    return { id, modalities: inferModalities(id), ...(contextWindow ? { contextWindow } : {}) }
+  })
 }
 
 /** First suggested model that the provider actually returned, per modality. */

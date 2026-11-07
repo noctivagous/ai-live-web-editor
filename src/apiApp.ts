@@ -7,6 +7,7 @@ import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
 import { getFsRoot } from './launcher.js'
 import { projectPathOrThrow } from './projectPath.js'
+import { contextWindowForModel } from './providerPresets.js'
 import { mountPageBridge } from './pageBridge.js'
 import { mountPoolPage } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
@@ -39,6 +40,7 @@ function publicConfig(publicUrl: string) {
     modelId: `openai/${modelName}`,
     providerId: active?.providerId || provider?.id || null,
     providerName: active?.providerName || provider?.name || null,
+    contextWindow: active?.contextWindow ?? contextWindowForModel(modelName),
     baseUrl: active?.baseUrl ?? openaiBaseUrl(),
     launcherUrl: publicUrl,
     previewStaticUrl: '/',

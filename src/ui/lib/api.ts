@@ -47,6 +47,7 @@ export interface LauncherConfig {
   modelId?: string
   providerId?: string | null
   providerName?: string | null
+  contextWindow?: number
   baseUrl: string
   launcherUrl: string
   previewStaticUrl: string

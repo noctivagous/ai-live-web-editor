@@ -11,6 +11,7 @@ import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot
 import { applyPageTemplate, applySeedApp, convertTextToPage, TEMPLATE_IDS, type PageTemplateId, type TemplateId } from './setupWizard.js'
 import { writeProjectConfig } from './projectConfig.js'
 import { projectPathOrThrow } from './projectPath.js'
+import { contextWindowForModel } from './providerPresets.js'
 import { getSelfCheck, isSelfMode, isSelfWorkspace, listSnapshotsAt, revertSelfSnapshot } from './selfMode.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
@@ -50,6 +51,7 @@ function publicConfig() {
     modelId: `openai/${modelName}`,
     providerId: active?.providerId || provider?.id || null,
     providerName: active?.providerName || provider?.name || null,
+    contextWindow: active?.contextWindow ?? contextWindowForModel(modelName),
     baseUrl: active?.baseUrl ?? openaiBaseUrl(),
     launcherUrl: `http://localhost:${PORT}`,
     previewStaticUrl: '/projects/',

@@ -5,7 +5,7 @@ import {
   removeEnvVar, upsertEnvVar,
 } from './env.js'
 import {
-  detectPreset, presetById, type Modality, type ModelInfo,
+  contextWindowForModel, detectPreset, presetById, type Modality, type ModelInfo,
 } from './providerPresets.js'
 
 /**
@@ -326,7 +326,7 @@ export function recordProbe(id: string, verifiedModels: ModelInfo[], ok: boolean
 
 /** What /api/config should report: the active connection, when one exists. */
 export function activePublic(): {
-  hasKey: boolean, model: string, providerId: string | null, providerName: string | null, baseUrl: string,
+  hasKey: boolean, model: string, providerId: string | null, providerName: string | null, baseUrl: string, contextWindow?: number,
 } | null {
   const store = getStore()
   const active = store.connections.find(c => c.id === store.activeId)
@@ -338,6 +338,7 @@ export function activePublic(): {
     providerId: active.presetId,
     providerName: active.name,
     baseUrl: active.baseUrl,
+    contextWindow: contextWindowForModel(active.model),
   }
 }
 
@@ -379,17 +380,61 @@ export function activeSearchTarget(): { name: string, baseUrl: string, model: st
   return { name: active.name, baseUrl: active.baseUrl, model: active.model, apiKey: key || 'not-needed' }
 }
 
-/** Agent model config from the active connection; null when none applies. */
+/**
+ * Whether the agent may serve a turn from this connection with this
+ * model. A connection whose last probe FAILED is known-bad and is
+ * never used — the agent used to take it as readily as a verified
+ * one. 'configured' (never probed, e.g. a migrated legacy key) stays
+ * usable: requiring 'verified' would break every setup that predates
+ * probing. A key must be on file unless the preset needs none.
+ */
+function agentUsable(conn: StoredConnection, model: string): boolean {
+  if (!model || conn.status === 'failed') return false
+  const preset = presetById(conn.presetId)
+  return Boolean(connectionKey(conn)) || Boolean(preset?.noKey)
+}
+
+function modelFrom(conn: StoredConnection, model: string) {
+  const key = connectionKey(conn)
+  return {
+    id: `openai/${model}` as const,
+    ...(conn.baseUrl ? { url: conn.baseUrl } : {}),
+    apiKey: key || 'not-needed',
+  }
+}
+
+/**
+ * Agent model config, in precedence order:
+ * 1. The active connection (the top-bar switcher's explicit choice),
+ *    when the agent may use it.
+ * 2. The text modality default (the Models-by-type choice) — read by
+ *    the agent for the first time; before this it was storage only.
+ *    It rescues the turn when the active connection has failed or
+ *    lost its key.
+ * 3. null — the caller falls back to the env model.
+ */
 export function resolveConnectionModel() {
   const store = getStore()
   const active = store.connections.find(c => c.id === store.activeId)
-  if (!active || !active.model) return null
-  const key = connectionKey(active)
-  const preset = presetById(active.presetId)
-  if (!key && !preset?.noKey) return null
-  return {
-    id: `openai/${active.model}` as const,
-    ...(active.baseUrl ? { url: active.baseUrl } : {}),
-    apiKey: key || 'not-needed',
+  if (active && agentUsable(active, active.model)) return modelFrom(active, active.model)
+  const def = store.modalityDefaults.text
+  if (def) {
+    const conn = store.connections.find(c => c.id === def.connectionId)
+    if (conn && agentUsable(conn, def.model)) return modelFrom(conn, def.model)
+  }
+  return null
+}
+
+/** Context window (tokens) of the model the agent will actually use:
+ * the resolved connection model, else the env model. Undefined when
+ * the model isn't in the known table. Never throws — memory sizing
+ * must not be able to break agent construction. */
+export function resolveAgentContextWindow(): number | undefined {
+  try {
+    const resolved = resolveConnectionModel()
+    const model = resolved ? resolved.id.replace(/^openai\//, '') : openaiModelName()
+    return contextWindowForModel(model)
+  } catch {
+    return undefined
   }
 }

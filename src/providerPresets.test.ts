@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectPreset, inferModalities, presetById, suggestedModel, tagModels } from './providerPresets.js'
+import { contextWindowForModel, detectPreset, inferModalities, presetById, suggestedModel, tagModels } from './providerPresets.js'
 
 test('detectPreset: distinctive prefixes resolve to one preset', () => {
   assert.equal(detectPreset('sk-or-v1-abc')?.preset.slotId, 'openrouter')
@@ -39,6 +39,20 @@ test('inferModalities: media ids are not misread as text', () => {
   assert.deepEqual(inferModalities('muse-spark-1.3'), ['text'])
   assert.deepEqual(inferModalities('anthropic/claude-sonnet-4.5'), ['text'])
   assert.deepEqual(inferModalities('some-unknown-model'), ['text'])
+})
+
+test('contextWindowForModel: exact, dated, aggregator, and family-variant ids', () => {
+  assert.equal(contextWindowForModel('gpt-4o'), 128_000)
+  assert.equal(contextWindowForModel('gpt-4o-2024-08-06'), 128_000)
+  assert.equal(contextWindowForModel('anthropic/claude-sonnet-4.5'), 200_000)
+  // Longest prefix wins where a variant's window differs from its family.
+  assert.equal(contextWindowForModel('o1-mini'), 128_000)
+  assert.equal(contextWindowForModel('gpt-5-chat-latest'), 128_000)
+  assert.equal(contextWindowForModel('gpt-5'), 400_000)
+  assert.equal(contextWindowForModel('acme-unknown-1'), undefined)
+  const tagged = tagModels(['gpt-4o', 'acme-unknown-1'])
+  assert.equal(tagged[0].contextWindow, 128_000)
+  assert.equal(tagged[1].contextWindow, undefined)
 })
 
 test('suggestedModel picks the preset suggestion the provider returned', () => {

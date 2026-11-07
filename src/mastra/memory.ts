@@ -22,6 +22,21 @@
  */
 import { Memory } from '@mastra/memory'
 import { mastraStorage } from './storage.js'
+import { resolveAgentContextWindow } from '../connections.js'
+
+/**
+ * History recall budget from the model's context window: half the
+ * window, floored at the old fixed 8k and capped at 128k. Unknown
+ * window → the fixed 8k the editor shipped with. Computed once at
+ * construction from the model resolved at boot; a connection switch
+ * mid-session re-sizes on the next server start.
+ */
+export function historyBudgetForWindow(windowTokens: number | undefined): number {
+  if (!windowTokens || windowTokens <= 0) return 8000
+  return Math.min(128_000, Math.max(8000, Math.floor(windowTokens / 2)))
+}
+
+export const HISTORY_BUDGET = historyBudgetForWindow(resolveAgentContextWindow())
 
 export const WORKING_MEMORY_TEMPLATE = [
   '# Project working set',
@@ -40,7 +55,7 @@ export const editorMemory = new Memory({
   storage: mastraStorage,
   options: {
     generateTitle: false,
-    messageHistory: { maxTokens: 8000 },
+    messageHistory: { maxTokens: HISTORY_BUDGET },
     workingMemory: {
       enabled: true,
       scope: 'thread',

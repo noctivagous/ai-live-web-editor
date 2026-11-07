@@ -32,22 +32,34 @@ function relFromRoot(full: string): string {
 function walkFiles(dir: string, acc: string[] = []): string[] {
   if (!fs.existsSync(dir)) return acc
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.name.startsWith('.chrome-data') || SKIP_DIR.has(e.name)) continue
+    if (SKIP_DIR.has(e.name)) continue
     const full = path.join(dir, e.name)
-    if (e.isDirectory()) walkFiles(full, acc)
+    if (e.isDirectory()) {
+      /* Dot-directories (.git, .ai-live, .vite, …) are tooling state,
+       * not project source — never walked (slice 4). Dot-files are
+       * still listed: .gitignore and friends are real project files. */
+      if (e.name.startsWith('.')) continue
+      walkFiles(full, acc)
+    }
     else acc.push(full)
   }
   return acc
 }
 
+/** Cap on list-real-files output (slice 4): beyond this the result
+ * carries totalFiles + truncated so the agent narrows with grep or
+ * codebase-map instead of paying for the whole tree. */
+export const LIST_FILES_CAP = 1000
+
 export const listRealFilesTool = createTool({
   id: 'list-real-files',
-  description: 'List files from real FS projects/',
+  description: 'List files from real FS projects/ (dot-directories like .git are skipped; capped at 1000 with totalFiles + truncated when the project is larger)',
   inputSchema: z.object({}),
   execute: async () => {
     const root = getFsRoot()
-    const files = walkFiles(root).map(relFromRoot)
-    return { files, root }
+    const all = walkFiles(root).map(relFromRoot)
+    const truncated = all.length > LIST_FILES_CAP
+    return { files: truncated ? all.slice(0, LIST_FILES_CAP) : all, root, totalFiles: all.length, truncated }
   }
 })
 

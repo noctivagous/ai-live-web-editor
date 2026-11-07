@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { setFsRoot } from '../../launcher.js'
-import { deleteFileTool, grepTool, makeDirTool, readRealFileTool, renameFileTool, strReplaceTool, writeRealFileTool } from './realFsTools.js'
+import { deleteFileTool, grepTool, LIST_FILES_CAP, listRealFilesTool, makeDirTool, readRealFileTool, renameFileTool, strReplaceTool, writeRealFileTool } from './realFsTools.js'
 
 /**
  * The file tools' execute() paths, exercised directly (basics audit
@@ -125,6 +125,52 @@ describe('delete-file / rename-file / make-dir (slice 2)', () => {
       assert.match(String(escape.error), /escapes the project root/)
       const missing = await run(deleteFileTool, { path: '/nope.txt' })
       assert.match(String(missing.error), /Not found/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('list / grep hygiene (slice 4)', () => {
+  it('list-real-files skips dot-directories but keeps dot-files', async () => {
+    const root = tmpProject()
+    try {
+      fs.mkdirSync(path.join(root, '.git', 'objects'), { recursive: true })
+      fs.writeFileSync(path.join(root, '.git', 'objects', 'blob'), 'UNIQUETOKEN')
+      fs.mkdirSync(path.join(root, '.ai-live'), { recursive: true })
+      fs.writeFileSync(path.join(root, '.ai-live', 'map.json'), '{"token":"UNIQUETOKEN"}')
+      fs.mkdirSync(path.join(root, '.hidden'), { recursive: true })
+      fs.writeFileSync(path.join(root, '.hidden', 'secret.js'), 'UNIQUETOKEN')
+      fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules\n')
+      const r = await run(listRealFilesTool, {})
+      const files = r.files as string[]
+      assert.ok(files.includes('/src/App.jsx'))
+      assert.ok(files.includes('/.gitignore'))
+      assert.equal(files.some((f) => f.startsWith('/.git/') || f.startsWith('/.ai-live/') || f.startsWith('/.hidden/')), false)
+      assert.equal(r.truncated, false)
+      assert.equal(r.totalFiles, files.length)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('grep never searches dot-directories', async () => {
+    const root = tmpProject()
+    try {
+      fs.mkdirSync(path.join(root, '.ai-live'), { recursive: true })
+      fs.writeFileSync(path.join(root, '.ai-live', 'map.json'), 'UNIQUETOKEN')
+      const r = await run(grepTool, { pattern: 'UNIQUETOKEN' })
+      assert.equal(r.count, 0)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('list-real-files caps its output and says so', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'realfs-list-cap-'))
+    setFsRoot(root)
+    try {
+      for (let i = 0; i < LIST_FILES_CAP + 3; i++) {
+        fs.writeFileSync(path.join(root, `f${String(i).padStart(4, '0')}.txt`), '')
+      }
+      const r = await run(listRealFilesTool, {})
+      assert.equal((r.files as string[]).length, LIST_FILES_CAP)
+      assert.equal(r.totalFiles, LIST_FILES_CAP + 3)
+      assert.equal(r.truncated, true)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

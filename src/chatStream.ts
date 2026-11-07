@@ -506,6 +506,20 @@ export async function pipeAgentChatStream(
     } catch { /* skill injection is an optimisation, not a requirement */ }
   }
   payload = withContextBeforeLastUser(turnContext, payload)
+  // Server-side thread memory (one thread per project root): the first
+  // turn seeds the thread from the client payload as-is; later turns
+  // drop the client-sent history because recall supplies it — the same
+  // history is never billed twice. Best-effort: a store failure leaves
+  // the payload untouched and the turn proceeds without memory. The
+  // verify-gate follow-up below deliberately runs WITHOUT this option,
+  // so its synthetic messages never land in the user's thread.
+  let memoryOption: { thread: string, resource: string } | undefined
+  try {
+    const { prepareMemoryTurn } = await import('./mastra/chatMemory.js')
+    const prepared = await prepareMemoryTurn(payload)
+    payload = prepared.payload
+    memoryOption = prepared.memory
+  } catch { /* memory is continuity, not a dependency */ }
   // Self mode (§L): snapshot the editor tree before a Files turn
   // can touch it, so the turn is always revertible from the
   // recovery page. Best-effort — a snapshot failure never breaks
@@ -570,6 +584,7 @@ export async function pipeAgentChatStream(
       maxSteps: 12,
       abortSignal,
       activeTools: turnTools,
+      memory: memoryOption,
     })
     let model: string | undefined
     const toolTrace: string[] = []
@@ -605,6 +620,8 @@ export async function pipeAgentChatStream(
         const follow = await agent.stream(followPayload as never, {
           maxSteps: 4,
           abortSignal,
+          // No memory option here on purpose: the gate's synthetic
+          // prompt/reply must not be persisted into the user's thread.
           // The gate prompt names the layout tools, so its own text
           // triggers the layout group; research stays off for a verify pass.
           activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan }),

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import {
-  getAgentSettings, getProjectConfig, getWorkflow, postAgentSettings, postProjectConfig, postWorkflow, setPlaywrightPool,
+  clearServerChatThreads, getAgentSettings, getProjectConfig, getWorkflow, postAgentSettings, postProjectConfig, postWorkflow, setPlaywrightPool,
   type AgentSettings, type LauncherConfig, type ProjectConfig, type SearchBackendId, type SearchOption,
 } from '../lib/api'
 import { parseWorkflowSnapshot } from '../lib/workflowSync'
@@ -341,13 +341,21 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
       setDataConfirm(null)
       setDataNotice('Device settings reset to defaults.')
     }
-    const doClearChats = () => {
+    const doClearChats = async () => {
       let removed = 0
       try {
         for (const k of chatSessionKeys(Object.keys(globalThis.localStorage))) { globalThis.localStorage.removeItem(k); removed++ }
       } catch { /* ignore */ }
+      // Chat history also lives server-side now (Mastra Memory threads);
+      // clearing only this device would leave the agent still recalling
+      // these conversations on the next turn.
+      let serverNote = ' Server conversation memory was cleared too.'
+      try {
+        const r = await clearServerChatThreads()
+        if (!r.ok) serverNote = ' The server conversation memory could not be cleared, so the agent may still recall these chats.'
+      } catch { serverNote = ' The server conversation memory could not be reached, so the agent may still recall these chats.' }
       setDataConfirm(null)
-      setDataNotice(`Cleared ${removed} saved chat session${removed === 1 ? '' : 's'}. Open chats keep their in-memory state until the page reloads.`)
+      setDataNotice(`Cleared ${removed} saved chat session${removed === 1 ? '' : 's'}.${serverNote} Open chats keep their in-memory state until the page reloads.`)
     }
     const confirmRow = (kind: 'reset' | 'clearChats', text: string, action: () => void) => dataConfirm === kind ? (
       <span className="set-confirm">
@@ -389,7 +397,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
         <div className="set-row">
           <div className="set-row-text">
             <div className="set-row-label">Clear saved chat sessions</div>
-            <div className="field-hint">{chatCount} saved session{chatCount === 1 ? '' : 's'} on this device. Transcripts saved per project are removed; files are untouched.</div>
+            <div className="field-hint">{chatCount} saved session{chatCount === 1 ? '' : 's'} on this device. Transcripts saved per project are removed, on this device and in the server's conversation memory; files are untouched.</div>
           </div>
           <div className="set-row-control">
             {confirmRow('clearChats', `Clear ${chatCount} saved sessions?`, doClearChats) ?? (

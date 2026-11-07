@@ -14,6 +14,7 @@ import { mountAgentSettingsApi } from './agentSettingsApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
+import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
 import { mountFsApi } from './fsApi.js'
@@ -71,6 +72,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)
+mountMemoryApi(app)
   mountCodebaseMapApi(app)
   mountCatalogApi(app)
   mountFsApi(app)
@@ -218,9 +220,14 @@ mountPlanApi(app)
           searchAvailable: getSearchBackend() !== 'off',
         })
       }
-      const result = await agent.generate(withContextBeforeLastUser([projectBrief()], msgs) as never, {
+      const briefed = withContextBeforeLastUser([projectBrief()], msgs)
+      // Same thread memory as the streamed route (chatMemory.ts).
+      const { prepareMemoryTurn } = await import('./mastra/chatMemory.js')
+      const prepared = await prepareMemoryTurn(briefed)
+      const result = await agent.generate(prepared.payload as never, {
         maxSteps: 12,
         activeTools: tools,
+        memory: prepared.memory,
       })
       res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
     } catch (e: any) {

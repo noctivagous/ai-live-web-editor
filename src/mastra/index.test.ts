@@ -29,4 +29,18 @@ describe('mastra storage', () => {
   it('honours the AI_LIVE_STORAGE override', () => {
     assert.equal(storageUrl(), `file:${path.join(tmp, 'test.db')}`)
   })
+
+  it('wires the shared store and the agent Memory from the one module', async () => {
+    // storage.ts constructs a single LibSQLStore that both the Mastra
+    // instance (above) and editorMemory are built on; Mastra wraps the
+    // store in its own composite, so identity is asserted on the parts
+    // we own: the exported store is a LibSQLStore and the agent's
+    // memory is exactly the shared editorMemory instance.
+    const { mastraStorage } = await import('./storage.js')
+    const { editorMemory } = await import('./memory.js')
+    assert.ok(mastraStorage instanceof LibSQLStore)
+    const agent = mastra.getAgent('editorAgent')
+    assert.equal(agent.hasOwnMemory(), true)
+    assert.equal(await agent.getMemory(), editorMemory)
+  })
 })

@@ -289,6 +289,12 @@ export async function saveAiConfig(input: { key?: string, baseUrl?: string, mode
   return data
 }
 
+/** Clear the server-side chat threads (Mastra Memory) for every project
+ * in the workspace — the server half of Settings → Clear saved chats. */
+export function clearServerChatThreads() {
+  return fsPost('/api/chat/threads/clear', {})
+}
+
 export async function chat(messages: {role:string, content:string}[]) {
   const r = await fetch(`${API}/api/chat`, {
     method:'POST', headers:{'Content-Type':'application/json'},

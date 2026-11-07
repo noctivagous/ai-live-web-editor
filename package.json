@@ -22,6 +22,7 @@
   "dependencies": {
     "@mastra/core": "^1.0.0",
     "@mastra/libsql": "^1.29.0",
+    "@mastra/memory": "^1.41.0",
     "@monaco-editor/react": "^4.6.0",
     "chokidar": "^3.6.0",
     "cors": "^2.8.5",

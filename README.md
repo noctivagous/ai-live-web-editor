@@ -82,6 +82,7 @@ aiLiveEditor({
 - **4112 launcher** — `src/server.ts`: UI, FS API, config, Mastra chat, project switcher, Vite child
 - **Vite plugin** `aiLiveEditor` — overlays + `/api` on the app origin (`src/vite-plugin/aiLiveEditor.ts`)
 - **Mastra `editorAgent`** — files (`list` / `read` / `write`) plus live-page `inspect-dom` / `patch-dom` / `eval-js` on the Vite app via a same-origin page bridge. Optional **Playwright pool** (Settings, `npm run dev:pool`, or `PLAYWRIGHT_POOL=1`) for other URLs and `layout-snapshot`.
+- **Chat memory** — conversations persist server-side (Mastra Memory on a LibSQL store at `.ai-live/mastra.db`, one thread per project root, with a per-thread working set of goal / files touched / decisions / open questions). The agent recalls earlier turns even from a fresh browser; `AI_LIVE_STORAGE` moves the database file. Settings → Privacy & Data → Clear saved chat sessions clears both the device copy and the server threads.
 - **OpenAI-compatible keys** — `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
 
 ## Commands

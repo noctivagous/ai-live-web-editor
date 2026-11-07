@@ -16,6 +16,7 @@ import {
 import { toolResultTrimProcessor } from '../../contextTrim.js'
 import { readSkillTool } from '../tools/skillTools.js'
 import { skillIndexText } from '../../skills/skills.js'
+import { editorMemory } from '../memory.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
@@ -42,6 +43,8 @@ Edits (token-efficient):
 - write-real-file only for new files, scaffolds, or a true full rewrite of a small file.
 - grep to find a symbol, then read-real-file with offset+limit around that line. Do not re-emit a whole file you just read.
 
+Working memory: this thread carries a working set (current goal, files touched, decisions, open questions). When a turn materially changes any of those, update it with the working-memory tool if one is available this turn — a later turn, possibly after a server restart, picks up from that note instead of re-deriving it from the transcript.
+
 Progress in the chat stream:
 The user sees tokens as they arrive. Before each group of tools, write one short sentence of what you are about to do (file you will read, inspect, or write). After tools return, write one short sentence of what you found or changed. Do not wait until the final message to explain the work.
 
@@ -64,6 +67,11 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
   // §2 in-turn trimming: bulky tool results fold after the next step
   // (transient per provider call; stored history/UI keep full results).
   inputProcessors: [toolResultTrimProcessor],
+  // Server-side conversation memory on the shared LibSQL store: one
+  // thread per project root (chatMemory.ts supplies thread/resource
+  // per chat turn). Calls without a memory option — live-edit submits,
+  // the verify-gate follow-up — persist nothing.
+  memory: editorMemory,
   model: () => resolveConnectionModel() ?? resolveAgentModel(),
   defaultOptions: { maxSteps: 12 },
   tools: {

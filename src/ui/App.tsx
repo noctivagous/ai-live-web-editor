@@ -1213,7 +1213,6 @@ export default function App() {
                 )}
               </div>
             )}
-            <span className="sub" style={{ marginLeft: 'auto' }}>Monaco • Real FS • Vite HMR</span>
           </div>
           {!collapse.editor && (
             <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>

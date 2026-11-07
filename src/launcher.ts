@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, spawn, type ChildProcess } from 'child_process'
 import { fileURLToPath } from 'url'
+import { classifyProject, type ProjectSetup } from './projectDetect.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const WORKSPACE_ROOT = path.resolve(__dirname, '../projects')
@@ -23,19 +24,24 @@ let viteChild: ChildProcess | null = null
 export function getFsRoot() { return fsRoot }
 export function setFsRoot(dir: string) { fsRoot = path.resolve(dir) }
 
-export type ProjectInfo = { id: string, root: string }
+export type ProjectInfo = { id: string, root: string, setup: ProjectSetup }
 
 export function listProjects(): ProjectInfo[] {
   const projects: ProjectInfo[] = []
   // Self mode (§L): the editor's own repo is a selectable workspace.
   // Only while the flag is on — a normal run must never offer it.
-  if (SELF_ENABLED) projects.push({ id: SELF_PROJECT_ID, root: EDITOR_ROOT })
+  if (SELF_ENABLED) projects.push({ id: SELF_PROJECT_ID, root: EDITOR_ROOT, setup: classifyProject(EDITOR_ROOT) })
   if (!fs.existsSync(WORKSPACE_ROOT)) return projects
+  // Every folder in the workspace is a project (Open slice A): a folder
+  // without package.json is classified, not hidden — gating discovery
+  // on package.json is what produced the "Unknown project" dead end.
   return projects.concat(
     fs.readdirSync(WORKSPACE_ROOT, { withFileTypes: true })
       .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP_DIR.has(d.name))
-      .filter((d) => fs.existsSync(path.join(WORKSPACE_ROOT, d.name, 'package.json')))
-      .map((d) => ({ id: d.name, root: path.join(WORKSPACE_ROOT, d.name) })),
+      .map((d) => {
+        const root = path.join(WORKSPACE_ROOT, d.name)
+        return { id: d.name, root, setup: classifyProject(root) }
+      }),
   )
 }
 
@@ -134,7 +140,7 @@ async function adoptProjectAppkit(root: string) {
 
 export function selectProject(id: string): ProjectInfo {
   const found = listProjects().find((p) => p.id === id)
-  if (!found) throw new Error(`Unknown project: ${id}`)
+  if (!found) throw new Error(`No folder named "${id}" in the workspace`)
   setFsRoot(found.root)
   void adoptProjectDevice(found.root)
   void adoptProjectAppkit(found.root)

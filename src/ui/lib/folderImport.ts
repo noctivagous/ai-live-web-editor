@@ -167,7 +167,8 @@ export interface ImportBatchResult {
   ok: boolean
   active?: string
   root?: string
-  projects?: { id: string; root: string }[]
+  setup?: import('./api').ProjectSetupInfo
+  projects?: { id: string; root: string; setup?: import('./api').ProjectSetupInfo }[]
   received?: number
   installed?: boolean
   installError?: string

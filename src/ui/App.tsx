@@ -33,7 +33,7 @@ import {
   listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getProjectConfig, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject, fetchSyncChanges,
-  type LauncherConfig, type ProjectInfo, type ConnectionsPayload,
+  type LauncherConfig, type ProjectInfo, type ProjectSetupInfo, type ConnectionsPayload,
 } from './lib/api'
 
 function connTone(status: string): string {
@@ -279,16 +279,25 @@ export default function App() {
     } catch { /* launcher down */ }
   }
 
+  /** Where to land after opening a project: the detected entry page
+   * when the folder has an unambiguous one, else /index.html —
+   * loadFiles falls back to the first file when that path is absent,
+   * so a folder of loose files lands on its first file, not a 404. */
+  function landingPath(setup?: ProjectSetupInfo): string {
+    return setup?.entry ? `/${setup.entry}` : '/index.html'
+  }
+
   async function handleSelectProject(id: string) {
     if (!id || id === activeProject) return
     setStatus(`switching to ${id}…`)
     try {
-      await selectProject(id)
+      const data = await selectProject(id)
       setActiveProject(id)
       skipSave.current = true
-      setActivePath('/index.html')
+      const landing = landingPath(data.setup)
+      setActivePath(landing)
       await loadProjects()
-      await loadFiles()
+      await loadFiles(landing)
       setStatus(`project ${id}`)
     } catch (e: unknown) {
       setStatus('switch failed: ' + (e instanceof Error ? e.message : String(e)))
@@ -430,10 +439,11 @@ export default function App() {
         try { await saveFolderHandle(name, pick.dirHandle) } catch { /* re-import is optional */ }
       }
       skipSave.current = true
-      setActivePath('/index.html')
+      const landing = landingPath(result.setup)
+      setActivePath(landing)
       await loadProjects()
       if (result.active) setActiveProject(result.active)
-      await loadFiles()
+      await loadFiles(landing)
       setStatus(`imported ${name}`)
       setImportReport({ name, result, skipped: pick.skipped })
     } catch (e: unknown) {
@@ -517,10 +527,11 @@ export default function App() {
       syncHandleRef.current = pick.dirHandle
       syncBaseRef.current = baseline
       skipSave.current = true
-      setActivePath('/index.html')
+      const landing = landingPath(result.setup)
+      setActivePath(landing)
       await loadProjects()
       setActiveProject(projectId)
-      await loadFiles()
+      await loadFiles(landing)
       setSyncSession({ projectId, dirName: pick.dirName, status: 'live', message: 'live sync on — changes flow both ways', lastAt: Date.now() })
       setStatus(`opened ${name} — live sync on`)
       setImportReport({ name, result, skipped: pick.skipped, mode: 'sync', syncDirName: pick.dirName })
@@ -879,7 +890,7 @@ export default function App() {
           >
             {projects.length === 0 && <option value="">no projects</option>}
             {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.id}</option>
+              <option key={p.id} value={p.id}>{p.id}{p.setup && p.setup.kind !== 'ready' ? ' — not set up' : ''}</option>
             ))}
             <hr />
             <option value="__refresh">Refresh list</option>
@@ -994,6 +1005,7 @@ export default function App() {
           <div style={{ flex: collapse.preview ? '0 0 auto' : collapse.editor ? '1 1 0' : `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid #1e1e23', display: 'flex', flexDirection: 'column' }}>
             <Preview
               key={activeProject}
+              setup={projects.find(p => p.id === activeProject)?.setup}
               hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
               collapsed={collapse.preview}
               onToggleCollapse={() => toggleCollapse('preview')}

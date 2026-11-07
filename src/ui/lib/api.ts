@@ -58,7 +58,17 @@ export interface LauncherConfig {
   liveTarget?: 'bridge' | 'pool'
 }
 
-export interface ProjectInfo { id: string, root: string }
+/** Server-side folder classification (src/projectDetect.ts). Optional
+ * so older launchers' payloads still parse; treat missing as 'ready'. */
+export interface ProjectSetupInfo {
+  kind: 'ready' | 'html' | 'loose' | 'empty'
+  entry: string | null
+  htmlFiles: string[]
+  stack: string
+  hasPackageJson: boolean
+}
+
+export interface ProjectInfo { id: string, root: string, setup?: ProjectSetupInfo }
 
 export async function listProjects() {
   const r = await fetch(`${API}/api/projects`)
@@ -71,7 +81,7 @@ export async function selectProject(id: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
   })
-  const data = await r.json() as { ok: boolean, active?: string, root?: string, projects?: ProjectInfo[], error?: string }
+  const data = await r.json() as { ok: boolean, active?: string, root?: string, setup?: ProjectSetupInfo, projects?: ProjectInfo[], error?: string }
   if (!r.ok || data.ok === false) throw new Error(data.error || `Select failed (${r.status})`)
   return data
 }

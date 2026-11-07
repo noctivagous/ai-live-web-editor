@@ -115,7 +115,7 @@ app.post('/api/projects/select', (req, res) => {
     const id = typeof req.body?.id === 'string' ? req.body.id : ''
     resetSketchForProjectSwitch()
     const project = selectProject(id)
-    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects() })
+    res.json({ ok: true, active: project.id, root: project.root, setup: project.setup, projects: listProjects() })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
   }
@@ -170,7 +170,7 @@ app.post('/api/projects/import', (req, res) => {
     }
     resetSketchForProjectSwitch()
     const project = selectProject(name)
-    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects(), received, installed, installError, writeErrors })
+    res.json({ ok: true, active: project.id, root: project.root, setup: project.setup, projects: listProjects(), received, installed, installError, writeErrors })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
   }

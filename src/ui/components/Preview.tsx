@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote } from '../lib/api'
+import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
 import { subscribeWorkflow } from '../lib/workflowSync'
 
@@ -43,13 +43,18 @@ async function ensureOverlay(iframe: HTMLIFrameElement | null): Promise<boolean>
   } catch { return false }
 }
 
-export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse }: {
+export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, setup }: {
   hmrUrl?: string
   onChanged: () => void
   onResult: (text: string) => void
   collapsed?: boolean
   onToggleCollapse?: () => void
+  /** Folder classification from the launcher; anything but 'ready'
+   * means no dev server will ever answer, so the pane states that
+   * plainly instead of polling a dead port. */
+  setup?: ProjectSetupInfo
 }) {
+  const noSetup = setup != null && setup.kind !== 'ready'
   const liveUrl = hmrUrl || DEFAULT_HMR
   const [url, setUrl] = useState(liveUrl)
   const [key, setKey] = useState(0)
@@ -225,12 +230,17 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
         )}
         <span style={{ fontWeight: 600 }}>PREVIEW</span>
         <span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
-        {onHmr && (
+        {onHmr && (noSetup ? (
+          <span className="pill" title="This folder has no preview set up">
+            <span className="dot" />
+            no preview
+          </span>
+        ) : (
           <span className={`pill ${hmr === 'up' ? 'good' : hmr === 'down' ? 'bad' : ''}`} title="Vite HMR server reachability">
             <span className="dot" />
             {checking ? 'checking…' : hmr === 'up' ? ':5173 up' : hmr === 'down' ? ':5173 unreachable' : ':5173?'}
           </span>
-        )}
+        ))}
         {annotating && (
           <span className="pill good" title="Page annotations collected">
             <span className="dot" />{noteCount} note{noteCount === 1 ? '' : 's'}
@@ -282,7 +292,22 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           )}
         </span>
       </div>
-      {!collapsed && (showDown ? (
+      {!collapsed && (noSetup ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
+          <div style={{ maxWidth: 420 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>No preview set up yet</div>
+            <div style={{ fontSize: 12.5, color: '#a1a1aa', lineHeight: 1.6 }}>
+              {setup.kind === 'html' && setup.entry
+                ? <><span className="mono">{setup.entry}</span> is in this folder but hasn&rsquo;t been set as the preview page.</>
+                : setup.kind === 'html'
+                  ? <>This folder has more than one HTML file ({setup.htmlFiles.join(', ')}) and none is set as the preview page.</>
+                  : setup.kind === 'loose'
+                    ? <>This folder has no HTML page, so there is nothing to preview yet. Its files are open in the editor.</>
+                    : <>This folder is empty, so there is nothing to preview yet.</>}
+            </div>
+          </div>
+        </div>
+      ) : showDown ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141417', padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 420 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 8 }}>Preview server not running</div>

@@ -3,8 +3,26 @@
 
 ---
 
+Facet > [Facet] > Drift Guard AI Agent
+  software architecture - makes sure that the codebase
+  remains within a stated architecture
+  style > makes sure that controls, components, typography,
+  and new additions etc. remains consistent the style guide.
+ 
+Facet > Features > Dogfooder AI Agent
+  goes through the app from the user's perspective,
+  makes notes while trying to use the app, will install
+  components, controls, systems along the way (default)
+  or update the feature graph.  This is where we will
+  really want our component, control, setup systems
+  to exist so that the dogfooded can install
+  ranging from small to large.
+
+
+---
+
 in the past, an app that built apps had functions.
-This was never recognized and what was left
+This was never recognized when AI came in and what was left
 as finished was interacting with the AI directly with
 the text box, typing one thing after another. in other
 words, no work was actually done to make an app

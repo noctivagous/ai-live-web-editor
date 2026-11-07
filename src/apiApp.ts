@@ -6,6 +6,7 @@ import { currentModelId, hasAiKey, liveTarget, openaiApiKey, openaiBaseUrl, open
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
 import { getFsRoot } from './launcher.js'
+import { projectPathOrThrow } from './projectPath.js'
 import { mountPageBridge } from './pageBridge.js'
 import { mountPoolPage } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
@@ -48,10 +49,7 @@ function publicConfig(publicUrl: string) {
 }
 
 function safePath(p: string) {
-  const root = getFsRoot()
-  const resolved = path.resolve(root, '.' + p)
-  if (!resolved.startsWith(root)) throw new Error('Path traversal')
-  return resolved
+  return projectPathOrThrow(getFsRoot(), p)
 }
 
 export function createApiApp(opts: { publicUrl?: () => string } = {}) {

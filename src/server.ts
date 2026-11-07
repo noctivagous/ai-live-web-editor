@@ -10,6 +10,7 @@ import { listProviderModels } from './providers.js'
 import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, SELF_PROJECT_ID, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
 import { applyPageTemplate, applySeedApp, convertTextToPage, TEMPLATE_IDS, type PageTemplateId, type TemplateId } from './setupWizard.js'
 import { writeProjectConfig } from './projectConfig.js'
+import { projectPathOrThrow } from './projectPath.js'
 import { getSelfCheck, isSelfMode, isSelfWorkspace, listSnapshotsAt, revertSelfSnapshot } from './selfMode.js'
 import { livePageCount, pageCommand } from './pageBridge.js'
 import { markLauncherOwner } from './liveTarget.js'
@@ -93,10 +94,7 @@ if (isSelfMode()) {
 }
 
 function safePath(p: string) {
-  const root = getFsRoot()
-  const resolved = path.resolve(root, '.' + p)
-  if (!resolved.startsWith(root)) throw new Error('Path traversal')
-  return resolved
+  return projectPathOrThrow(getFsRoot(), p)
 }
 
 // --- FS API ---

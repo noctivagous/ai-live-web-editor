@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { resolveProjectPath } from './projectPath.js'
 
 /**
  * Filesystem operations behind the file browser pane: rename/move,
@@ -13,10 +14,10 @@ import path from 'node:path'
 
 function resolveUnder(root: string, p: unknown, label: string): string {
   if (typeof p !== 'string' || !p.startsWith('/')) throw new Error(`${label} must be an absolute project path`)
-  const full = path.resolve(root, '.' + p)
-  if (full === root) throw new Error(`${label} must name an entry inside the project, not the project root`)
-  if (!full.startsWith(root + path.sep)) throw new Error('Path traversal')
-  return full
+  const r = resolveProjectPath(root, p)
+  if (r.ok === false) throw new Error('Path traversal')
+  if (r.full === root) throw new Error(`${label} must name an entry inside the project, not the project root`)
+  return r.full
 }
 
 function statOrNull(full: string): fs.Stats | null {

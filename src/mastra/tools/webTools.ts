@@ -3,6 +3,7 @@ import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getFsRoot } from '../../launcher.js'
+import { resolveProjectPath } from '../../projectPath.js'
 import { fetchPageText } from '../../research/fetchPage.js'
 import { runResearch } from '../../research/research.js'
 import { webSearch } from '../../research/searchBackend.js'
@@ -58,12 +59,11 @@ export const researchTool = createTool({
     let savedPath: string | undefined
     if (saveTo) {
       if (!saveTo.endsWith('.md')) return { ok: false, error: 'saveTo must be a .md path (research briefs are documents, not code)' }
-      const root = getFsRoot()
-      const full = path.resolve(root, saveTo.replace(/^\/+/, ''))
-      if (!full.startsWith(root)) return { ok: false, error: 'saveTo escapes the project root' }
-      fs.mkdirSync(path.dirname(full), { recursive: true })
-      fs.writeFileSync(full, r.brief, 'utf-8')
-      savedPath = saveTo
+      const resolved = resolveProjectPath(getFsRoot(), saveTo)
+      if (resolved.ok === false) return { ok: false, error: resolved.error }
+      fs.mkdirSync(path.dirname(resolved.full), { recursive: true })
+      fs.writeFileSync(resolved.full, r.brief, 'utf-8')
+      savedPath = resolved.rel
     }
     return {
       ok: true,

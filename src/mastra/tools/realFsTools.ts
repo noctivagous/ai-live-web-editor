@@ -8,14 +8,19 @@ import { livePageOp, poolOpen } from '../../liveTarget.js'
 import { applyStrReplace, compileGrep, GREP_MAX_HITS, grepText, isPlaceholderWrite, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
 import { sketchWriteGuard } from '../../sketchSession.js'
 import { selfWriteGuard } from '../../selfMode.js'
+import { resolveProjectPath } from '../../projectPath.js'
 
 const SKIP_DIR = new Set(['node_modules', '.vite', '.chrome-data'])
 
-function safe(p: string) {
-  const root = getFsRoot()
-  const full = path.resolve(root, '.' + p)
-  if (!full.startsWith(root)) throw new Error('traversal')
-  return full
+type ToolPath = { ok: true; full: string; rel: string } | { ok: false; error: string; path: string }
+
+/** Resolve a tool path argument (any form: /src/x, src/x, ./src/x) to
+ * the canonical project path. A bad path becomes an error result —
+ * tools never throw and never silently relocate a file. */
+function toolPath(p: string): ToolPath {
+  const r = resolveProjectPath(getFsRoot(), p)
+  if (r.ok === false) return { ok: false, error: r.error, path: p }
+  return r
 }
 
 function relFromRoot(full: string): string {
@@ -47,18 +52,20 @@ export const listRealFilesTool = createTool({
 
 export const readRealFileTool = createTool({
   id: 'read-real-file',
-  description: 'Read a source file. Prefer offset+limit (1-based lines) for existing files instead of the whole file.',
+  description: 'Read a source file. Paths may be /src/x, src/x, or ./src/x; results return the canonical /… path. Prefer offset+limit (1-based lines) for existing files instead of the whole file.',
   inputSchema: z.object({
     path: z.string(),
     offset: z.number().int().positive().optional(),
     limit: z.number().int().positive().optional(),
   }),
   execute: async ({ path: p, offset, limit }) => {
-    const full = safe(p)
-    if (!fs.existsSync(full)) return { error: 'Not found: ' + p }
-    const raw = fs.readFileSync(full, 'utf-8')
+    const r = toolPath(p)
+    if (r.ok === false) return { error: r.error, path: p }
+    if (!fs.existsSync(r.full)) return { error: 'Not found: ' + r.rel, path: r.rel }
+    if (fs.statSync(r.full).isDirectory()) return { error: 'Is a directory: ' + r.rel, path: r.rel }
+    const raw = fs.readFileSync(r.full, 'utf-8')
     const slice = sliceLines(raw, offset, limit)
-    return { path: p, ...slice }
+    return { path: r.rel, ...slice }
   }
 })
 
@@ -76,7 +83,12 @@ export const grepTool = createTool({
     if ('error' in re) return { error: 'invalid pattern: ' + re.error }
     const cap = Math.min(maxHits || GREP_MAX_HITS, 200)
     const root = getFsRoot()
-    const start = p ? safe(p) : root
+    let start = root
+    if (p) {
+      const r = toolPath(p)
+      if (r.ok === false) return { error: r.error, path: p }
+      start = r.full
+    }
     if (!fs.existsSync(start)) return { error: 'Not found: ' + (p || '/') }
     const files = fs.statSync(start).isDirectory() ? walkFiles(start) : [start]
     const hits: GrepHit[] = []
@@ -107,17 +119,19 @@ export const strReplaceTool = createTool({
   execute: async ({ path: p, old_string, new_string, replace_all }) => {
     const blocked = sketchWriteGuard()
     if (blocked) return blocked
-    const full = safe(p)
-    const selfBlocked = selfWriteGuard(full)
+    const r = toolPath(p)
+    if (r.ok === false) return { error: r.error, path: p }
+    const selfBlocked = selfWriteGuard(r.full)
     if (selfBlocked) return selfBlocked
-    if (!fs.existsSync(full)) return { error: 'Not found: ' + p, path: p }
-    const before = fs.readFileSync(full, 'utf-8')
+    if (!fs.existsSync(r.full)) return { error: 'Not found: ' + r.rel, path: r.rel }
+    if (fs.statSync(r.full).isDirectory()) return { error: 'Is a directory: ' + r.rel, path: r.rel }
+    const before = fs.readFileSync(r.full, 'utf-8')
     const result = applyStrReplace(before, old_string, new_string, replace_all === true)
-    if (result.ok === false) return { error: result.error, path: p, matches: result.matches }
-    fs.writeFileSync(full, result.content, 'utf-8')
+    if (result.ok === false) return { error: result.error, path: r.rel, matches: result.matches }
+    fs.writeFileSync(r.full, result.content, 'utf-8')
     return {
       ok: true,
-      path: p,
+      path: r.rel,
       matches: result.matches,
       bytes: result.content.length,
       snippet: snippetAround(result.content, new_string),
@@ -128,7 +142,7 @@ export const strReplaceTool = createTool({
 
 export const writeRealFileTool = createTool({
   id: 'write-real-file',
-  description: 'Create or fully overwrite a file. Use for new files and scaffolds. For existing files, use str-replace. Do not write placeholders like "[original content]".',
+  description: 'Create or fully overwrite a file. Paths may be /src/x, src/x, or ./src/x; the result returns the canonical /… path and whether the file was created. Use for new files and scaffolds. For existing files, use str-replace. Do not write placeholders like "[original content]".',
   inputSchema: z.object({ path: z.string(), content: z.string() }),
   execute: async ({ path: p, content }) => {
     const blocked = sketchWriteGuard()
@@ -136,12 +150,16 @@ export const writeRealFileTool = createTool({
     if (isPlaceholderWrite(content)) {
       return { error: 'Refusing placeholder write. Use str-replace with an exact hunk.', path: p }
     }
-    const full = safe(p)
-    const selfBlocked = selfWriteGuard(full)
+    const r = toolPath(p)
+    if (r.ok === false) return { error: r.error, path: p }
+    const selfBlocked = selfWriteGuard(r.full)
     if (selfBlocked) return selfBlocked
-    fs.mkdirSync(path.dirname(full), { recursive: true })
-    fs.writeFileSync(full, content, 'utf-8')
-    return { ok: true, path: p, bytes: content.length, mode: 'real-fs', elapsedMs: 1 }
+    const existing = fs.existsSync(r.full) ? fs.statSync(r.full) : null
+    if (existing?.isDirectory()) return { error: 'Is a directory: ' + r.rel, path: r.rel }
+    const created = !existing
+    fs.mkdirSync(path.dirname(r.full), { recursive: true })
+    fs.writeFileSync(r.full, content, 'utf-8')
+    return { ok: true, path: r.rel, created, bytes: content.length, mode: 'real-fs', elapsedMs: 1 }
   }
 })
 

@@ -76,7 +76,14 @@ export const readRealFileTool = createTool({
     if (r.ok === false) return { error: r.error, path: p }
     if (!fs.existsSync(r.full)) return { error: 'Not found: ' + r.rel, path: r.rel }
     if (fs.statSync(r.full).isDirectory()) return { error: 'Is a directory: ' + r.rel, path: r.rel }
-    const raw = fs.readFileSync(r.full, 'utf-8')
+    const buf = fs.readFileSync(r.full)
+    /* Binary content read as UTF-8 is garbled noise the agent may act
+     * on — refuse it readably, the same NUL check grep already uses
+     * (slice 5b). */
+    if (buf.subarray(0, 8192).includes(0)) {
+      return { error: `Binary file: ${r.rel} (${buf.length} bytes) — cannot be read as text`, path: r.rel }
+    }
+    const raw = buf.toString('utf-8')
     const slice = sliceLines(raw, offset, limit)
     return { path: r.rel, ...slice }
   }

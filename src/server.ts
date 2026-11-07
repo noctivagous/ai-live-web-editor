@@ -127,7 +127,7 @@ app.post('/api/projects/create', (req, res) => {
   try {
     const id = typeof req.body?.id === 'string' ? req.body.id : ''
     const project = createProject(id)
-    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects() })
+    res.json({ ok: true, active: project.id, root: project.root, projects: listProjects(), ...(project.installError ? { installError: project.installError } : {}) })
   } catch (e: any) {
     res.status(400).json({ ok: false, error: e.message })
   }

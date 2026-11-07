@@ -189,6 +189,16 @@ describe('read / str-replace / grep path forms', () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 
+  it('refuses binary files instead of returning garbled text (slice 5b)', async () => {
+    const root = tmpProject()
+    try {
+      fs.writeFileSync(path.join(root, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]))
+      const r = await run(readRealFileTool, { path: '/logo.png' })
+      assert.match(String(r.error), /Binary file: \/logo\.png/)
+      assert.equal(r.content, undefined)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
   it('returns readable error values for missing and escaping paths', async () => {
     const root = tmpProject()
     try {

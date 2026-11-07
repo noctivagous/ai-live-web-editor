@@ -342,7 +342,9 @@ export default function App() {
       await loadProjects()
       if (data.active) setActiveProject(data.active)
       await loadFiles()
-      setStatus(`project ${data.active}`)
+      setStatus(data.installError
+        ? `project ${data.active} — npm install failed: ${data.installError}. Run npm install in the project folder to finish setup.`
+        : `project ${data.active}`)
     } catch (e: unknown) {
       setStatus('create failed: ' + (e instanceof Error ? e.message : String(e)))
     }

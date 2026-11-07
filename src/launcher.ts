@@ -24,7 +24,7 @@ let viteChild: ChildProcess | null = null
 export function getFsRoot() { return fsRoot }
 export function setFsRoot(dir: string) { fsRoot = path.resolve(dir) }
 
-export type ProjectInfo = { id: string, root: string, setup: ProjectSetup }
+export type ProjectInfo = { id: string, root: string, setup: ProjectSetup, installError?: string }
 
 export function listProjects(): ProjectInfo[] {
   const projects: ProjectInfo[] = []
@@ -283,6 +283,20 @@ export function writeImportFiles(
   return { received, writeErrors }
 }
 
+/** Run npm install in a project dir. Returns null on success or a
+ * short error message — an install failure is a fact the caller (and
+ * the user) should see, not a console line to swallow (slice 5b). */
+export function installProjectDeps(dest: string): string | null {
+  try {
+    execSync('npm install', { cwd: dest, stdio: 'inherit', env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } })
+    return null
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
+    console.error('[workspace] npm install failed for', dest, msg)
+    return msg
+  }
+}
+
 export function createProject(id: string): ProjectInfo {
   const name = id.trim()
   if (!validProjectId(name)) throw new Error('Project name: letters, numbers, dash, underscore')
@@ -290,12 +304,9 @@ export function createProject(id: string): ProjectInfo {
   const dest = path.join(WORKSPACE_ROOT, name)
   if (fs.existsSync(dest)) throw new Error(`Project already exists: ${name}`)
   seedProjectDir(dest)
-  try {
-    execSync('npm install', { cwd: dest, stdio: 'inherit' })
-  } catch (e) {
-    console.error('[workspace] npm install failed for', name, e)
-  }
-  return selectProject(name)
+  const installError = installProjectDeps(dest)
+  const info = selectProject(name)
+  return installError ? { ...info, installError } : info
 }
 
 const SEED_FILES: Record<string, string> = {
@@ -383,7 +394,11 @@ export function ensureWorkspace() {
   if (!listProjects().length) seedProjectDir(path.join(WORKSPACE_ROOT, 'lumen'))
   const id = readActiveId()
   const dest = listProjects().find((p) => p.id === id)?.root ?? path.join(WORKSPACE_ROOT, id)
-  if (dest !== EDITOR_ROOT && !fs.existsSync(path.join(dest, 'package.json'))) seedProjectDir(dest)
+  /* No seeding here (slice 5b): the empty-workspace lumen seed above is
+   * the only boot-time write. Seeding whatever folder happens to be
+   * active wrote App.jsx/package.json into user folders that were
+   * merely opened — selectProject never does this, and the Open-slice
+   * rule is classify, don't seed. */
   setFsRoot(dest)
   void adoptProjectDevice(dest)
   void adoptProjectAppkit(dest)

@@ -92,7 +92,7 @@ export async function createProject(id: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
   })
-  const data = await r.json() as { ok: boolean, active?: string, root?: string, projects?: ProjectInfo[], error?: string }
+  const data = await r.json() as { ok: boolean, active?: string, root?: string, projects?: ProjectInfo[], installError?: string, error?: string }
   if (!r.ok || data.ok === false) throw new Error(data.error || `Create failed (${r.status})`)
   return data
 }

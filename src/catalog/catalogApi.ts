@@ -2,8 +2,9 @@
  * Catalog API (TASKS-token-efficiency §3): the Library panel's
  * surface. Tiered like the agent tool — listing/search return
  * tier-1 summaries; a full entry comes back only for an exact tag.
- * GET  /api/catalog?q=&includeAppkit=  -> { components: summaries, templates }
+ * GET  /api/catalog?q=&includeAppkit=  -> { packs: summaries, components: summaries, templates }
  * GET  /api/catalog/component?tag=     -> { component: full entry }
+ * GET  /api/catalog/pack?id=           -> { pack: full feature pack (tier 3) }
  * POST /api/catalog/install            -> { tag } copy-own install (same as §1)
  * POST /api/catalog/place-template     -> { id } one-write template placement
  * Mounted on both servers like the other project APIs.
@@ -12,6 +13,7 @@ import type { Express } from 'express'
 import { getFsRoot } from '../launcher.js'
 import { entryEnabled, entrySummary, getComponent, loadCatalog, searchSummaries } from './catalog.js'
 import { loadTemplates, placeTemplate } from './templates.js'
+import { getPack, loadPacks, packSummary, searchPacks } from './packs.js'
 import { installCatalogComponent } from '../codebaseMap/mapStore.js'
 
 export function mountCatalogApi(app: Express) {
@@ -22,7 +24,17 @@ export function mountCatalogApi(app: Express) {
     const components = q
       ? searchSummaries(q, 24, catalog, { includeAppkit })
       : catalog.components.filter(e => entryEnabled(e, includeAppkit)).map(entrySummary)
-    res.json({ ok: true, components, templates: loadTemplates().templates })
+    const packsFile = loadPacks()
+    const packs = q ? searchPacks(q, 24, packsFile) : packsFile.packs.map(packSummary)
+    res.json({ ok: true, packs, components, templates: loadTemplates().templates })
+  })
+
+  app.get('/api/catalog/pack', (req, res) => {
+    const id = typeof req.query.id === 'string' ? req.query.id : ''
+    if (!id) return res.status(400).json({ ok: false, error: 'id required' })
+    const pack = getPack(id)
+    if (!pack) return res.status(404).json({ ok: false, error: `No feature pack with id ${id}` })
+    return res.json({ ok: true, pack })
   })
 
   app.get('/api/catalog/component', (req, res) => {

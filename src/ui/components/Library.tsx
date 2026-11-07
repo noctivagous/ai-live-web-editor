@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
   askAi, getCatalog, installCatalogComponent, placeTemplate,
-  type CatalogSummaryItem, type TemplateItem,
+  type CatalogSummaryItem, type PackSummaryItem, type TemplateItem,
 } from '../lib/api'
 
 /**
- * Library panel (§3): the component catalog and the layout
- * templates, in the left panel beside Files. Every row carries the
- * two actions the tiering is built around:
+ * Library panel (§3): the catalog in the left panel beside Files —
+ * feature packs (tier 3) first, then components and layout
+ * templates, top-down like the search. Pack rows carry one action
+ * (Ask AI to install: grafting is a planned job, not a file copy);
+ * component and template rows carry the two actions the tiering is
+ * built around:
  * - Insert: copy-own the file into the project (it lands in the
  *   project registry/map, so later turns import it by name).
  * - Ask AI: seed a chat turn naming the component/template.
@@ -19,6 +22,7 @@ export function Library({ onOpenPath, onNotice }: {
   onNotice: (text: string) => void
 }) {
   const [q, setQ] = useState('')
+  const [packs, setPacks] = useState<PackSummaryItem[]>([])
   const [components, setComponents] = useState<CatalogSummaryItem[]>([])
   const [templates, setTemplates] = useState<TemplateItem[]>([])
   const [busy, setBusy] = useState('')
@@ -28,7 +32,7 @@ export function Library({ onOpenPath, onNotice }: {
     let live = true
     getCatalog(q).then(d => {
       if (!live) return
-      if (d.ok) { setComponents(d.components || []); setTemplates(d.templates || []); setError('') }
+      if (d.ok) { setPacks(d.packs || []); setComponents(d.components || []); setTemplates(d.templates || []); setError('') }
       else setError(d.error || 'Catalog failed to load')
     }).catch(e => { if (live) setError(e.message) })
     return () => { live = false }
@@ -76,6 +80,28 @@ export function Library({ onOpenPath, onNotice }: {
         />
         {error && <div style={{ color: 'var(--red-text)', fontSize: 'calc(12px * var(--ui-scale, 1))', marginTop: 6 }}>{error}</div>}
       </div>
+
+      <div className="panel-head">Feature packs <span className="sub">{packs.length}</span></div>
+      {packs.map(item => (
+        <div key={item.id} style={rowStyle}>
+          <div style={nameStyle}>
+            <span>{item.name}</span>
+            <span style={chipStyle}>pack</span>
+            <span style={{ ...chipStyle, fontFamily: 'monospace' }}>{item.id}</span>
+          </div>
+          <div style={descStyle}>{item.description}</div>
+          <div style={propsStyle}>{item.nodes} nodes · {item.settings} settings{item.configures.length ? ` · configures ${item.configures.join(', ')}` : ''}</div>
+          <div style={btnRow}>
+            <button
+              type="button" className="deck-btn"
+              onClick={() => askAi(`Install the ${item.name} feature pack (pack id ${item.id}) into this app. Plan it as an install: look the pack up in full with find-component (pack: "${item.id}"), graft it into the project's feature graph with feature-install-pack, and report which of its configures links were wired and which were left unwired. Then build what is missing in the graft's build order, updating node statuses with feature-set-status as work lands.`)}
+            >
+              Ask AI to install it
+            </button>
+          </div>
+        </div>
+      ))}
+      {!packs.length && !error && <div style={{ padding: '10px', fontSize: 'calc(12px * var(--ui-scale, 1))', opacity: 0.6 }}>No feature packs match.</div>}
 
       <div className="panel-head">Components <span className="sub">{components.length}</span></div>
       {components.map(item => (

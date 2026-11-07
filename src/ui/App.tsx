@@ -26,6 +26,7 @@ import {
 } from './lib/folderSync'
 import { SetupWizard } from './components/SetupWizard'
 import { PlanOverlay } from './components/PlanOverlay'
+import { GraphOverlay } from './components/GraphOverlay'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
@@ -57,8 +58,20 @@ export default function App() {
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
   // Planning (§O): the /plan overlay floats over files + middle; chat stays live.
   const [planOpen, setPlanOpen] = useState<{ level?: number, goal?: string, n: number } | null>(null)
+  // Feature graph: the /graph overlay shares the planner's float
+  // space; the two never stack.
+  const [graphOpen, setGraphOpen] = useState<{ n: number } | null>(null)
+  useEffect(() => {
+    const onGraphOpen = () => {
+      setPlanOpen(null)
+      setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 }))
+    }
+    window.addEventListener('ai-live:graph-open', onGraphOpen)
+    return () => window.removeEventListener('ai-live:graph-open', onGraphOpen)
+  }, [])
   useEffect(() => {
     const onPlanOpen = (e: Event) => {
+      setGraphOpen(null)
       const d = (e as CustomEvent).detail as { level?: number, goal?: string } | undefined
       const open = (level?: number) => setPlanOpen(prev => ({ level, goal: d?.goal, n: (prev?.n ?? 0) + 1 }))
       if (d?.level) { open(d.level); return }
@@ -991,10 +1004,19 @@ export default function App() {
             style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
           />
         )}
+        {graphOpen && (
+          <GraphOverlay
+            key={`${activeProject}-graph-${graphOpen.n}`}
+            onClose={() => setGraphOpen(null)}
+            onShowLibrary={() => { setLeftView('library'); setGraphOpen(null) }}
+            style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
+          />
+        )}
         <div className="panel" style={{ width: leftW, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="panel-head" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}>Files</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates">Library</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status">Graph</button>
             {leftView === 'files' && <span className="sub">{files.length}</span>}
           </div>
           {leftView === 'files' ? (

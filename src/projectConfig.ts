@@ -19,6 +19,7 @@ import {
 } from './deviceSession.js'
 import { catalogSummary } from './catalog/catalog.js'
 import { templateSummary } from './catalog/templates.js'
+import { packSummaryLine } from './catalog/packs.js'
 import { searchAvailable, searchBackendLabel } from './research/searchBackend.js'
 import { getActivePlan } from './plans/plans.js'
 import { featureGraphSummary, getFeatureGraph } from './features/features.js'
@@ -176,6 +177,8 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   if (catalog) lines.push(catalog)
   const templates = templateSummary()
   if (templates) lines.push(templates)
+  const packs = packSummaryLine()
+  if (packs) lines.push(packs)
   if (searchAvailable()) {
     lines.push(`Web research is available via ${searchBackendLabel()}: web-search / fetch-page for quick lookups, research for multi-source briefs — build from cited briefs, not memory, when external facts matter.`)
   }
@@ -190,6 +193,9 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
         : `The plan is still being shaped. `) +
       `If the user asks to add, drop or reword a plan question, use plan-add-question / plan-remove-question / plan-revise-question — edit the plan in place, never restart it or re-ask settled questions. Questions: ${qList || '(none yet)'}`,
     )
+    if (plan.tasks.some(t => t.nodeId)) {
+      lines.push('This plan was generated from the feature graph: its tasks are tied to graph nodes, and marking a task doing/done updates the node (building/done) on its own — no separate feature-set-status call is needed for them.')
+    }
   }
   try {
     const graph = getFeatureGraph()

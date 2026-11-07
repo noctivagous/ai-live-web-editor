@@ -8,6 +8,7 @@ import {
   parsePlanKind, parsePlanLevel, removeQuestion, reviseWithModel, savePlan,
   setActivePlan, type PlanDoc,
 } from './plans.js'
+import { planFromGraph } from './planFromGraph.js'
 
 function summary(doc: PlanDoc) {
   return {
@@ -43,6 +44,15 @@ export function mountPlanApi(app: Express) {
       level: parsePlanLevel(req.body?.level),
     })
     return res.json({ ok: true, plan: doc })
+  })
+
+  // Registered before /api/plans/:slug so "from-graph" is not a slug.
+  app.post('/api/plans/from-graph', (req, res) => {
+    const nodeId = typeof req.body?.nodeId === 'string' ? req.body.nodeId : undefined
+    const packId = typeof req.body?.packId === 'string' ? req.body.packId : undefined
+    const result = planFromGraph({ nodeId, packId })
+    if (result.ok === false) return res.status(422).json({ ok: false, error: result.error })
+    return res.json({ ok: true, plan: result.plan, skippedBuilt: result.skippedBuilt })
   })
 
   app.get('/api/plans/:slug', (req, res) => {

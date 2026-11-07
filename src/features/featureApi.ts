@@ -1,9 +1,15 @@
 import type { Express } from 'express'
 import {
   addEdge, addNode, createFeatureGraph, getFeatureGraph, getNode, graphRollup,
+  lintGraph, nodeSummary,
   parseFeatureEdgeType, parseFeatureNodeKind, parseFeatureStatus, saveFeatureGraph,
-  setNodeStatus,
+  setNodeParam, setNodeStatus,
 } from './features.js'
+import { buildNode, writeNodeConfig } from './buildNode.js'
+import { graftPack, resolvePendingLinks, uninstallPack } from './graft.js'
+import { reconcileGraph } from './reconcile.js'
+import { getPack } from '../catalog/packs.js'
+import { getFsRoot } from '../launcher.js'
 
 /**
  * Feature graph HTTP API, mounted on both servers (the planApi
@@ -38,8 +44,9 @@ export function mountFeatureApi(app: Express) {
       ...(typeof req.body?.derivedFrom === 'string' ? { derivedFrom: req.body.derivedFrom } : {}),
       ...(typeof req.body?.note === 'string' ? { note: req.body.note } : {}),
     })
+    const resolvedLinks = resolvePendingLinks(graph, [node])
     saveFeatureGraph(graph)
-    res.json({ ok: true, node, totalNodes: graph.nodes.length })
+    res.json({ ok: true, node, totalNodes: graph.nodes.length, ...(resolvedLinks.length ? { resolvedLinks } : {}) })
   })
 
   app.post('/api/features/status', (req, res) => {
@@ -51,6 +58,78 @@ export function mountFeatureApi(app: Express) {
     }
     saveFeatureGraph(graph)
     res.json({ ok: true, node: getNode(graph, id), rollup: graphRollup(graph).overall })
+  })
+
+  app.post('/api/features/param', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    const name = typeof req.body?.name === 'string' ? req.body.name : ''
+    if (!id || !name || typeof req.body?.value !== 'string') {
+      return res.status(400).json({ ok: false, error: 'Expected { id, name, value }.' })
+    }
+    const problem = setNodeParam(graph, id, name, req.body.value)
+    if (problem) return res.status(422).json({ ok: false, error: problem })
+    saveFeatureGraph(graph)
+    const configFile = writeNodeConfig(getNode(graph, id)!, getFsRoot())
+    res.json({ ok: true, node: getNode(graph, id), configFile })
+  })
+
+  app.post('/api/features/build', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    const result = buildNode(graph, id, getFsRoot())
+    if (result.ok === false) return res.status(404).json(result)
+    saveFeatureGraph(graph)
+    res.json(result)
+  })
+
+  app.get('/api/features/reconcile', (_req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.json({ ok: true, drift: [], checked: 0 })
+    const { drift, checked } = reconcileGraph(graph, getFsRoot())
+    res.json({ ok: true, drift, checked })
+  })
+
+  app.get('/api/features/lint', (_req, res) => {
+    const graph = getFeatureGraph()
+    res.json({ ok: true, problems: graph ? lintGraph(graph) : [] })
+  })
+
+  app.post('/api/features/uninstall', (req, res) => {
+    const packId = typeof req.body?.packId === 'string' ? req.body.packId : ''
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const result = uninstallPack(graph, packId)
+    if (result.ok === false) return res.status(422).json({ ok: false, error: result.error })
+    saveFeatureGraph(graph)
+    res.json({
+      ok: true, pack: result.packId,
+      removed: result.removed.map(nodeSummary),
+      lifted: result.lifted,
+      rollup: graphRollup(graph).overall,
+    })
+  })
+
+  app.post('/api/features/install', (req, res) => {
+    const packId = typeof req.body?.packId === 'string' ? req.body.packId : ''
+    const pack = getPack(packId)
+    if (!pack) return res.status(404).json({ ok: false, error: `No feature pack with id ${packId}` })
+    const graph = getFeatureGraph() ?? createFeatureGraph(pack.name)
+    const parentId = typeof req.body?.parentId === 'string' ? req.body.parentId : undefined
+    const result = graftPack(graph, pack, { parentId })
+    if (result.ok === false) return res.status(422).json({ ok: false, error: result.error })
+    saveFeatureGraph(graph)
+    res.json({
+      ok: true, pack: pack.id,
+      added: result.added, internalEdges: result.internalEdges,
+      wired: result.wired, unwired: result.unwired,
+      pendingLinks: graph.pendingLinks ?? [],
+      resolvedLinks: result.resolvedLinks,
+      buildOrder: result.buildOrder.map(n => n.id),
+      rollup: graphRollup(graph).overall,
+    })
   })
 
   app.post('/api/features/links', (req, res) => {

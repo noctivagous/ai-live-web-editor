@@ -9,6 +9,7 @@ import { z } from 'zod'
 import {
   addQuestion, getActivePlan, removeQuestion, savePlan,
 } from '../../plans/plans.js'
+import { planFromGraph } from '../../plans/planFromGraph.js'
 
 function noPlan() {
   return { ok: false, error: 'No active plan in this project. The user opens one with /plan in the chat.' }
@@ -75,6 +76,29 @@ export const planReviseQuestionTool = createTool({
     q.revised = true
     savePlan(doc)
     return { ok: true, plan: doc.slug, question: q }
+  },
+})
+
+export const planFromGraphTool = createTool({
+  id: 'plan-from-graph',
+  description:
+    'Generate a plan FROM the feature graph: pass a region/feature nodeId (its subtree) or an installed packId, and the plan\'s tasks are that subgraph\'s unbuilt nodes in depends-on order, each tied to its graph node. Already-built nodes are skipped and reported; unbuilt prerequisites outside the selection are pulled in. Marking these tasks doing/done with plan-update-task writes the node statuses back (building/done) automatically. Use this instead of drafting tasks from memory whenever the work is a region or pack the graph already describes.',
+  inputSchema: z.object({
+    nodeId: z.string().optional().describe('A graph node id — plan its subtree (find ids with feature-query)'),
+    packId: z.string().optional().describe('An installed pack id — plan building out that pack'),
+  }),
+  execute: async ({ nodeId, packId }) => {
+    const result = planFromGraph({ nodeId, packId })
+    if (result.ok === false) return { ok: false, error: result.error }
+    const { plan, skippedBuilt } = result
+    return {
+      ok: true,
+      plan: plan.slug,
+      title: plan.title,
+      kind: plan.kind,
+      tasks: plan.tasks.map(t => ({ id: t.id, text: t.text, nodeId: t.nodeId })),
+      skippedBuilt,
+    }
   },
 })
 

@@ -95,13 +95,30 @@ itself maps 217 files in 947 tokens with injection on.
 Agent-context Layer 2. Within the 12-step run, `inspect-dom` HTML
 and 20k file reads currently stay in context for every later step.
 
-- [ ] Mastra `processToolResult` / output processor: clip or drop
-  bulky tool results after the next step (`inspect-dom` HTML,
-  full file reads, snapshot dumps)
-- [ ] Keep signatures of recently touched files when trimming
-  (Roo-style smart folding, small budget), not whole bodies
-- [ ] Re-check history size: `historyForAgent` currently sends up
-  to 12 raw text turns; measure cost, trim if the yardstick says so
+- [x] Mastra processor (`processLLMRequest`, the installed core's
+  per-call hook — transient, stored history/UI keep full results):
+  clip or drop bulky tool results after the next step (`inspect-dom`
+  HTML, full file reads, snapshot dumps). **Landed 2026-11-06** as
+  `ToolResultTrimProcessor` on the agent (`src/contextTrim.ts`): the
+  newest tool results stay in full for the step that acts on them;
+  from the next step on, results over 1,500 chars fold to ≤640-char
+  summaries. Verified live against a stub provider: the step-2
+  request carried a 9,266-char read in full; the step-3 request
+  carried the folded summary instead (request shrank ~9k chars).
+- [x] Keep signatures of recently touched files when trimming
+  (Roo-style smart folding, small budget), not whole bodies.
+  **Landed 2026-11-06:** folded reads keep path + line range +
+  components/exports from the §1 extractor (`parseFile`), plus a
+  re-read hint; `inspect-dom` keeps selector/tag/text, snapshots
+  keep a head + note.
+- [x] Re-check history size: `historyForAgent` sends up to 12 prior
+  turns; **measured 2026-11-06:** the stored log clips items at
+  8,000 chars, so the uncapped worst case was 96k chars (~24k
+  tokens) of history alone. Each prior turn is now capped at 2,000
+  chars in the agent payload (`HISTORY_TURN_CHAR_CAP`; stored log
+  and the current ask untouched) — worst case ~24k chars (~6k
+  tokens), typical turns unchanged. The yardstick (§5) can tighten
+  this further with real data.
 - [ ] No second "compaction manager" agent — trimming lives in the
   existing agent run
 

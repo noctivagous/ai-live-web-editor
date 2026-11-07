@@ -248,11 +248,26 @@ export function rebaseLocalUserItems(local: LogItem[], winner: LogItem[]): LogIt
   return [...winner, ...missing]
 }
 
+/**
+ * Per-turn cap for PRIOR turns in the agent payload (§2 re-check,
+ * measured 2026-11-06): the stored log clips each item to 8,000
+ * chars, so 12 raw turns could cost 96k chars (~24k tokens) of
+ * history alone. Capping each prior turn at 2,000 chars bounds
+ * history at ~24k chars (~6k tokens) worst case while leaving
+ * typical turns (well under 2k) untouched. The stored log and the
+ * current user message are not clipped here.
+ */
+export const HISTORY_TURN_CHAR_CAP = 2000
+
+function clipHistoryTurn(text: string): string {
+  return text.length > HISTORY_TURN_CHAR_CAP ? text.slice(0, HISTORY_TURN_CHAR_CAP) + '…' : text
+}
+
 export function historyForAgent(log: LogItem[], userText: string, activePath: string) {
   const turns = log.filter((m) => m.role === 'user' || m.role === 'ai').slice(-12)
   const messages = turns.map((m) => ({
     role: m.role === 'ai' ? 'assistant' : 'user',
-    content: (m as { text: string }).text,
+    content: clipHistoryTurn((m as { text: string }).text),
   }))
   messages.push({ role: 'user', content: `${userText} Current file: ${activePath}` })
   return messages

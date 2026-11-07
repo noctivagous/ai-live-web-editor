@@ -12,6 +12,7 @@ import {
   planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
   planReviseQuestionTool, planUpdateTaskTool,
 } from '../tools/planTools.js'
+import { toolResultTrimProcessor } from '../../contextTrim.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
@@ -57,6 +58,9 @@ Live-edit mode: the user may annotate elements on the page. When you receive a l
 3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
 `,
+  // §2 in-turn trimming: bulky tool results fold after the next step
+  // (transient per provider call; stored history/UI keep full results).
+  inputProcessors: [toolResultTrimProcessor],
   model: () => resolveConnectionModel() ?? resolveAgentModel(),
   defaultOptions: { maxSteps: 12 },
   tools: {

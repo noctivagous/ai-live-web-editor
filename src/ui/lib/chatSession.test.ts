@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bootStopped, casWinner, createSendGuard, emptyChat, historyForAgent, parseChat, rebaseLocalUserItems, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
+import { bootStopped, casWinner, createSendGuard, emptyChat, historyForAgent, HISTORY_TURN_CHAR_CAP, parseChat, rebaseLocalUserItems, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
 
 describe('chatSession', () => {
   it('round-trips a log and drops other projects', () => {
@@ -28,6 +28,22 @@ describe('chatSession', () => {
       { role: 'assistant', content: 'hi' },
       { role: 'user', content: 'again Current file: /App.jsx' },
     ])
+  })
+
+  it('caps each prior turn in the agent payload (§2 history re-check)', () => {
+    const big = 'x'.repeat(8000)
+    const log: LogItem[] = [
+      { role: 'user', text: big },
+      { role: 'ai', text: big },
+      { role: 'user', text: 'short' },
+    ]
+    const messages = historyForAgent(log, 'now', '/App.jsx')
+    // Worst case is bounded: 12 turns x cap, not 12 x the 8k storage clip.
+    for (const m of messages.slice(0, -1)) assert.ok(m.content.length <= HISTORY_TURN_CHAR_CAP + 1, `turn was ${m.content.length}`)
+    assert.equal(messages[2].content, 'short', 'typical turns are untouched')
+    assert.equal(messages[3].content, 'now Current file: /App.jsx', 'the current ask is never clipped')
+    const worst = 12 * (HISTORY_TURN_CHAR_CAP + 1)
+    assert.ok(worst < 25_000, `worst-case history ${worst} chars stays ~6k tokens, was ~24k uncapped`)
   })
 
   it('marks running tools stopped and appends a single Stopped line', () => {

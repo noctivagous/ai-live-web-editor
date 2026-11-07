@@ -109,6 +109,8 @@ describe('WRITE_TOOLS (slice 3)', () => {
   it('is exactly the tools that write project files', () => {
     assert.deepEqual([...WRITE_TOOLS].sort(), [
       'delete-file',
+      'feature-build-node',
+      'feature-set-param',
       'install-catalog-component',
       'make-dir',
       'place-template',

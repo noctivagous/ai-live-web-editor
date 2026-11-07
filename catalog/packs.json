@@ -1,0 +1,561 @@
+{
+  "packs": [
+    {
+      "description": "An admin area for a store app, installed as one feature: a master-detail shell whose sections hold the store's settings and configure the live storefront and checkout.",
+      "edges": [
+        {
+          "from": "shell",
+          "to": "identity",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "currency",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "payments",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "shipping",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "brand",
+          "type": "renders"
+        }
+      ],
+      "externalLinks": [
+        {
+          "from": "currency",
+          "match": "price|total|checkout",
+          "role": "price display and checkout totals",
+          "type": "configures"
+        },
+        {
+          "from": "payments",
+          "match": "checkout|payment",
+          "role": "the checkout payment step",
+          "type": "configures"
+        },
+        {
+          "from": "shipping",
+          "match": "checkout|shipping",
+          "role": "checkout shipping options",
+          "type": "configures"
+        },
+        {
+          "from": "brand",
+          "match": "storefront|header|theme",
+          "role": "storefront appearance",
+          "type": "configures"
+        },
+        {
+          "from": "identity",
+          "match": "header|receipt|invoice",
+          "role": "storefront header and receipts",
+          "type": "configures"
+        }
+      ],
+      "id": "admin-configuration",
+      "name": "Admin / Configuration",
+      "nodes": [
+        {
+          "derivedFrom": "master-detail",
+          "kind": "screen",
+          "localId": "shell",
+          "name": "Admin shell",
+          "note": "Section list on the left, the selected section's settings on the right — the settings use of the master-detail layout."
+        },
+        {
+          "kind": "setting",
+          "localId": "identity",
+          "name": "Store identity",
+          "params": [
+            {
+              "default": "My Store",
+              "name": "store-name",
+              "type": "text"
+            },
+            {
+              "name": "support-email",
+              "type": "text"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "currency",
+          "name": "Currency & pricing",
+          "params": [
+            {
+              "default": "USD",
+              "name": "currency",
+              "options": [
+                "USD",
+                "EUR",
+                "GBP",
+                "JPY"
+              ],
+              "type": "choice"
+            },
+            {
+              "default": "false",
+              "name": "tax-inclusive-prices",
+              "type": "boolean"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "payments",
+          "name": "Payment providers",
+          "params": [
+            {
+              "default": "Stripe",
+              "name": "provider",
+              "options": [
+                "Stripe",
+                "PayPal",
+                "Manual"
+              ],
+              "type": "choice"
+            },
+            {
+              "default": "true",
+              "name": "test-mode",
+              "type": "boolean"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "shipping",
+          "name": "Shipping zones",
+          "params": [
+            {
+              "name": "free-shipping-threshold",
+              "type": "number"
+            },
+            {
+              "name": "default-zone",
+              "type": "text"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "brand",
+          "name": "Brand",
+          "params": [
+            {
+              "default": "#3366cc",
+              "name": "brand-color",
+              "type": "color"
+            },
+            {
+              "name": "logo-text",
+              "type": "text"
+            }
+          ],
+          "parent": "shell"
+        }
+      ]
+    },
+    {
+      "description": "A user-facing settings area for any app: a master-detail shell with appearance, notifications, privacy and account sections.",
+      "edges": [
+        {
+          "from": "shell",
+          "to": "appearance",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "notifications",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "privacy",
+          "type": "renders"
+        },
+        {
+          "from": "shell",
+          "to": "account",
+          "type": "renders"
+        }
+      ],
+      "externalLinks": [
+        {
+          "from": "appearance",
+          "match": "app|shell|layout|theme",
+          "role": "the whole app interface",
+          "type": "configures"
+        },
+        {
+          "from": "notifications",
+          "match": "email|alert|notification",
+          "role": "email and alert delivery",
+          "type": "configures"
+        },
+        {
+          "from": "privacy",
+          "match": "analytics|tracking",
+          "role": "analytics and tracking",
+          "type": "configures"
+        },
+        {
+          "from": "account",
+          "match": "profile|account|header",
+          "role": "profile display across the app",
+          "type": "configures"
+        }
+      ],
+      "id": "settings",
+      "name": "Settings",
+      "nodes": [
+        {
+          "derivedFrom": "master-detail",
+          "kind": "screen",
+          "localId": "shell",
+          "name": "Settings shell",
+          "note": "Section list on the left, the selected section's settings on the right."
+        },
+        {
+          "kind": "setting",
+          "localId": "appearance",
+          "name": "Appearance",
+          "params": [
+            {
+              "default": "System",
+              "name": "theme",
+              "options": [
+                "Light",
+                "Dark",
+                "System"
+              ],
+              "type": "choice"
+            },
+            {
+              "default": "Comfortable",
+              "name": "ui-density",
+              "options": [
+                "Comfortable",
+                "Compact"
+              ],
+              "type": "choice"
+            },
+            {
+              "name": "font-size",
+              "type": "number"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "notifications",
+          "name": "Notifications",
+          "params": [
+            {
+              "default": "true",
+              "name": "email-notifications",
+              "type": "boolean"
+            },
+            {
+              "default": "Daily",
+              "name": "digest",
+              "options": [
+                "Off",
+                "Daily",
+                "Weekly"
+              ],
+              "type": "choice"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "privacy",
+          "name": "Privacy & data",
+          "params": [
+            {
+              "default": "false",
+              "name": "analytics",
+              "type": "boolean"
+            },
+            {
+              "default": "false",
+              "name": "share-diagnostics",
+              "type": "boolean"
+            }
+          ],
+          "parent": "shell"
+        },
+        {
+          "kind": "setting",
+          "localId": "account",
+          "name": "Account",
+          "params": [
+            {
+              "name": "display-name",
+              "type": "text"
+            },
+            {
+              "default": "en",
+              "name": "language",
+              "options": [
+                "en",
+                "es",
+                "fr",
+                "de"
+              ],
+              "type": "choice"
+            }
+          ],
+          "parent": "shell"
+        }
+      ]
+    },
+    {
+      "description": "Print support for an app's documents: a print service, a preview screen, and page-setup settings that configure the printed output.",
+      "edges": [
+        {
+          "from": "docdata",
+          "to": "service",
+          "type": "data-flows"
+        },
+        {
+          "from": "service",
+          "to": "preview",
+          "type": "renders"
+        },
+        {
+          "from": "preview",
+          "to": "service",
+          "type": "depends-on"
+        },
+        {
+          "from": "pagesetup",
+          "to": "preview",
+          "type": "configures"
+        },
+        {
+          "from": "range",
+          "to": "preview",
+          "type": "configures"
+        }
+      ],
+      "externalLinks": [
+        {
+          "direction": "in",
+          "from": "docdata",
+          "match": "document|report|invoice|receipt",
+          "role": "the app's documents and reports",
+          "type": "data-flows"
+        },
+        {
+          "from": "pagesetup",
+          "match": "document|report|invoice|receipt",
+          "role": "printed output of documents",
+          "type": "configures"
+        }
+      ],
+      "id": "printing",
+      "name": "Printing",
+      "nodes": [
+        {
+          "kind": "service",
+          "localId": "service",
+          "name": "Print service",
+          "note": "Renders a document to the printer or a PDF file."
+        },
+        {
+          "kind": "data",
+          "localId": "docdata",
+          "name": "Document content",
+          "note": "Placeholder for the host app's documents; grafting binds it to real document nodes."
+        },
+        {
+          "kind": "screen",
+          "localId": "preview",
+          "name": "Print preview"
+        },
+        {
+          "kind": "setting",
+          "localId": "pagesetup",
+          "name": "Page setup",
+          "params": [
+            {
+              "default": "A4",
+              "name": "paper-size",
+              "options": [
+                "A4",
+                "Letter",
+                "Legal"
+              ],
+              "type": "choice"
+            },
+            {
+              "default": "Portrait",
+              "name": "orientation",
+              "options": [
+                "Portrait",
+                "Landscape"
+              ],
+              "type": "choice"
+            },
+            {
+              "default": "15",
+              "name": "margins-mm",
+              "type": "number"
+            },
+            {
+              "default": "1",
+              "name": "copies",
+              "type": "number"
+            }
+          ],
+          "parent": "preview"
+        },
+        {
+          "kind": "setting",
+          "localId": "range",
+          "name": "Print range",
+          "params": [
+            {
+              "default": "All",
+              "name": "range",
+              "options": [
+                "All",
+                "Current",
+                "Selection"
+              ],
+              "type": "choice"
+            },
+            {
+              "default": "100",
+              "name": "scale-percent",
+              "type": "number"
+            }
+          ],
+          "parent": "preview"
+        }
+      ]
+    },
+    {
+      "description": "Accounts and sign-in for an app: sign-in and sign-up screens, a session service, password rules and a reset flow.",
+      "edges": [
+        {
+          "from": "signin",
+          "to": "session",
+          "type": "depends-on"
+        },
+        {
+          "from": "signup",
+          "to": "session",
+          "type": "depends-on"
+        },
+        {
+          "from": "reset",
+          "to": "session",
+          "type": "depends-on"
+        },
+        {
+          "from": "passwords",
+          "to": "signin",
+          "type": "configures"
+        },
+        {
+          "from": "passwords",
+          "to": "signup",
+          "type": "configures"
+        }
+      ],
+      "externalLinks": [
+        {
+          "from": "session",
+          "match": "dashboard|account|checkout|admin",
+          "role": "access to protected screens",
+          "type": "configures"
+        },
+        {
+          "from": "session",
+          "match": "user|account",
+          "role": "user accounts data",
+          "type": "depends-on"
+        }
+      ],
+      "id": "auth",
+      "name": "Auth",
+      "nodes": [
+        {
+          "kind": "screen",
+          "localId": "signin",
+          "name": "Sign-in screen"
+        },
+        {
+          "kind": "screen",
+          "localId": "signup",
+          "name": "Sign-up screen"
+        },
+        {
+          "kind": "service",
+          "localId": "session",
+          "name": "Session service",
+          "note": "Issues and checks session tokens for the app."
+        },
+        {
+          "kind": "feature",
+          "localId": "reset",
+          "name": "Password reset flow"
+        },
+        {
+          "kind": "setting",
+          "localId": "passwords",
+          "name": "Password rules",
+          "params": [
+            {
+              "default": "10",
+              "name": "min-length",
+              "type": "number"
+            },
+            {
+              "default": "false",
+              "name": "require-symbol",
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "kind": "setting",
+          "localId": "roles",
+          "name": "Roles & permissions",
+          "params": [
+            {
+              "default": "Viewer",
+              "name": "default-role",
+              "options": [
+                "Viewer",
+                "Editor",
+                "Admin"
+              ],
+              "type": "choice"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "version": 1
+}

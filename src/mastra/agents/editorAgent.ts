@@ -10,11 +10,11 @@ import { adoptRegistryTool, codebaseMapTool, installCatalogComponentTool } from 
 import { placeTemplateTool } from '../tools/templateTools.js'
 import { fetchPageTool, researchTool, webSearchTool } from '../tools/webTools.js'
 import {
-  planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
+  planAddQuestionTool, planFinishTool, planFromGraphTool, planRemoveQuestionTool,
   planReviseQuestionTool, planUpdateTaskTool,
 } from '../tools/planTools.js'
 import {
-  featureAddNodeTool, featureLinkTool, featureQueryTool, featureSetStatusTool,
+  featureAddNodeTool, featureBuildNodeTool, featureEditNodeTool, featureInstallPackTool, featureLinkTool, featureLintTool, featureQueryTool, featureReconcileTool, featureRemoveNodeTool, featureSetParamTool, featureSetStatusTool, featureUninstallPackTool, featureUnlinkTool,
 } from '../tools/featureTools.js'
 import { toolResultTrimProcessor } from '../../contextTrim.js'
 import { readSkillTool } from '../tools/skillTools.js'
@@ -114,10 +114,20 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'plan-revise-question': planReviseQuestionTool,
     'plan-update-task': planUpdateTaskTool,
     'plan-finish': planFinishTool,
+    'plan-from-graph': planFromGraphTool,
     'feature-add-node': featureAddNodeTool,
+    'feature-install-pack': featureInstallPackTool,
     'feature-set-status': featureSetStatusTool,
     'feature-link': featureLinkTool,
     'feature-query': featureQueryTool,
+    'feature-set-param': featureSetParamTool,
+    'feature-build-node': featureBuildNodeTool,
+    'feature-edit-node': featureEditNodeTool,
+    'feature-remove-node': featureRemoveNodeTool,
+    'feature-unlink': featureUnlinkTool,
+    'feature-lint': featureLintTool,
+    'feature-uninstall-pack': featureUninstallPackTool,
+    'feature-reconcile': featureReconcileTool,
     'get-console': getConsoleTool,
     'get-network-failures': getNetworkFailuresTool,
   }

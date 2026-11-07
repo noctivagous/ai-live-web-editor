@@ -67,6 +67,7 @@ export const FILE_PLAN_TOOLS = [
   'plan-revise-question',
   'plan-update-task',
   'plan-finish',
+  'plan-from-graph',
 ] as const
 
 /** Feature graph — only meaningful while a graph exists or is being discussed. */
@@ -75,6 +76,15 @@ export const FILE_FEATURE_TOOLS = [
   'feature-set-status',
   'feature-link',
   'feature-query',
+  'feature-install-pack',
+  'feature-set-param',
+  'feature-build-node',
+  'feature-edit-node',
+  'feature-remove-node',
+  'feature-unlink',
+  'feature-lint',
+  'feature-uninstall-pack',
+  'feature-reconcile',
 ] as const
 
 export const FILE_ACTIVE_TOOLS = [
@@ -111,10 +121,20 @@ export const FILE_ACTIVE_TOOLS = [
   'plan-revise-question',
   'plan-update-task',
   'plan-finish',
+  'plan-from-graph',
   'feature-add-node',
   'feature-set-status',
   'feature-link',
   'feature-query',
+  'feature-install-pack',
+  'feature-set-param',
+  'feature-build-node',
+  'feature-edit-node',
+  'feature-remove-node',
+  'feature-unlink',
+  'feature-lint',
+  'feature-uninstall-pack',
+  'feature-reconcile',
   'get-console',
   'get-network-failures',
 ] as const
@@ -158,6 +178,10 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   'make-dir',
   'place-template',
   'install-catalog-component',
+  // Build-out places catalog files and writes src/config values —
+  // app files, so the verify gate applies like the two installs above.
+  'feature-build-node',
+  'feature-set-param',
 ])
 
 export function isWriteTool(name: string): boolean {
@@ -168,7 +192,7 @@ const LAYOUT_RE = /\b(layout|wireframe|overlap|spacing|responsive|breakpoint|vie
 const CATALOG_RE = /\b(components?|templates?|catalog|library|install|buttons?|dialogs?|modals?|dropdowns?|tooltips?|accordion|tabs?|forms?|inputs?|tables?|cards?|pricing|hero|navbar|navigation|sidebar|headers?|footers?|dashboard|widgets?|icons?|charts?|menus?|pages?|sections?|landing)\b/i
 const RESEARCH_RE = /\b(web|internet|online|search|research|lookup|google|docs?|documentation|latest|changelog|version of)\b|\blook up\b/i
 const PLAN_RE = /\bplans?\b|\/plan\b/i
-const FEATURE_RE = /feature[-\s]?graph/i
+const FEATURE_RE = /feature[-\s]?graph|feature[-\s]pack|\binstall(?:ing|ed)?\b[^.]*\bpack\b/i
 const CODE_RE = /\b(unpack\w*|unminif\w*|de-?minif\w*|minified|beautif\w*|prettif\w*|bundles?|bundled|vendor|obfuscat\w*)\b|\.min\.(?:js|mjs|cjs|ts)\b/i
 const RUN_RE = /\b(verify|verifying|runtime|execute|probe)\b|\bactually (returns?|exports?|renders?|does|do)\b|\bwhat does\b[^?]*\breturn/i
 

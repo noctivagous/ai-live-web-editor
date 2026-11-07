@@ -4,9 +4,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  addEdge, addNode, configuresFor, createFeatureGraph, featureGraphSummary,
-  getFeatureGraph, graphRollup, prerequisites, renderFeatureMarkdown,
-  saveFeatureGraph, setNodeStatus, subtree,
+  addEdge, addNode, configuresFor, createFeatureGraph, effectiveValues,
+  featureGraphSummary, getFeatureGraph, getNode, graphRollup, lintGraph,
+  nodeSummary, prerequisites, removeEdge, removeNode, renameNode,
+  renderFeatureMarkdown, reparentNode, saveFeatureGraph, seedValues,
+  setNodeParam, setNodeStatus, subtree, validateParamValue,
 } from './features.js'
 
 function tmpRoot(): string {
@@ -109,4 +111,111 @@ test('status changes persist through save + reload', () => {
   const reloaded = getFeatureGraph(root)!
   assert.equal(reloaded.nodes.find(n => n.id === checkout.id)?.status, 'blocked')
   assert.equal(graphRollup(reloaded).overall.blocked, 1)
+})
+
+test('parameter values: validation per type, seeding from defaults, effective overlay', () => {
+  const root = tmpRoot()
+  const { graph, currency } = storeGraph(root)
+  const choice = currency.params![0]
+  assert.equal(validateParamValue(choice, 'EUR'), null)
+  assert.match(validateParamValue(choice, 'JPY')!, /not one of/)
+  assert.equal(validateParamValue({ name: 'b', type: 'boolean' }, 'true'), null)
+  assert.match(validateParamValue({ name: 'b', type: 'boolean' }, 'yes')!, /true/)
+  assert.equal(validateParamValue({ name: 'n', type: 'number' }, '3.5'), null)
+  assert.match(validateParamValue({ name: 'n', type: 'number' }, 'abc')!, /not a number/)
+  assert.equal(validateParamValue({ name: 'c', type: 'color' }, '#a1b2c3'), null)
+  assert.match(validateParamValue({ name: 'c', type: 'color' }, 'red')!, /hex color/)
+
+  // setNodeParam refuses bad values and unknown params/nodes, sets good ones.
+  assert.match(setNodeParam(graph, currency.id, 'currency', 'JPY')!, /not one of/)
+  assert.equal(setNodeParam(graph, currency.id, 'currency', 'EUR'), null)
+  assert.equal(currency.values?.currency, 'EUR')
+  assert.match(setNodeParam(graph, currency.id, 'nope', 'x')!, /no parameter/)
+  assert.match(setNodeParam(graph, 'missing', 'currency', 'EUR')!, /No node/)
+  // The summary shows the effective value; markdown renders it.
+  assert.equal(nodeSummary(currency).params?.[0].value, 'EUR')
+  assert.match(renderFeatureMarkdown(graph), /currency: choice = EUR/)
+
+  // Seeding fills only unset defaults.
+  const fresh = addNode(graph, {
+    name: 'Tax', kind: 'setting',
+    params: [
+      { name: 'rate', type: 'number', default: '20' },
+      { name: 'label', type: 'text' },
+    ],
+  })
+  assert.equal(seedValues(fresh), 1)
+  assert.deepEqual(effectiveValues(fresh), { rate: '20' })
+  assert.equal(seedValues(fresh), 0)
+})
+
+test('editing: rename, reparent with cycle refusals, remove lift vs cascade, unlink', () => {
+  const root = tmpRoot()
+  const { graph, storefront, engine, prices, cart, checkout } = storeGraph(root)
+
+  assert.equal(renameNode(graph, prices.id, 'Price board'), true)
+  assert.equal(getNode(graph, prices.id)?.name, 'Price board')
+  assert.equal(renameNode(graph, 'missing', 'X'), false)
+  assert.equal(renameNode(graph, prices.id, '  '), false)
+
+  // Reparent Cart from Engine to Storefront; cycle attempts refused.
+  assert.equal(reparentNode(graph, cart.id, storefront.id), null)
+  assert.equal(getNode(graph, cart.id)?.parent, storefront.id)
+  assert.match(reparentNode(graph, storefront.id, cart.id)!, /containment cycle/)
+  assert.match(reparentNode(graph, storefront.id, storefront.id)!, /containment cycle/)
+  assert.match(reparentNode(graph, cart.id, 'missing')!, /No node with id/)
+  assert.equal(reparentNode(graph, cart.id, undefined), null)
+  assert.equal(getNode(graph, cart.id)?.parent, undefined)
+
+  // Unlink: the configures edge exists in the fixture (currency → prices).
+  const currency = graph.nodes.find(n => n.name === 'Currency')!
+  assert.equal(removeEdge(graph, { from: currency.id, to: prices.id, type: 'configures' }), true)
+  assert.equal(removeEdge(graph, { from: currency.id, to: prices.id, type: 'configures' }), false)
+
+  // Lift: removing Engine lifts Checkout (its only remaining child here) to top level.
+  const lifted = removeNode(graph, engine.id, 'lift')!
+  assert.deepEqual(lifted.removed.map(n => n.id), [engine.id])
+  assert.equal(lifted.lifted, 2) // Checkout + Payments were Engine's children (Cart was moved out)
+  assert.equal(getNode(graph, checkout.id)?.parent, undefined)
+  assert.ok(getNode(graph, checkout.id), 'lifted child survives')
+
+  // Cascade on a fresh graph removes the subtree and its edges.
+  const root2 = tmpRoot()
+  const g2 = storeGraph(root2)
+  const cascaded = removeNode(g2.graph, g2.engine.id, 'cascade')!
+  assert.equal(cascaded.removed.length, 4) // Engine, Cart, Payments, Checkout
+  assert.equal(getNode(g2.graph, g2.checkout.id), null)
+  assert.equal(g2.graph.edges.length, 1, 'only the configures edge outside the subtree survives')
+  assert.equal(removeNode(g2.graph, 'missing', 'lift'), null)
+})
+
+test('lint: clean graph passes; each planted defect is reported; walks survive a parent cycle', () => {
+  const root = tmpRoot()
+  const { graph, storefront, prices, checkout, currency } = storeGraph(root)
+  assert.deepEqual(lintGraph(graph), [])
+
+  // Plant defects the way a hand edit could.
+  prices.parent = 'f-missing'
+  graph.nodes.push({ ...currency, id: currency.id, name: 'Currency clone' }) // duplicate id
+  const broken = graph.nodes.find(n => n.name === 'Checkout')!
+  broken.kind = 'widget' as typeof broken.kind
+  broken.values = { nope: '1' }
+  currency.values = { currency: 'BTC' } // off-schema value
+  graph.edges.push({ from: checkout.id, to: 'f-gone', type: 'renders' })
+  graph.edges.push({ from: checkout.id, to: prices.id, type: 'depends-on' })
+  graph.edges.push({ from: prices.id, to: checkout.id, type: 'depends-on' })
+  graph.edges.push({ from: prices.id, to: checkout.id, type: 'depends-on' }) // duplicate edge
+
+  const kinds = lintGraph(graph).map(p => p.kind)
+  for (const kind of ['duplicate-id', 'unknown-kind', 'dangling-parent', 'dangling-edge', 'duplicate-edge', 'depends-on-cycle', 'orphan-value', 'invalid-value'] as const) {
+    assert.ok(kinds.includes(kind), `lint reports ${kind} (got: ${kinds.join(', ')})`)
+  }
+
+  // A containment cycle is reported — and the walks terminate.
+  prices.parent = storefront.id
+  storefront.parent = prices.id
+  const cycleKinds = lintGraph(graph).map(p => p.kind)
+  assert.ok(cycleKinds.includes('parent-cycle'), `lint reports parent-cycle (got: ${cycleKinds.join(', ')})`)
+  assert.ok(subtree(graph, storefront.id).length >= 2, 'subtree terminates on a cycled graph')
+  assert.match(renderFeatureMarkdown(graph), /Feature graph/, 'markdown render terminates on a cycled graph')
 })

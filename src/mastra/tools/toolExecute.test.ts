@@ -10,10 +10,10 @@ import { pageSectionsTool, runInPageTool } from './layoutTools.js'
 import { readSymbolTool, unpackCodeTool } from './codeTools.js'
 import { codebaseMapTool, installCatalogComponentTool } from './codebaseMapTools.js'
 import {
-  featureAddNodeTool, featureLinkTool, featureQueryTool, featureSetStatusTool,
+  featureAddNodeTool, featureBuildNodeTool, featureEditNodeTool, featureInstallPackTool, featureLinkTool, featureLintTool, featureQueryTool, featureReconcileTool, featureRemoveNodeTool, featureSetParamTool, featureSetStatusTool, featureUninstallPackTool, featureUnlinkTool,
 } from './featureTools.js'
 import {
-  planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
+  planAddQuestionTool, planFinishTool, planFromGraphTool, planRemoveQuestionTool,
   planReviseQuestionTool, planUpdateTaskTool,
 } from './planTools.js'
 import { poolOpenTool, runProjectCheckTool } from './realFsTools.js'
@@ -202,7 +202,7 @@ describe('catalog + template tools execute()', () => {
 
       const neither = await run(findComponentTool, {})
       assert.equal(neither.ok, false)
-      assert.match(String(neither.error), /Pass a query or a tag/)
+      assert.match(String(neither.error), /Pass a query, a tag, or a pack id/)
 
       const nonsense = await run(findComponentTool, { query: 'xqzwkj' })
       assert.equal(nonsense.ok, true)
@@ -252,6 +252,284 @@ describe('catalog + template tools execute()', () => {
       const unknown = await run(installCatalogComponentTool, { tag: 'NoSuchThing' })
       assert.equal(unknown.ok, false)
       assert.match(String(unknown.error), /No catalog component tagged/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('find-component searches top-down: packs surface whole features, exact pack id returns the subgraph', async () => {
+    const root = tmpProject({})
+    try {
+      const search = await run(findComponentTool, { query: 'admin configuration for a store' })
+      assert.equal(search.ok, true)
+      const packs = search.packs as Array<{ id: string }> | undefined
+      assert.equal(packs?.[0]?.id, 'admin-configuration', 'the whole feature outranks its pieces')
+
+      const pieces = await run(findComponentTool, { query: 'button' })
+      assert.equal(pieces.ok, true)
+      assert.equal(pieces.packs, undefined, 'piece words do not summon packs')
+
+      const full = await run(findComponentTool, { pack: 'admin-configuration' })
+      assert.equal(full.ok, true)
+      assert.equal(full.tier, 'full')
+      const pack = full.pack as { nodes: unknown[], externalLinks: unknown[] }
+      assert.equal(pack.nodes.length, 6)
+      assert.ok(pack.externalLinks.length >= 4, 'the pack declares how it configures the host app')
+
+      const unknownPack = await run(findComponentTool, { pack: 'no-such-pack' })
+      assert.equal(unknownPack.ok, false)
+      assert.match(String(unknownPack.error), /No feature pack with id/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+/**
+ * Feature graph tools: add-node bootstraps the graph, every mutation
+ * persists to ai-features/, queries read the same store back, and
+ * bad ids / duplicate edges come back as error values.
+ */
+describe('feature graph tools execute()', () => {
+  it('queries and status on a graph-less project return the no-graph error value', async () => {
+    const root = tmpProject({})
+    try {
+      const q = await run(featureQueryTool, { mode: 'overview' })
+      assert.equal(q.ok, false)
+      assert.match(String(q.error), /No feature graph/)
+      const s = await run(featureSetStatusTool, { id: 'f-x', status: 'done' })
+      assert.equal(s.ok, false)
+      assert.match(String(s.error), /No feature graph/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('builds a small graph end to end: bootstrap, link, status, query', async () => {
+    const root = tmpProject({})
+    try {
+      const region = await run(featureAddNodeTool, { name: 'Storefront', kind: 'region' })
+      assert.equal(region.ok, true)
+      const regionId = (region.node as { id: string }).id
+      assert.ok(fs.existsSync(path.join(root, 'ai-features/graph.json')), 'first add bootstraps the graph')
+
+      const badParent = await run(featureAddNodeTool, { name: 'Orphan', kind: 'feature', parentId: 'f-missing' })
+      assert.equal(badParent.ok, false)
+      assert.match(String(badParent.error), /No node with id/)
+
+      const prices = await run(featureAddNodeTool, { name: 'Price display', kind: 'feature', parentId: regionId })
+      const pricesId = (prices.node as { id: string }).id
+      const currency = await run(featureAddNodeTool, {
+        name: 'Currency', kind: 'setting', parentId: regionId,
+        params: [{ name: 'currency', type: 'choice', options: ['USD', 'EUR'], default: 'USD' }],
+      })
+      const currencyId = (currency.node as { id: string }).id
+
+      const linked = await run(featureLinkTool, { from: currencyId, to: pricesId, type: 'configures' })
+      assert.equal(linked.ok, true)
+      const dup = await run(featureLinkTool, { from: currencyId, to: pricesId, type: 'configures' })
+      assert.equal(dup.ok, false)
+      const badLink = await run(featureLinkTool, { from: currencyId, to: 'f-missing', type: 'configures' })
+      assert.equal(badLink.ok, false)
+
+      const configured = await run(featureQueryTool, { mode: 'configures', id: currencyId })
+      assert.equal(configured.ok, true)
+      assert.deepEqual((configured.configures as Array<{ id: string }>).map(n => n.id), [pricesId])
+
+      const statused = await run(featureSetStatusTool, { id: pricesId, status: 'done' })
+      assert.equal(statused.ok, true)
+      assert.equal((statused.overall as { pct: number }).pct, 50, 'one of two counted leaves built (region excluded)')
+      const badStatus = await run(featureSetStatusTool, { id: 'f-missing', status: 'done' })
+      assert.equal(badStatus.ok, false)
+
+      const overview = await run(featureQueryTool, { mode: 'overview' })
+      assert.equal(overview.ok, true)
+      assert.equal((overview.regions as unknown[]).length, 1)
+      assert.ok(fs.existsSync(path.join(root, 'ai-features/graph.md')), 'rendered outline written beside the canonical json')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('feature-install-pack grafts a pack, refuses a repeat, and errors on unknown packs', async () => {
+    const root = tmpProject({})
+    try {
+      const unknown = await run(featureInstallPackTool, { packId: 'no-such-pack' })
+      assert.equal(unknown.ok, false)
+      assert.match(String(unknown.error), /No feature pack with id/)
+
+      const installed = await run(featureInstallPackTool, { packId: 'settings' })
+      assert.equal(installed.ok, true)
+      assert.equal((installed.added as unknown[]).length, 5)
+      assert.equal(installed.totalNodes, 5)
+      assert.ok(fs.existsSync(path.join(root, 'ai-features/graph.json')))
+
+      const again = await run(featureInstallPackTool, { packId: 'settings' })
+      assert.equal(again.ok, false)
+      assert.match(String(again.error), /already installed/)
+
+      const overview = await run(featureQueryTool, { mode: 'overview' })
+      assert.equal(overview.ok, true)
+      assert.equal((overview.overall as { total: number }).total, 5, 'the grafted settings nodes are in the graph and counted')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('the loop closes: plan-from-graph generates, plan-update-task writes node status back', async () => {
+    const root = tmpProject({})
+    try {
+      const noGraph = await run(planFromGraphTool, { packId: 'auth' })
+      assert.equal(noGraph.ok, false)
+      assert.match(String(noGraph.error), /No feature graph/)
+
+      await run(featureInstallPackTool, { packId: 'auth' })
+      const generated = await run(planFromGraphTool, { packId: 'auth' })
+      assert.equal(generated.ok, true)
+      assert.equal(generated.kind, 'install')
+      const tasks = generated.tasks as Array<{ id: string, text: string, nodeId: string }>
+      const session = tasks.find(t => t.text === 'Session service')!
+      assert.ok(session.nodeId)
+
+      const doing = await run(planUpdateTaskTool, { id: session.id, status: 'doing' })
+      assert.equal(doing.ok, true)
+      const mid = await run(featureQueryTool, { mode: 'status', status: 'building' })
+      assert.deepEqual((mid.nodes as Array<{ id: string }>).map(n => n.id), [session.nodeId], 'the node is building, via the plan save alone')
+
+      const done = await run(planUpdateTaskTool, { id: session.id, status: 'done', detail: 'token issue/check in place' })
+      assert.equal(done.ok, true)
+      const after = await run(featureQueryTool, { mode: 'status', status: 'done' })
+      assert.deepEqual((after.nodes as Array<{ id: string }>).map(n => n.id), [session.nodeId])
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('build-out: feature-build-node places bindings, feature-set-param validates and writes the config file', async () => {
+    const root = tmpProject({})
+    try {
+      const installed = await run(featureInstallPackTool, { packId: 'admin-configuration' })
+      assert.equal(installed.ok, true)
+      const added = installed.added as Array<{ id: string, name: string }>
+      const currency = added.find(n => n.name === 'Currency & pricing')!
+
+      // The graft seeded values from defaults — visible in the canonical graph.
+      const graphDoc = JSON.parse(fs.readFileSync(path.join(root, 'ai-features/graph.json'), 'utf-8')) as
+        { nodes: Array<{ id: string, values?: Record<string, string> }> }
+      assert.equal(graphDoc.nodes.find(n => n.id === currency.id)?.values?.currency, 'USD')
+
+      // Set-param validates against the schema, then writes graph + config.
+      const bad = await run(featureSetParamTool, { id: currency.id, name: 'currency', value: 'BTC' })
+      assert.equal(bad.ok, false)
+      assert.match(String(bad.error), /not one of/)
+      const set = await run(featureSetParamTool, { id: currency.id, name: 'currency', value: 'EUR' })
+      assert.equal(set.ok, true)
+      assert.equal(set.configFile, '/src/config/currency-pricing.json')
+      const config = JSON.parse(fs.readFileSync(path.join(root, 'src/config/currency-pricing.json'), 'utf-8'))
+      assert.equal(config.currency, 'EUR')
+      assert.equal(config['tax-inclusive-prices'], 'false')
+
+      // Building a bound node places its template + component and flips status.
+      const bound = await run(featureAddNodeTool, {
+        name: 'Pricing page', kind: 'screen', template: 'pricing-section', component: 'Button',
+      })
+      assert.equal(bound.ok, true)
+      const boundId = (bound.node as { id: string }).id
+      const built = await run(featureBuildNodeTool, { id: boundId })
+      assert.equal(built.ok, true)
+      const t = (built as { template?: { state: string, dest?: string } }).template
+      assert.equal(t?.state, 'placed')
+      assert.ok(fs.existsSync(path.join(root, '.' + (t?.dest ?? ''))))
+      assert.equal((built as { component?: { state: string } }).component?.state, 'placed')
+      assert.ok(fs.existsSync(path.join(root, 'src/components/ui/button.tsx')))
+      const again = await run(featureBuildNodeTool, { id: boundId })
+      assert.equal((again as { template?: { state: string } }).template?.state, 'already')
+      assert.equal((again as { component?: { state: string } }).component?.state, 'already')
+      const building = await run(featureQueryTool, { mode: 'status', status: 'building' })
+      assert.ok((building.nodes as Array<{ id: string }>).some(n => n.id === boundId))
+
+      const missing = await run(featureBuildNodeTool, { id: 'f-nope' })
+      assert.equal(missing.ok, false)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('editing: rename/reparent, unlink, remove lift, lint, and pack uninstall through execute()', async () => {
+    const root = tmpProject({})
+    try {
+      const region = await run(featureAddNodeTool, { name: 'Storefront', kind: 'region' })
+      const regionId = (region.node as { id: string }).id
+      const child = await run(featureAddNodeTool, { name: 'Prices', kind: 'feature', parentId: regionId })
+      const childId = (child.node as { id: string }).id
+
+      const renamed = await run(featureEditNodeTool, { id: childId, name: 'Price board' })
+      assert.equal(renamed.ok, true)
+      assert.equal((renamed.node as { name: string }).name, 'Price board')
+      const cyclic = await run(featureEditNodeTool, { id: regionId, parentId: childId })
+      assert.equal(cyclic.ok, false)
+      assert.match(String(cyclic.error), /containment cycle/)
+      const detached = await run(featureEditNodeTool, { id: childId, parentId: null })
+      assert.equal(detached.ok, true)
+      assert.equal((detached.node as { parent?: string }).parent, undefined)
+
+      const linked = await run(featureLinkTool, { from: childId, to: regionId, type: 'renders' })
+      assert.equal(linked.ok, true)
+      const unlinked = await run(featureUnlinkTool, { from: childId, to: regionId, type: 'renders' })
+      assert.equal(unlinked.ok, true)
+      const unlinkMiss = await run(featureUnlinkTool, { from: childId, to: regionId, type: 'renders' })
+      assert.equal(unlinkMiss.ok, false)
+
+      const clean = await run(featureLintTool, {})
+      assert.equal(clean.ok, true)
+      assert.deepEqual(clean.problems, [])
+
+      // Break the graph on disk the way a hand edit could, then lint sees it.
+      const file = path.join(root, 'ai-features/graph.json')
+      const doc = JSON.parse(fs.readFileSync(file, 'utf-8')) as { nodes: Array<{ id: string, parent?: string }> }
+      doc.nodes.find(n => n.id === childId)!.parent = 'f-ghost'
+      fs.writeFileSync(file, JSON.stringify(doc))
+      const dirty = await run(featureLintTool, {})
+      assert.equal(dirty.ok, false)
+      assert.ok((dirty.problems as Array<{ kind: string }>).some(p => p.kind === 'dangling-parent'))
+
+      const removed = await run(featureRemoveNodeTool, { id: regionId, mode: 'lift' })
+      assert.equal(removed.ok, true)
+      assert.equal(removed.totalNodes, 1, 'the child survives a lift removal of its region')
+
+      const installed = await run(featureInstallPackTool, { packId: 'printing' })
+      assert.equal(installed.ok, true)
+      const uninstalled = await run(featureUninstallPackTool, { packId: 'printing' })
+      assert.equal(uninstalled.ok, true)
+      assert.equal((uninstalled.removed as unknown[]).length, 5)
+      assert.equal(uninstalled.totalNodes, 1)
+      const uninstallMiss = await run(featureUninstallPackTool, { packId: 'printing' })
+      assert.equal(uninstallMiss.ok, false)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('pending links persist, resurface on add-node, and reconcile reports drift', async () => {
+    const root = tmpProject({})
+    try {
+      const installed = await run(featureInstallPackTool, { packId: 'printing' })
+      assert.equal(installed.ok, true)
+      assert.equal((installed.pendingLinks as unknown[]).length, 2, 'unwired links recorded on the graph, not just reported')
+
+      const pending = await run(featureQueryTool, { mode: 'pending' })
+      assert.equal(pending.ok, true)
+      assert.equal((pending.pendingLinks as Array<{ fromName: string }>)[0].fromName, 'Document content')
+
+      // Adding the matching node wires the pendings and says so.
+      const invoice = await run(featureAddNodeTool, { name: 'Invoice list', kind: 'data' })
+      assert.equal(invoice.ok, true)
+      assert.equal((invoice.resolvedLinks as unknown[]).length, 2)
+      const after = await run(featureQueryTool, { mode: 'pending' })
+      assert.deepEqual(after.pendingLinks, [])
+
+      // Reconcile: nothing done yet, so nothing to check.
+      const clean = await run(featureReconcileTool, {})
+      assert.equal(clean.ok, true)
+      assert.equal(clean.checked, 0)
+
+      // Claim a component is done without placing it: drift.
+      const btn = await run(featureAddNodeTool, { name: 'Save button', kind: 'component', component: 'Button' })
+      const btnId = (btn.node as { id: string }).id
+      await run(featureSetStatusTool, { id: btnId, status: 'done' })
+      const drifted = await run(featureReconcileTool, {})
+      assert.equal(drifted.ok, false)
+      assert.equal((drifted.drift as unknown[]).length, 1)
+
+      // Build it out and the drift clears.
+      await run(featureBuildNodeTool, { id: btnId })
+      const healed = await run(featureReconcileTool, {})
+      assert.equal(healed.ok, true)
+      assert.deepEqual(healed.drift, [])
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

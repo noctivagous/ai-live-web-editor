@@ -20,8 +20,8 @@ function contrast(a: string, b: string): number {
 }
 
 describe('themes', () => {
-  it('defines exactly the three themes, in picker order', () => {
-    assert.deepEqual(UI_THEMES.map(t => t.id), ['dark-2020s', 'dark-pro-classic', 'gray-pro-classic'])
+  it('defines exactly the five themes, in picker order', () => {
+    assert.deepEqual(UI_THEMES.map(t => t.id), ['dark-2020s', 'dark-pro-classic', 'gray-pro-classic', 'light-gray-2020s', 'lightgray-2020s-regular'])
     assert.deepEqual(UI_THEME_IDS, UI_THEMES.map(t => t.id))
   })
 
@@ -102,10 +102,33 @@ describe('themes', () => {
     assert.equal(pro.redText, flat.redText)
   })
 
+  it('the two light-gray themes are light, readable, and genuinely different palettes', () => {
+    const faithful = themeById('light-gray-2020s').tokens
+    const regular = themeById('lightgray-2020s-regular').tokens
+    for (const t of [faithful, regular]) {
+      assert.ok(luminance(t.bg) > 0.15, 'light ground')
+      assert.ok(contrast(t.text, t.panel) > 7, 'text on panel reads at AAA')
+      assert.ok(contrast(t.accentSoftText, t.accentSoftBg) > 3.5, 'accent-soft text reads')
+    }
+    // The faithful theme carries the prototype artifact's values.
+    assert.equal(faithful.panel, '#f6f5f1')
+    assert.equal(faithful.blue, '#2f5aa6')
+    assert.equal(faithful.accentSoftBg, '#dbe6f7')
+    assert.equal(faithful.cardHover, faithful.accentSoftBg)
+    assert.match(faithful.fontUi, /Tahoma/)
+    // The regular theme is its own derivation, not a copy.
+    assert.notEqual(regular.bg, faithful.bg)
+    assert.notEqual(regular.blue, faithful.blue)
+    assert.notEqual(regular.cardHover, faithful.cardHover)
+    assert.match(regular.fontUi, /system-ui/)
+  })
+
   it('monaco mapping and font-size scale', () => {
     assert.equal(monacoThemeFor('dark-2020s'), 'vs-dark')
     assert.equal(monacoThemeFor('dark-pro-classic'), 'vs-dark')
     assert.equal(monacoThemeFor('gray-pro-classic'), 'light')
+    assert.equal(monacoThemeFor('light-gray-2020s'), 'light')
+    assert.equal(monacoThemeFor('lightgray-2020s-regular'), 'light')
     assert.equal(uiScaleFor(UI_FONT_SIZE_DEFAULT), 1)
     assert.ok(uiScaleFor(16) > 1 && uiScaleFor(11) < 1)
   })

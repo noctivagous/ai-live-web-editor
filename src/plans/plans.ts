@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { openaiApiKey, openaiBaseUrl, openaiModelName } from '../env.js'
 import { getFsRoot } from '../launcher.js'
+import { getFeatureGraph, getNode, saveFeatureGraph, setNodeStatus } from '../features/features.js'
 
 export type PlanStatus = 'draft' | 'approved' | 'executing' | 'done'
 export type PlanKind = 'feature' | 'app' | 'install' | 'fix' | 'refactor'
@@ -45,6 +46,9 @@ export interface PlanTask {
   text: string
   status: 'todo' | 'doing' | 'done'
   detail?: string
+  /** Feature-graph node this task builds (plan ↔ graph loop):
+   *  marking the task doing/done writes the node's status back. */
+  nodeId?: string
 }
 
 export interface PlanDoc {
@@ -171,7 +175,41 @@ export function savePlan(doc: PlanDoc, root?: string): PlanDoc {
   fs.writeFileSync(p.json, JSON.stringify(doc, null, 2), 'utf-8')
   fs.writeFileSync(p.md, renderPlanMarkdown(doc), 'utf-8')
   fs.writeFileSync(p.xml, renderPlanXml(doc), 'utf-8')
+  syncGraphStatuses(doc, root)
   return doc
+}
+
+/**
+ * The plan ↔ graph loop's write-back, at the store so EVERY save
+ * path (agent tools, the HTTP API, the overlay) syncs alike: a task
+ * tied to a feature-graph node promotes that node's status —
+ * doing → building, done → done. Promotions only, never demotions:
+ * moving a node backwards is a decision for feature-set-status.
+ * Best-effort by construction — a graph problem never breaks a
+ * plan save.
+ */
+function syncGraphStatuses(doc: PlanDoc, root?: string): void {
+  if (!doc.tasks.some(t => t.nodeId)) return
+  try {
+    const graph = getFeatureGraph(root)
+    if (!graph) return
+    let changed = false
+    for (const task of doc.tasks) {
+      if (!task.nodeId) continue
+      const target = task.status === 'doing' ? 'building' : task.status === 'done' ? 'done' : null
+      if (!target) continue
+      const node = getNode(graph, task.nodeId)
+      if (node && node.status !== target && setNodeStatus(graph, task.nodeId, target)) changed = true
+    }
+    if (changed) saveFeatureGraph(graph, root)
+  } catch { /* the graph never breaks a plan save */ }
+}
+
+/** Append a task with a fresh stable id; existing tasks are untouched. */
+export function addTask(doc: PlanDoc, task: Omit<PlanTask, 'id' | 'status'> & { status?: PlanTask['status'] }): PlanTask {
+  const created: PlanTask = { ...task, id: nextId('t'), status: task.status ?? 'todo' }
+  doc.tasks.push(created)
+  return created
 }
 
 /** Append a question with a fresh stable id; existing answers are untouched. */
@@ -224,7 +262,7 @@ export function renderPlanMarkdown(doc: PlanDoc): string {
     lines.push('## Tasks')
     for (const t of doc.tasks) {
       const box = t.status === 'done' ? '[x]' : t.status === 'doing' ? '[~]' : '[ ]'
-      lines.push(`- ${box} ${t.text}${t.detail ? ` — ${t.detail}` : ''}`)
+      lines.push(`- ${box} ${t.text}${t.detail ? ` — ${t.detail}` : ''}${t.nodeId ? ` (graph node ${t.nodeId})` : ''}`)
     }
     lines.push('')
   }

@@ -58,8 +58,10 @@ export interface FeatureNode {
   pack?: string
   /** The ladder: a layout, template or pack id this node derives from / realizes. */
   derivedFrom?: string
-  /** Setting nodes: the parameters this node holds. */
+  /** Setting nodes: the parameters this node holds (the schema). */
   params?: FeatureParam[]
+  /** Current parameter values, by param name. Absent = the default rules. */
+  values?: Record<string, string>
   note?: string
 }
 
@@ -69,6 +71,22 @@ export interface FeatureEdge {
   type: FeatureEdgeType
 }
 
+/**
+ * A pack external link that matched nothing when its pack was
+ * grafted, kept on the graph (never silently dropped): when a
+ * node whose name matches `match` appears later, the link wires
+ * itself and leaves this list. `from` is the GRAFTED graph id of
+ * the pack-side endpoint.
+ */
+export interface PendingLink {
+  pack: string
+  from: string
+  type: FeatureEdgeType
+  role: string
+  match: string
+  direction: 'out' | 'in'
+}
+
 export interface FeatureGraph {
   version: 1
   title: string
@@ -76,6 +94,7 @@ export interface FeatureGraph {
   updatedAt: number
   nodes: FeatureNode[]
   edges: FeatureEdge[]
+  pendingLinks?: PendingLink[]
 }
 
 export const FEATURE_STATUSES: FeatureStatus[] = [
@@ -126,6 +145,7 @@ export function getFeatureGraph(root?: string): FeatureGraph | null {
       updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0,
       nodes: raw.nodes,
       edges: raw.edges,
+      ...(Array.isArray(raw.pendingLinks) ? { pendingLinks: raw.pendingLinks } : {}),
     }
   } catch {
     return null
@@ -175,6 +195,64 @@ export function setNodeStatus(graph: FeatureGraph, id: string, status: FeatureSt
   return true
 }
 
+/** Fill a node's values from its params' defaults, where unset. */
+export function seedValues(node: FeatureNode): number {
+  let seeded = 0
+  for (const param of node.params ?? []) {
+    if (param.default === undefined) continue
+    node.values ??= {}
+    if (node.values[param.name] === undefined) {
+      node.values[param.name] = param.default
+      seeded += 1
+    }
+  }
+  return seeded
+}
+
+/** The values an app would read: defaults overlaid with set values. */
+export function effectiveValues(node: FeatureNode): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const param of node.params ?? []) {
+    const value = node.values?.[param.name] ?? param.default
+    if (value !== undefined) out[param.name] = value
+  }
+  return out
+}
+
+/** Null when the value fits the param's schema, else the reason. */
+export function validateParamValue(param: FeatureParam, value: string): string | null {
+  switch (param.type) {
+    case 'choice':
+      return param.options?.includes(value)
+        ? null
+        : `"${value}" is not one of: ${(param.options ?? []).join(', ')}`
+    case 'boolean':
+      return value === 'true' || value === 'false' ? null : 'expected "true" or "false"'
+    case 'number':
+      return value.trim() !== '' && !Number.isNaN(Number(value)) ? null : `"${value}" is not a number`
+    case 'color':
+      return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value) ? null : `"${value}" is not a hex color (#rgb or #rrggbb)`
+    case 'text':
+      return value.length <= 500 ? null : 'text values are capped at 500 characters'
+  }
+}
+
+/**
+ * Set one parameter value on a node, validated against its schema.
+ * Returns an error string, or null on success.
+ */
+export function setNodeParam(graph: FeatureGraph, id: string, name: string, value: string): string | null {
+  const node = getNode(graph, id)
+  if (!node) return `No node with id ${id} in the feature graph.`
+  const param = node.params?.find(p => p.name === name)
+  if (!param) return `Node "${node.name}" has no parameter named ${name}.`
+  const problem = validateParamValue(param, value)
+  if (problem) return `Invalid value for ${name}: ${problem}.`
+  node.values ??= {}
+  node.values[name] = value
+  return null
+}
+
 /** Add an edge; false when an endpoint is missing, it self-links, or it already exists. */
 export function addEdge(graph: FeatureGraph, edge: FeatureEdge): boolean {
   if (edge.from === edge.to) return false
@@ -182,6 +260,169 @@ export function addEdge(graph: FeatureGraph, edge: FeatureEdge): boolean {
   if (graph.edges.some(e => e.from === edge.from && e.to === edge.to && e.type === edge.type)) return false
   graph.edges.push(edge)
   return true
+}
+
+export function removeEdge(graph: FeatureGraph, edge: FeatureEdge): boolean {
+  const before = graph.edges.length
+  graph.edges = graph.edges.filter(e => !(e.from === edge.from && e.to === edge.to && e.type === edge.type))
+  return graph.edges.length < before
+}
+
+/* ── Editing ────────────────────────────────────────────────────
+ * The graph can be reshaped after the fact, not just grown. All
+ * edits are structural only — statuses and plans are untouched,
+ * and refusals (missing nodes, cycles) come back as values. */
+
+export function renameNode(graph: FeatureGraph, id: string, name: string): boolean {
+  const node = getNode(graph, id)
+  if (!node || !name.trim()) return false
+  node.name = name.trim()
+  return true
+}
+
+/**
+ * Move a node under a new parent (undefined = top level). Returns
+ * an error string, or null on success. Refuses anything that
+ * would create a containment cycle.
+ */
+export function reparentNode(graph: FeatureGraph, id: string, parentId: string | undefined): string | null {
+  const node = getNode(graph, id)
+  if (!node) return `No node with id ${id} in the feature graph.`
+  if (parentId !== undefined) {
+    const parent = getNode(graph, parentId)
+    if (!parent) return `No node with id ${parentId} in the feature graph.`
+    if (subtree(graph, id).some(n => n.id === parentId)) {
+      return `"${parent.name}" is the node itself or inside its subtree — reparenting there would create a containment cycle.`
+    }
+  }
+  if (parentId === undefined) delete node.parent
+  else node.parent = parentId
+  return null
+}
+
+export interface RemoveResult { removed: FeatureNode[], lifted: number }
+
+/**
+ * Remove a node. `lift` (the safe default): its children move up
+ * to the node's parent. `cascade`: the whole subtree goes. Edges
+ * touching removed nodes go with them. Returns null for an
+ * unknown id.
+ */
+export function removeNode(graph: FeatureGraph, id: string, mode: 'cascade' | 'lift'): RemoveResult | null {
+  const node = getNode(graph, id)
+  if (!node) return null
+  const removedIds = new Set(mode === 'cascade' ? subtree(graph, id).map(n => n.id) : [id])
+  const children = mode === 'lift' ? childrenOf(graph, id) : []
+  for (const child of children) {
+    if (node.parent) child.parent = node.parent
+    else delete child.parent
+  }
+  const removed = graph.nodes.filter(n => removedIds.has(n.id))
+  graph.nodes = graph.nodes.filter(n => !removedIds.has(n.id))
+  graph.edges = graph.edges.filter(e => !removedIds.has(e.from) && !removedIds.has(e.to))
+  if (graph.pendingLinks?.length) {
+    graph.pendingLinks = graph.pendingLinks.filter(l => !removedIds.has(l.from))
+  }
+  return { removed, lifted: children.length }
+}
+
+/* ── Lint ───────────────────────────────────────────────────────
+ * graph.json is a file a person can hand-edit; lint is how a bad
+ * edit is found before it confuses a walk, a rollup or a plan.
+ * Read-only: lint reports, the editing ops fix. */
+
+export interface GraphProblem {
+  kind: 'duplicate-id' | 'unknown-kind' | 'unknown-status' | 'dangling-parent' | 'parent-cycle'
+    | 'dangling-edge' | 'duplicate-edge' | 'depends-on-cycle' | 'orphan-value' | 'invalid-value'
+  message: string
+  nodeId?: string
+}
+
+export function lintGraph(graph: FeatureGraph): GraphProblem[] {
+  const problems: GraphProblem[] = []
+  const ids = new Set<string>()
+  for (const node of graph.nodes) {
+    if (ids.has(node.id)) problems.push({ kind: 'duplicate-id', message: `Duplicate node id ${node.id} ("${node.name}")`, nodeId: node.id })
+    ids.add(node.id)
+    if (!FEATURE_NODE_KINDS.includes(node.kind)) {
+      problems.push({ kind: 'unknown-kind', message: `"${node.name}" has unknown kind "${node.kind}"`, nodeId: node.id })
+    }
+    if (!FEATURE_STATUSES.includes(node.status)) {
+      problems.push({ kind: 'unknown-status', message: `"${node.name}" has unknown status "${node.status}"`, nodeId: node.id })
+    }
+    if (node.parent && !ids.has(node.parent) && !graph.nodes.some(n => n.id === node.parent)) {
+      problems.push({ kind: 'dangling-parent', message: `"${node.name}" points at missing parent ${node.parent}`, nodeId: node.id })
+    }
+    for (const key of Object.keys(node.values ?? {})) {
+      const param = node.params?.find(p => p.name === key)
+      if (!param) {
+        problems.push({ kind: 'orphan-value', message: `"${node.name}" holds a value for "${key}", which is not one of its parameters`, nodeId: node.id })
+      } else {
+        const problem = validateParamValue(param, node.values![key])
+        if (problem) problems.push({ kind: 'invalid-value', message: `"${node.name}" parameter ${key}: ${problem}`, nodeId: node.id })
+      }
+    }
+  }
+
+  // Containment cycles: walk each node's parent chain; report each
+  // distinct cycle once (keyed by its sorted member set).
+  const cyclesSeen = new Set<string>()
+  for (const node of graph.nodes) {
+    const chain: string[] = []
+    const position = new Map<string, number>()
+    let current: FeatureNode | undefined = node
+    while (current?.parent) {
+      if (position.has(current.parent)) {
+        const members = chain.slice(position.get(current.parent)!).sort()
+        const key = members.join('|')
+        if (!cyclesSeen.has(key)) {
+          cyclesSeen.add(key)
+          problems.push({
+            kind: 'parent-cycle',
+            message: `Containment cycle: ${members.map(m => getNode(graph, m)?.name ?? m).join(' → ')}`,
+            nodeId: members[0],
+          })
+        }
+        break
+      }
+      position.set(current.parent, chain.length)
+      chain.push(current.parent)
+      current = getNode(graph, current.parent) ?? undefined
+    }
+  }
+
+  const edgeKeys = new Set<string>()
+  for (const edge of graph.edges) {
+    const key = `${edge.from}|${edge.type}|${edge.to}`
+    if (edgeKeys.has(key)) problems.push({ kind: 'duplicate-edge', message: `Duplicate edge ${edge.from} —${edge.type}→ ${edge.to}` })
+    edgeKeys.add(key)
+    if (!ids.has(edge.from) || !ids.has(edge.to)) {
+      problems.push({ kind: 'dangling-edge', message: `Edge ${edge.from} —${edge.type}→ ${edge.to} points at a missing node` })
+    }
+  }
+
+  // depends-on cycles: three-color DFS over existing nodes.
+  const state = new Map<string, 'open' | 'done'>()
+  const visit = (id: string, trail: string[]): void => {
+    if (state.get(id) === 'done') return
+    if (state.get(id) === 'open') {
+      const cycle = [...trail.slice(trail.indexOf(id)), id]
+      problems.push({
+        kind: 'depends-on-cycle',
+        message: `depends-on cycle: ${cycle.map(m => getNode(graph, m)?.name ?? m).join(' → ')}`,
+        nodeId: id,
+      })
+      return
+    }
+    state.set(id, 'open')
+    for (const e of graph.edges.filter(x => x.type === 'depends-on' && x.from === id && ids.has(x.to))) {
+      visit(e.to, [...trail, id])
+    }
+    state.set(id, 'done')
+  }
+  for (const node of graph.nodes) visit(node.id, [])
+
+  return problems
 }
 
 /* ── Structure + rollup ─────────────────────────────────────── */
@@ -195,9 +436,14 @@ export function subtree(graph: FeatureGraph, id: string): FeatureNode[] {
   const out: FeatureNode[] = []
   const start = getNode(graph, id)
   if (!start) return out
+  // Visited set: a hand-edited parent cycle must not hang the walk
+  // (feature-lint reports the cycle; the walk just stays finite).
+  const seen = new Set<string>()
   const queue = [start]
   while (queue.length) {
     const node = queue.shift()!
+    if (seen.has(node.id)) continue
+    seen.add(node.id)
     out.push(node)
     queue.push(...childrenOf(graph, node.id))
   }
@@ -234,6 +480,8 @@ export function graphRollup(graph: FeatureGraph): { overall: Rollup, regions: Ar
 export interface NodeSummary {
   id: string, name: string, kind: FeatureNodeKind, status: FeatureStatus,
   parent?: string, component?: string, template?: string, pack?: string,
+  /** Setting nodes only: the schema with the current effective value. */
+  params?: Array<{ name: string, type: FeatureParam['type'], value?: string, options?: string[] }>,
 }
 
 export function nodeSummary(node: FeatureNode): NodeSummary {
@@ -243,6 +491,13 @@ export function nodeSummary(node: FeatureNode): NodeSummary {
     ...(node.component ? { component: node.component } : {}),
     ...(node.template ? { template: node.template } : {}),
     ...(node.pack ? { pack: node.pack } : {}),
+    ...(node.params?.length ? {
+      params: node.params.map(p => ({
+        name: p.name, type: p.type,
+        ...((node.values?.[p.name] ?? p.default) !== undefined ? { value: node.values?.[p.name] ?? p.default } : {}),
+        ...(p.options ? { options: p.options } : {}),
+      })),
+    } : {}),
   }
 }
 
@@ -294,6 +549,9 @@ export function featureGraphSummary(graph: FeatureGraph): string {
     `FEATURE GRAPH "${graph.title}" — ${overall.total} features, ${overall.pct}% built` +
     (overall.blocked ? `, ${overall.blocked} blocked` : '') +
     (regionText ? ` (${regionText})` : '') +
+    (graph.pendingLinks?.length
+      ? `. ${graph.pendingLinks.length} pack link${graph.pendingLinks.length === 1 ? '' : 's'} still pending — they wire themselves when a node matching their name appears (feature-query mode "pending" lists them)`
+      : '') +
     `. Full record at ai-features/graph.md. Query it with feature-query before planning feature work; ` +
     `as work lands, update node status with feature-set-status, and grow the graph with feature-add-node / feature-link ` +
     `when the app's shape changes — edit it in place, never restart it.`
@@ -315,7 +573,10 @@ export function renderFeatureMarkdown(graph: FeatureGraph): string {
       (overall.blocked ? ` · ${overall.blocked} blocked` : ''),
     '',
   ]
+  const rendered = new Set<string>()
   const renderNode = (node: FeatureNode, depth: number) => {
+    if (rendered.has(node.id)) return // parent cycle guard, as in subtree()
+    rendered.add(node.id)
     const binds = [
       node.component ? `component: ${node.component}` : '',
       node.template ? `template: ${node.template}` : '',
@@ -325,7 +586,8 @@ export function renderFeatureMarkdown(graph: FeatureGraph): string {
     lines.push(`${'  '.repeat(depth)}- ${STATUS_MARK[node.status]} ${node.name} — ${node.kind}, ${node.status} (${node.id})${binds ? ` [${binds}]` : ''}`)
     if (node.params?.length) {
       for (const p of node.params) {
-        lines.push(`${'  '.repeat(depth + 1)}· ${p.name}: ${p.type}${p.default !== undefined ? ` = ${p.default}` : ''}`)
+        const value = node.values?.[p.name] ?? p.default
+        lines.push(`${'  '.repeat(depth + 1)}· ${p.name}: ${p.type}${value !== undefined ? ` = ${value}` : ''}`)
       }
     }
     if (node.note) lines.push(`${'  '.repeat(depth + 1)}_${node.note}_`)
@@ -336,6 +598,15 @@ export function renderFeatureMarkdown(graph: FeatureGraph): string {
     lines.push('', '## Edges', '')
     const name = (id: string) => getNode(graph, id)?.name ?? id
     for (const e of graph.edges) lines.push(`- ${name(e.from)} —${e.type}→ ${name(e.to)}`)
+  }
+  if (graph.pendingLinks?.length) {
+    lines.push('', '## Pending links (wire themselves when a matching node appears)', '')
+    const name = (id: string) => getNode(graph, id)?.name ?? id
+    for (const l of graph.pendingLinks) {
+      lines.push(l.direction === 'in'
+        ? `- ? —${l.type}→ ${name(l.from)} · ${l.role} (pack ${l.pack}, waiting for a node matching "${l.match}")`
+        : `- ${name(l.from)} —${l.type}→ ? · ${l.role} (pack ${l.pack}, waiting for a node matching "${l.match}")`)
+    }
   }
   if (regions.length) {
     lines.push('', '## Progress by region', '')

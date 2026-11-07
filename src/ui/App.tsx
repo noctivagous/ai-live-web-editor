@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { FolderOpen, Import, Plus, Save, Settings } from 'lucide-react'
+import { FolderOpen, Import, Plus, Save, Settings, Wand2, Zap } from 'lucide-react'
 import { FileTree } from './components/FileTree'
 import { Library } from './components/Library'
 import { MonacoEditor } from './components/MonacoEditor'
@@ -7,6 +7,15 @@ import { Preview } from './components/Preview'
 import { Chat } from './components/Chat'
 import { NoticeDialog } from './components/Modal'
 import { SettingsWindow } from './components/SettingsWindow'
+import { AgentActionsMenu } from './components/AgentActionsMenu'
+import { ActionsPalette } from './components/ActionsPalette'
+import { ActionCommandPalette } from './components/ActionCommandPalette'
+import { WizardsMenu } from './components/WizardsMenu'
+import { AddFeatureWizard } from './components/AddFeatureWizard'
+import { FileActionsMenu } from './components/FileActionsMenu'
+import { FacetView } from './components/FacetView'
+import { formatRoute, parseRoute, type AppLayout, type FacetId } from './lib/layoutRoute'
+import { themeById } from './lib/themes'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { loadUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
 import { applyUiTheme } from './lib/themes'
@@ -26,13 +35,14 @@ import {
 } from './lib/folderSync'
 import { SetupWizard } from './components/SetupWizard'
 import { PlanOverlay } from './components/PlanOverlay'
+import { GraphOverlay } from './components/GraphOverlay'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
 import { loadCollapse, saveCollapse } from './lib/collapse'
-import { publishWorkflowChanged } from './lib/workflowSync'
+import { publishWorkflowChanged, subscribeWorkflow } from './lib/workflowSync'
 import {
-  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getProjectConfig, postProjectConfig, postWorkflow, probeModels, saveAiConfig,
+  listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getFeatures, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject, fetchSyncChanges,
   type LauncherConfig, type ProjectInfo, type ProjectSetupInfo, type ConnectionsPayload,
@@ -48,17 +58,75 @@ export default function App() {
   const [files, setFiles] = useState<string[]>([])
   const [fileDirs, setFileDirs] = useState<string[]>([])
   const [fileMtimes, setFileMtimes] = useState<Record<string, number>>({})
-  const [leftView, setLeftView] = useState<'files' | 'library'>('files')
+  const [leftView, setLeftView] = useState<'files' | 'library' | 'actions'>('files')
+  // ⌘K command search over the action registry (slice 2).
+  const [cmdkOpen, setCmdkOpen] = useState(false)
+  // Layouts + routes (slice 5): Workbench is the default; the Facets
+  // layout is the alternative, one route per facet (#/facets/…).
+  const [route, setRoute] = useState<AppLayout>(() => parseRoute(window.location.hash))
+  const [lastFacet, setLastFacet] = useState<FacetId>('features')
+  useEffect(() => {
+    const onHash = () => setRoute(parseRoute(window.location.hash))
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  useEffect(() => { if (route.kind === 'facets') setLastFacet(route.facet) }, [route])
+  function navigate(layout: AppLayout) {
+    const h = formatRoute(layout)
+    if (window.location.hash !== h) window.location.hash = h
+    else setRoute(layout)
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCmdkOpen(o => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const [activePath, setActivePath] = useState('/index.html')
   const [content, setContent] = useState('// loading...')
   const [status, setStatus] = useState('connecting to :4112...')
   const [notice, setNotice] = useState<string | null>(null)
   const [settingsAt, setSettingsAt] = useState<string | null>(null)
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
+  // Agent Actions menu (slice 1): the registry-driven card menu in the
+  // top bar. Feature-graph presence is fetched per project so graph
+  // actions can grey with their reason; null = not known yet.
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
+  // Wizards (slice 3): the per-facet Wizards menu + the open wizard.
+  const [wizardsMenuOpen, setWizardsMenuOpen] = useState(false)
+  const [wizard, setWizard] = useState<string | null>(null)
+  // Context palette (slice 4): the preview mark lives in the launcher
+  // workflow state; App mirrors it so page-context actions know
+  // whether a page is in the preview. undefined = not known yet.
+  const [markedPath, setMarkedPath] = useState<string | null | undefined>(undefined)
+  const [fileMenuOpen, setFileMenuOpen] = useState(false)
+  useEffect(() => {
+    if (!fileMenuOpen) return
+    const close = () => setFileMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [fileMenuOpen])
+  const [hasFeatureGraph, setHasFeatureGraph] = useState<boolean | null>(null)
   // Planning (§O): the /plan overlay floats over files + middle; chat stays live.
   const [planOpen, setPlanOpen] = useState<{ level?: number, goal?: string, n: number } | null>(null)
+  // Feature graph: the /graph overlay shares the planner's float
+  // space; the two never stack.
+  const [graphOpen, setGraphOpen] = useState<{ n: number } | null>(null)
+  useEffect(() => {
+    const onGraphOpen = () => {
+      setPlanOpen(null)
+      setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 }))
+    }
+    window.addEventListener('ai-live:graph-open', onGraphOpen)
+    return () => window.removeEventListener('ai-live:graph-open', onGraphOpen)
+  }, [])
   useEffect(() => {
     const onPlanOpen = (e: Event) => {
+      setGraphOpen(null)
       const d = (e as CustomEvent).detail as { level?: number, goal?: string } | undefined
       const open = (level?: number) => setPlanOpen(prev => ({ level, goal: d?.goal, n: (prev?.n ?? 0) + 1 }))
       if (d?.level) { open(d.level); return }
@@ -77,6 +145,19 @@ export default function App() {
     window.addEventListener('pointerdown', close)
     return () => window.removeEventListener('pointerdown', close)
   }, [settingsMenuOpen])
+  useEffect(() => {
+    if (!actionsMenuOpen) return
+    const close = () => setActionsMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [actionsMenuOpen])
+  useEffect(() => {
+    if (!wizardsMenuOpen) return
+    const close = () => setWizardsMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [wizardsMenuOpen])
+
   const [config, setConfig] = useState<LauncherConfig | null>(null)
   const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem(EDITOR_THEME_KEY) || 'vs-dark')
   const [uiPrefsState, setUiPrefsState] = useState<UiPrefs>(() => loadUiPrefs())
@@ -97,6 +178,26 @@ export default function App() {
 
   const [projects, setProjects] = useState<ProjectInfo[]>([])
   const [activeProject, setActiveProject] = useState('')
+  useEffect(() => {
+    if (!activeProject) { setMarkedPath(undefined); return }
+    let live = true
+    const refresh = () => {
+      void getWorkflow()
+        .then(wf => { if (live) setMarkedPath(wf.previewMark ?? null) })
+        .catch(() => { if (live) setMarkedPath(undefined) })
+    }
+    refresh()
+    const unsub = subscribeWorkflow(refresh)
+    return () => { live = false; unsub() }
+  }, [activeProject])
+  useEffect(() => {
+    if (!activeProject) { setHasFeatureGraph(null); return }
+    let live = true
+    void getFeatures()
+      .then(r => { if (live) setHasFeatureGraph(!!r.graph) })
+      .catch(() => { if (live) setHasFeatureGraph(null) })
+    return () => { live = false }
+  }, [activeProject, graphOpen])
   /** The active project's designated start page (project.ai.json
    * entry), shared by the file pane's badge and the Preview. */
   const [startPage, setStartPage] = useState<string | null>(null)
@@ -827,6 +928,16 @@ export default function App() {
     return () => es.close()
   }, [])
 
+  // The one context every action surface reads (slices 1–4): project,
+  // open file, feature-graph presence, and whether a page is marked
+  // for preview (the mark, or the start page it seeds from).
+  const actionCtx = {
+    hasProject: !!activeProject,
+    activePath,
+    hasFeatureGraph,
+    hasPage: markedPath === undefined ? null : !!(markedPath ?? startPage),
+  }
+
   function finishSetup() {
     localStorage.setItem(SETUP_DONE_KEY, SETUP_DONE_VALUE)
     setSetupDone(true)
@@ -860,7 +971,7 @@ export default function App() {
         </div>
         <div className="toolbar" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span className={`pill mono ${connTone(status)}`} title={status}>
-            <span className="dot" />{status.startsWith('real FS:') ? status.replace('real FS: ', '') : status.slice(0, 42)}
+            <span className="dot" />{status.startsWith('real FS:') ? status.replace(/^real FS: (\d+ files) @ .*$/, '$1') : status.slice(0, 42)}
           </span>
           {activeConn ? (
             <>
@@ -952,9 +1063,33 @@ export default function App() {
           </button>
           <ReimportButton projectId={activeProject} suppress={syncSession?.projectId === activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="layout-switch" role="group" aria-label="Layout">
+            <button type="button" className={route.kind === 'workbench' ? 'on' : ''} onClick={() => navigate({ kind: 'workbench' })} title="The workbench layout: files, editor, preview">Workbench</button>
+            <button type="button" className={route.kind === 'facets' ? 'on' : ''} onClick={() => navigate({ kind: 'facets', facet: lastFacet })} title="The facets layout: one screen per facet — state, actions, wizards">Facets</button>
+          </div>
           <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
-            <button className="deck-btn" onClick={() => setSettingsMenuOpen(o => !o)} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings</button>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setWizardsMenuOpen(false); setActionsMenuOpen(o => !o) }} title="Agent Actions — start work from a menu instead of typing a command" aria-haspopup="menu" aria-expanded={actionsMenuOpen}><Zap size={13} />Agent Actions</button>
+            {actionsMenuOpen && (
+              <AgentActionsMenu
+                ctx={actionCtx}
+                onOpenLibrary={() => setLeftView('library')}
+                onOpenSettings={(section) => setSettingsAt(section)}
+                onClose={() => setActionsMenuOpen(false)}
+              />
+            )}
+          </div>
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(o => !o) }} title="Wizards — guided changes, grouped by facet" aria-haspopup="menu" aria-expanded={wizardsMenuOpen}><Wand2 size={13} />Wizards</button>
+            {wizardsMenuOpen && (
+              <WizardsMenu
+                onOpenWizard={(id) => setWizard(id)}
+                onClose={() => setWizardsMenuOpen(false)}
+              />
+            )}
+          </div>
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button className="deck-btn" onClick={() => { setActionsMenuOpen(false); setWizardsMenuOpen(false); setSettingsMenuOpen(o => !o) }} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings</button>
             {settingsMenuOpen && (
               <div className="set-menu" role="menu">
                 {SETTING_SECTIONS.map(s => (
@@ -991,10 +1126,38 @@ export default function App() {
             style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
           />
         )}
+        {graphOpen && (
+          <GraphOverlay
+            key={`${activeProject}-graph-${graphOpen.n}`}
+            onClose={() => setGraphOpen(null)}
+            onShowLibrary={() => { setLeftView('library'); setGraphOpen(null) }}
+            style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
+          />
+        )}
+        {cmdkOpen && (
+          <ActionCommandPalette
+            ctx={actionCtx}
+            onOpenLibrary={() => setLeftView('library')}
+            onOpenSettings={(section) => setSettingsAt(section)}
+            onClose={() => setCmdkOpen(false)}
+          />
+        )}
+        {wizard === 'add-feature' && (
+          <AddFeatureWizard
+            onClose={() => setWizard(null)}
+            onNotice={setNotice}
+          />
+        )}
+        {/* Workbench panes: display:contents keeps the flex row exact
+            in the workbench layout and hides the panes (mounted, state
+            intact) in the facets layout. */}
+        <div style={{ display: route.kind === 'workbench' ? 'contents' : 'none' }}>
         <div className="panel" style={{ width: leftW, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="panel-head" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}>Files</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates">Library</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)">Actions</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status">Graph</button>
             {leftView === 'files' && <span className="sub">{files.length}</span>}
           </div>
           {leftView === 'files' ? (
@@ -1014,11 +1177,18 @@ export default function App() {
               startPage={startPage}
               onSetStartPage={(p) => { void handleSetStartPage(p) }}
             />
-          ) : (
+          ) : leftView === 'library' ? (
             <Library
               key={activeProject}
               onOpenPath={(path) => { void loadFile(path); loadFiles() }}
               onNotice={setNotice}
+            />
+          ) : (
+            <ActionsPalette
+              key={activeProject}
+              ctx={actionCtx}
+              onOpenLibrary={() => setLeftView('library')}
+              onOpenSettings={(section) => setSettingsAt(section)}
             />
           )}
         </div>
@@ -1030,6 +1200,19 @@ export default function App() {
               {collapse.editor ? '▸' : '▾'}
             </button>
             <span className="mono" style={{ fontWeight: 500 }}>{activePath}</span>
+            {activePath && (
+              <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+                <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => setFileMenuOpen(o => !o)} title="Actions for the open file" aria-haspopup="menu" aria-expanded={fileMenuOpen}>File actions</button>
+                {fileMenuOpen && (
+                  <FileActionsMenu
+                    ctx={actionCtx}
+                    onOpenLibrary={() => setLeftView('library')}
+                    onOpenSettings={(section) => setSettingsAt(section)}
+                    onClose={() => setFileMenuOpen(false)}
+                  />
+                )}
+              </div>
+            )}
             <span className="sub" style={{ marginLeft: 'auto' }}>Monaco • Real FS • Vite HMR</span>
           </div>
           {!collapse.editor && (
@@ -1054,6 +1237,24 @@ export default function App() {
             />
           </div>
         </div>
+        </div>
+        {route.kind === 'facets' && (
+          <div className="panel" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+            <FacetView
+              key={`${activeProject}-${route.facet}`}
+              facet={route.facet}
+              projectName={projects.find(p => p.id === activeProject)?.root.split('/').filter(Boolean).pop() ?? activeProject}
+              filesCount={files.length}
+              startPage={startPage}
+              themeLabel={themeById(uiPrefsState.uiTheme)?.label ?? uiPrefsState.uiTheme}
+              ctx={actionCtx}
+              onNavigateFacet={(f) => navigate({ kind: 'facets', facet: f })}
+              onOpenWizard={(id) => setWizard(id)}
+              onOpenSettings={(section) => setSettingsAt(section)}
+              onOpenLibrary={() => { setLeftView('library'); navigate({ kind: 'workbench' }) }}
+            />
+          </div>
+        )}
         <VDivider onMouseDown={colDrag(setRightW, -1)} title="Drag to resize chat" />
         <div className="panel" style={{ width: rightW, flexShrink: 0, minWidth: 0, minHeight: 0 }}>
           <Chat

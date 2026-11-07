@@ -241,6 +241,13 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       setLog(l => [...l, { role: 'system', text: 'Planner opened — it floats over the files and preview, and this chat stays live. Ask here anytime to add, drop or reword a plan question.' }])
       return
     }
+    // /graph: the feature graph overlay, same float space as the planner.
+    if (input.trim() === '/graph') {
+      setInput('')
+      window.dispatchEvent(new CustomEvent('ai-live:graph-open', {}))
+      setLog(l => [...l, { role: 'system', text: 'Feature graph opened — the map of the whole app. Select a node for its bindings and connections, or generate a plan from any region.' }])
+      return
+    }
     void sendText(input)
   }
 

@@ -417,6 +417,88 @@ export async function createPlan(input: { goal: string, kind: string, level: num
   return postJson<{ ok: boolean, plan?: PlanDoc, error?: string }>('/api/plans', input)
 }
 
+export async function planFromGraph(input: { nodeId?: string, packId?: string }) {
+  return postJson<{ ok: boolean, plan?: PlanDoc, skippedBuilt?: number, error?: string }>('/api/plans/from-graph', input)
+}
+
+/* ── Feature graph (ai-features/) ─────────────────────────── */
+
+export type FeatureNodeStatus = 'proposed' | 'planned' | 'building' | 'done' | 'verified' | 'blocked' | 'dropped'
+
+export interface FeatureParamItem {
+  name: string
+  type: 'text' | 'choice' | 'boolean' | 'color' | 'number'
+  options?: string[]
+  default?: string
+}
+
+export interface FeatureNodeItem {
+  id: string
+  name: string
+  kind: 'region' | 'feature' | 'screen' | 'component' | 'setting' | 'data' | 'service'
+  status: FeatureNodeStatus
+  parent?: string
+  component?: string
+  template?: string
+  pack?: string
+  derivedFrom?: string
+  params?: FeatureParamItem[]
+  values?: Record<string, string>
+  note?: string
+}
+
+export interface FeatureEdgeItem { from: string, to: string, type: string }
+
+export interface PendingLinkItem {
+  pack: string
+  from: string
+  type: string
+  role: string
+  match: string
+  direction: 'out' | 'in'
+}
+
+export interface FeatureGraphItem {
+  title: string
+  nodes: FeatureNodeItem[]
+  edges: FeatureEdgeItem[]
+  pendingLinks?: PendingLinkItem[]
+}
+
+export interface FeatureRollup { total: number, built: number, blocked: number, pct: number }
+
+export async function getFeatures() {
+  const r = await fetch(`${API}/api/features`)
+  return r.json() as Promise<{
+    ok: boolean,
+    graph: FeatureGraphItem | null,
+    rollup: { overall: FeatureRollup, regions: { node: FeatureNodeItem, rollup: FeatureRollup }[] } | null,
+    error?: string,
+  }>
+}
+
+export async function setFeatureNodeStatus(id: string, status: FeatureNodeStatus) {
+  return postJson<{ ok: boolean, error?: string }>('/api/features/status', { id, status })
+}
+
+export async function setFeatureParam(id: string, name: string, value: string) {
+  return postJson<{ ok: boolean, configFile?: string, error?: string }>('/api/features/param', { id, name, value })
+}
+
+export interface GraphProblemItem { kind: string, message: string, nodeId?: string }
+
+export async function getFeatureLint() {
+  const r = await fetch(`${API}/api/features/lint`)
+  return r.json() as Promise<{ ok: boolean, problems: GraphProblemItem[] }>
+}
+
+export interface DriftItem { nodeId: string, node: string, binding: string, problem: string }
+
+export async function getFeatureReconcile() {
+  const r = await fetch(`${API}/api/features/reconcile`)
+  return r.json() as Promise<{ ok: boolean, drift: DriftItem[], checked: number }>
+}
+
 export async function getPlan(slug: string) {
   const r = await fetch(`${API}/api/plans/${encodeURIComponent(slug)}`)
   return r.json() as Promise<{ ok: boolean, plan?: PlanDoc, error?: string }>
@@ -590,9 +672,18 @@ export interface TemplateItem {
   target: string
 }
 
+export interface PackSummaryItem {
+  id: string
+  name: string
+  description: string
+  nodes: number
+  settings: number
+  configures: string[]
+}
+
 export async function getCatalog(q = '') {
   const r = await fetch(`${API}/api/catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`)
-  return r.json() as Promise<{ ok: boolean, components: CatalogSummaryItem[], templates: TemplateItem[], error?: string }>
+  return r.json() as Promise<{ ok: boolean, packs: PackSummaryItem[], components: CatalogSummaryItem[], templates: TemplateItem[], error?: string }>
 }
 
 export async function installCatalogComponent(tag: string) {

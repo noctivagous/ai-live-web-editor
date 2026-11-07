@@ -15,6 +15,7 @@ import {
 } from '../tools/planTools.js'
 import { toolResultTrimProcessor } from '../../contextTrim.js'
 import { readSkillTool } from '../tools/skillTools.js'
+import { unpackCodeTool } from '../tools/codeTools.js'
 import { skillIndexText } from '../../skills/skills.js'
 import { editorMemory } from '../memory.js'
 
@@ -33,7 +34,7 @@ Chat has two workflows (header pill): Files (default) and Live sketch.
 Routing: Live sketch only applies to the live page. The host may switch a files-only turn from sketch to Files. If you are still in sketch and the ask is not about the rendered page, say they need Files. If the ask is mixed, only patch the page, then say the file work needs Files. Never enter Live sketch on your own.
 
 Tools (the host sends only the set for the current workflow):
-- Files: list-real-files, codebase-map, grep, read-real-file, str-replace, write-real-file, delete-file, rename-file, make-dir, take-snapshot, inspect-dom, resolve-source, read-skill — plus the groups this turn calls for: layout-snapshot / layout-svg / pool-open for page and layout work, find-component / install-catalog-component / place-template for catalog work, the plan tools while a plan is active, and the web tools when search is on and the ask needs it. If a tool you need is not in this turn's set, say so in one line and continue with what you have — the set is chosen per turn, not per project.
+- Files: list-real-files, codebase-map, grep, read-real-file, str-replace, write-real-file, delete-file, rename-file, make-dir, take-snapshot, inspect-dom, resolve-source, read-skill — plus the groups this turn calls for: layout-snapshot / layout-svg / pool-open for page and layout work, find-component / install-catalog-component / place-template for catalog work, the plan tools while a plan is active, unpack-code for dense or minified files (it returns a section map over a formatted copy under .ai-live/unpacked/ — read sections from the copy, make edits against the original), and the web tools when search is on and the ask needs it. If a tool you need is not in this turn's set, say so in one line and continue with what you have — the set is chosen per turn, not per project.
 - Live sketch: take-snapshot, inspect-dom, patch-dom, eval-js, layout-snapshot, layout-svg, pool-open
 
 Web research (Files only): web-search for quick current facts (API shapes, versions, docs), fetch-page to read one page, and research for anything that needs several sources reconciled — plan 3-6 sub-queries when you call it, and prefer building from its cited brief over building from memory. When the user will keep building from a brief, save it with saveTo under ai-research/.
@@ -94,6 +95,7 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'resolve-source': resolveSourceTool,
     'find-component': findComponentTool,
     'codebase-map': codebaseMapTool,
+    'unpack-code': unpackCodeTool,
     'adopt-registry': adoptRegistryTool,
     'install-catalog-component': installCatalogComponentTool,
     'place-template': placeTemplateTool,

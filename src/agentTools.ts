@@ -37,6 +37,11 @@ export const FILE_LAYOUT_TOOLS = [
   'pool-open',
 ] as const
 
+/** Workbench code programs — dense/minified/generated file work. */
+export const FILE_CODE_TOOLS = [
+  'unpack-code',
+] as const
+
 /** Component catalog + templates. */
 export const FILE_CATALOG_TOOLS = [
   'find-component',
@@ -79,6 +84,7 @@ export const FILE_ACTIVE_TOOLS = [
   'resolve-source',
   'find-component',
   'codebase-map',
+  'unpack-code',
   'adopt-registry',
   'install-catalog-component',
   'place-template',
@@ -144,6 +150,7 @@ const LAYOUT_RE = /\b(layout|wireframe|overlap|spacing|responsive|breakpoint|vie
 const CATALOG_RE = /\b(components?|templates?|catalog|library|install|buttons?|dialogs?|modals?|dropdowns?|tooltips?|accordion|tabs?|forms?|inputs?|tables?|cards?|pricing|hero|navbar|navigation|sidebar|headers?|footers?|dashboard|widgets?|icons?|charts?|menus?|pages?|sections?|landing)\b/i
 const RESEARCH_RE = /\b(web|internet|online|search|research|lookup|google|docs?|documentation|latest|changelog|version of)\b|\blook up\b/i
 const PLAN_RE = /\bplans?\b|\/plan\b/i
+const CODE_RE = /\b(unpack\w*|unminif\w*|de-?minif\w*|minified|beautif\w*|prettif\w*|bundles?|bundled|vendor|obfuscat\w*)\b|\.min\.(?:js|mjs|cjs|ts)\b/i
 
 export interface FilesTurnSignals {
   /** The newest user message's text (trigger evidence). */
@@ -160,6 +167,7 @@ export function fileToolsForTurn(signals: FilesTurnSignals): string[] {
   const wanted = new Set<string>(FILE_CORE_TOOLS)
   if (LAYOUT_RE.test(text)) for (const t of FILE_LAYOUT_TOOLS) wanted.add(t)
   if (CATALOG_RE.test(text)) for (const t of FILE_CATALOG_TOOLS) wanted.add(t)
+  if (CODE_RE.test(text)) for (const t of FILE_CODE_TOOLS) wanted.add(t)
   if (signals.searchAvailable && RESEARCH_RE.test(text)) for (const t of FILE_RESEARCH_TOOLS) wanted.add(t)
   if (signals.hasActivePlan || PLAN_RE.test(text)) for (const t of FILE_PLAN_TOOLS) wanted.add(t)
   return FILE_ACTIVE_TOOLS.filter((t) => wanted.has(t))

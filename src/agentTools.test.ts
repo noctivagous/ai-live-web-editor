@@ -4,6 +4,7 @@ import {
   activeToolsForMode,
   FILE_ACTIVE_TOOLS,
   FILE_CATALOG_TOOLS,
+  FILE_CODE_TOOLS,
   FILE_CORE_TOOLS,
   FILE_LAYOUT_TOOLS,
   FILE_PLAN_TOOLS,
@@ -38,7 +39,7 @@ describe('activeToolsForMode', () => {
 describe('fileToolsForTurn', () => {
   it('sends only the core set for a plain file fix', () => {
     const tools: string[] = fileToolsForTurn({ userText: 'fix the typo in the greeting function' })
-    for (const t of [...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS]) {
+    for (const t of [...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS]) {
       assert.equal(tools.includes(t), false, `${t} should not ride a copy fix`)
     }
     // Last: deepEqual's assertion signature narrows `tools` to the core type.
@@ -55,6 +56,14 @@ describe('fileToolsForTurn', () => {
   it('adds the catalog group for component/template asks', () => {
     const tools = fileToolsForTurn({ userText: 'add a pricing section with a call-to-action button' })
     for (const t of FILE_CATALOG_TOOLS) assert.ok(tools.includes(t), t)
+  })
+
+  it('adds the workbench code group for dense-code asks', () => {
+    for (const t of FILE_CODE_TOOLS) {
+      assert.ok(fileToolsForTurn({ userText: 'unpack the minified vendor bundle' }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'look inside dist/app.min.js' }).includes(t), t)
+      assert.equal(fileToolsForTurn({ userText: 'fix the typo' }).includes(t), false, t)
+    }
   })
 
   it('adds research tools only when a backend exists AND the ask needs the web', () => {
@@ -75,10 +84,10 @@ describe('fileToolsForTurn', () => {
   })
 
   it('the groups partition the full set, and a fully-triggered turn gets all of it', () => {
-    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS]
+    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS]
     assert.deepEqual([...grouped].sort(), [...FILE_ACTIVE_TOOLS].sort())
     const all = fileToolsForTurn({
-      userText: 'check the layout of the pricing page, search the latest docs, then update the plan',
+      userText: 'check the layout of the pricing page, search the latest docs, unpack the bundle, then update the plan',
       hasActivePlan: true,
       searchAvailable: true,
     })

@@ -6,6 +6,7 @@ import path from 'node:path'
 import { setFsRoot } from '../../launcher.js'
 import { createPlan, getActivePlan, getPlan, savePlan } from '../../plans/plans.js'
 import { findComponentTool } from './catalogTools.js'
+import { unpackCodeTool } from './codeTools.js'
 import { codebaseMapTool, installCatalogComponentTool } from './codebaseMapTools.js'
 import {
   planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
@@ -247,6 +248,47 @@ describe('catalog + template tools execute()', () => {
       const unknown = await run(installCatalogComponentTool, { tag: 'NoSuchThing' })
       assert.equal(unknown.ok, false)
       assert.match(String(unknown.error), /No catalog component tagged/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('unpack-code execute()', () => {
+  const DENSE = 'const a=1;function go(x){return x+a}const h=(y)=>y*3;'
+
+  it('writes a formatted copy under .ai-live/unpacked and returns its section map', async () => {
+    const root = tmpProject({ 'dist/bundle.min.js': DENSE })
+    try {
+      const r = await run(unpackCodeTool, { path: '/dist/bundle.min.js' })
+      assert.equal(r.ok, true)
+      assert.equal(r.path, '/dist/bundle.min.js')
+      assert.equal(r.unpackedPath, '/.ai-live/unpacked/dist/bundle.min.js')
+      assert.equal(r.originalLines, 1)
+      assert.ok(Number(r.formattedLines) > 3, String(r.formattedLines))
+      const names = (r.sections as { name: string }[]).map((s) => s.name)
+      assert.ok(names.includes('go'), names.join(','))
+      assert.ok(names.includes('h'), names.join(','))
+      const copy = fs.readFileSync(path.join(root, '.ai-live', 'unpacked', 'dist', 'bundle.min.js'), 'utf8')
+      assert.ok(copy.split('\n').length > 3)
+      // The original is never touched.
+      assert.equal(fs.readFileSync(path.join(root, 'dist', 'bundle.min.js'), 'utf8'), DENSE)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('refuses non-code files, escapes, and its own output', async () => {
+    const root = tmpProject({ 'styles.css': 'a { color: red }', 'ok.js': 'const a = 1;' })
+    try {
+      const css = await run(unpackCodeTool, { path: '/styles.css' })
+      assert.equal(css.ok, false)
+      assert.match(String(css.error), /handles JS\/TS files/)
+      const escape = await run(unpackCodeTool, { path: '../outside.js' })
+      assert.equal(escape.ok, false)
+      const missing = await run(unpackCodeTool, { path: '/nope.js' })
+      assert.equal(missing.ok, false)
+      assert.match(String(missing.error), /No such file/)
+      await run(unpackCodeTool, { path: '/ok.js' })
+      const again = await run(unpackCodeTool, { path: '/.ai-live/unpacked/ok.js' })
+      assert.equal(again.ok, false)
+      assert.match(String(again.error), /already an unpacked copy/)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

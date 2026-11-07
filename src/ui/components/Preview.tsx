@@ -332,7 +332,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           </button>
         )}
         <span style={{ fontWeight: 600 }}>PREVIEW</span>
-        <span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayUrl}</span>
+        <span className="mono" title={displayUrl} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayUrl}</span>
         {renderer === 'page' && location && mark && location !== mark && (
           <span className="pill" title="You followed a link inside the preview">
             viewing {location}

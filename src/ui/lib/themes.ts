@@ -25,9 +25,9 @@
  * inline-style sweep (slice 3).
  */
 
-export type UiThemeId = 'dark-2020s' | 'dark-pro-classic' | 'gray-pro-classic'
+export type UiThemeId = 'dark-2020s' | 'dark-pro-classic' | 'gray-pro-classic' | 'light-gray-2020s' | 'lightgray-2020s-regular'
 
-export const UI_THEME_IDS: UiThemeId[] = ['dark-2020s', 'dark-pro-classic', 'gray-pro-classic']
+export const UI_THEME_IDS: UiThemeId[] = ['dark-2020s', 'dark-pro-classic', 'gray-pro-classic', 'light-gray-2020s', 'lightgray-2020s-regular']
 
 export const UI_FONT_SIZE_MIN = 11
 export const UI_FONT_SIZE_MAX = 16
@@ -90,6 +90,7 @@ export interface UiTheme {
 
 const SYSTEM_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 const PRO_FONT = '"Lucida Grande", "Lucida Sans Unicode", Helvetica, Arial, sans-serif'
+const TAHOMA_FONT = 'Tahoma, "Segoe UI", Verdana, Geneva, sans-serif'
 const PRO_BLUE_GRADIENT = 'linear-gradient(180deg, #6aa6ff, #4a8af4 45%, #2a5cb0)'
 
 export const UI_THEMES: UiTheme[] = [
@@ -237,6 +238,115 @@ export const UI_THEMES: UiTheme[] = [
       onPrimary: '#ffffff',
     },
   },
+  {
+    // The Agent Actions prototype's palette, token for token: its
+    // --chrome is the frame the panes sit on (bg + topbar), --chrome2
+    // its toolbar tone (panel heads), --panel/--panel2 the pane and
+    // segmented surfaces, --field the raised white of cards and
+    // wells, --accent-soft the hover of its menu and action cards,
+    // and its .scrim the overlay. Its status soft-backgrounds and
+    // drop shadow have no token here (status surfaces use the text
+    // tokens; menu/dialog shadows are still hardcoded in the CSS).
+    id: 'light-gray-2020s',
+    label: 'Light Gray 2020s',
+    fontLabel: 'Tahoma',
+    description: 'The Agent Actions prototype\u2019s look, matched exactly: warm light-gray chrome, near-white panels, white fields.',
+    tokens: {
+      bg: '#dcd9d0',
+      panel: '#f6f5f1',
+      card: '#ffffff',
+      cardHover: '#dbe6f7',
+      border: '#b9b5aa',
+      borderSoft: '#cdc9bd',
+      text: '#1d1d1b',
+      muted: '#4c4a44',
+      faint: '#76736a',
+      blue: '#2f5aa6',
+      green: '#2e7d46',
+      amber: '#9a6a12',
+      red: '#b3362b',
+      well: '#ffffff',
+      highlight: 'rgba(255, 255, 255, 0)',
+      panelBg: '#f6f5f1',
+      buttonBg: '#f6f5f1',
+      buttonBgPrimary: '#2f5aa6',
+      wellShadow: 'none',
+      buttonShadow: 'none',
+      topbarBg: '#dcd9d0',
+      scrollbarThumb: '#cfcbc0',
+      radiusPanel: '10px',
+      radiusControl: '6px',
+      fontUi: TAHOMA_FONT,
+      textStrong: '#1d1d1b',
+      textSoft: '#4c4a44',
+      borderStrong: '#b9b5aa',
+      accentSoftBg: '#dbe6f7',
+      accentSoftBorder: '#2f5aa6',
+      accentSoftText: '#2f5aa6',
+      redText: '#b3362b',
+      greenText: '#2e7d46',
+      amberText: '#9a6a12',
+      violet: '#6a5aa8',
+      overlayBg: 'rgba(15, 15, 12, 0.5)',
+      segBg: '#efeee8',
+      segShadow: 'none',
+      headBg: '#cfcbc0',
+      onPrimary: '#ffffff',
+    },
+  },
+  {
+    // The regular interpretation: dark-2020s' flat model flipped to
+    // light — neutral zinc grays, white cards, the standard 2020s
+    // blue, its radii and system font. Independently derived, in the
+    // same spirit as light-gray-2020s but not copied from it, so the
+    // two can be compared in the picker.
+    id: 'lightgray-2020s-regular',
+    label: 'Light Gray 2020s Regular',
+    fontLabel: 'System UI',
+    description: 'A light-gray 2020s look in the same spirit: flat neutral grays, white cards, standard blue accent.',
+    tokens: {
+      bg: '#e5e5e5',
+      panel: '#f4f4f5',
+      card: '#ffffff',
+      cardHover: '#ededf0',
+      border: '#d4d4d8',
+      borderSoft: '#e4e4e7',
+      text: '#27272a',
+      muted: '#71717a',
+      faint: '#a1a1aa',
+      blue: '#2563eb',
+      green: '#16a34a',
+      amber: '#d97706',
+      red: '#dc2626',
+      well: '#ffffff',
+      highlight: 'rgba(255, 255, 255, 0)',
+      panelBg: '#f4f4f5',
+      buttonBg: '#ffffff',
+      buttonBgPrimary: '#dbeafe',
+      wellShadow: 'none',
+      buttonShadow: 'none',
+      topbarBg: 'rgba(244, 244, 245, 0.9)',
+      scrollbarThumb: '#d4d4d8',
+      radiusPanel: '12px',
+      radiusControl: '8px',
+      fontUi: SYSTEM_FONT,
+      textStrong: '#18181b',
+      textSoft: '#3f3f46',
+      borderStrong: '#a1a1aa',
+      accentSoftBg: '#eff6ff',
+      accentSoftBorder: '#bfdbfe',
+      accentSoftText: '#1d4ed8',
+      redText: '#b91c1c',
+      greenText: '#15803d',
+      amberText: '#b45309',
+      violet: '#7c3aed',
+      overlayBg: 'rgba(24, 24, 27, 0.45)',
+      segBg: 'transparent',
+      segShadow: 'none',
+      headBg: '#f4f4f5',
+      onPrimary: '#1e40af',
+    },
+  },
 ]
 
 export function themeById(id: string): UiTheme {
@@ -248,9 +358,10 @@ export function isUiThemeId(v: unknown): v is UiThemeId {
 }
 
 /** The Monaco theme that matches a UI theme. Monaco ships no pro-app
- * theme; the dark pro theme keeps vs-dark until a custom one is built. */
+ * theme; the dark pro theme keeps vs-dark until a custom one is built.
+ * The light themes (gray pro and both light-grays) use Monaco's light. */
 export function monacoThemeFor(id: UiThemeId): string {
-  return id === 'gray-pro-classic' ? 'light' : 'vs-dark'
+  return id === 'gray-pro-classic' || id === 'light-gray-2020s' || id === 'lightgray-2020s-regular' ? 'light' : 'vs-dark'
 }
 
 /** The font-size scale factor: 1 at the default size, so the default

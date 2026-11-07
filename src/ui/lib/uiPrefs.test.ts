@@ -62,6 +62,32 @@ describe('uiPrefs editor fields + replace', () => {
   })
 })
 
+describe('uiPrefs theme fields', () => {
+  it('defaults to dark-2020s at the default font size', () => {
+    const d = validateUiPrefs({})
+    assert.equal(d.uiTheme, 'dark-2020s')
+    assert.equal(d.uiFontSize, 13)
+  })
+
+  it('keeps a valid theme and clamps the UI font size to 11–16', () => {
+    assert.equal(validateUiPrefs({ uiTheme: 'dark-pro-classic' }).uiTheme, 'dark-pro-classic')
+    assert.equal(validateUiPrefs({ uiTheme: 'gray-pro-classic' }).uiTheme, 'gray-pro-classic')
+    assert.equal(validateUiPrefs({ uiTheme: 'vs-dark' }).uiTheme, 'dark-2020s')
+    assert.equal(validateUiPrefs({ uiFontSize: 16 }).uiFontSize, 16)
+    assert.equal(validateUiPrefs({ uiFontSize: 99 }).uiFontSize, 16)
+    assert.equal(validateUiPrefs({ uiFontSize: 4 }).uiFontSize, 11)
+    assert.equal(validateUiPrefs({ uiFontSize: 'big' }).uiFontSize, 13)
+  })
+
+  it('round-trips theme fields through the store', () => {
+    const store = fakeStore()
+    saveUiPrefs({ uiTheme: 'gray-pro-classic', uiFontSize: 15 }, store)
+    const p = loadUiPrefs(store)
+    assert.equal(p.uiTheme, 'gray-pro-classic')
+    assert.equal(p.uiFontSize, 15)
+  })
+})
+
 describe('uiPrefs shortcut overrides', () => {
   it('keeps valid overrides and drops unknown, fixed, and default-equal entries', () => {
     const p = validateUiPrefs({ shortcutOverrides: { fileRename: 'F4', deckNext: 'arrowright', nope: 'f9', chatSend: 'x', fileDelete: 'junk++' } })

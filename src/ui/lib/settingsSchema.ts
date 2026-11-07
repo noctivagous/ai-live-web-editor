@@ -42,14 +42,15 @@ export interface SettingSection {
   title: string
   scope: SettingScope
   /** Set for sections rendered by a dedicated component, not fields. */
-  custom?: 'providers' | 'search' | 'preview' | 'data' | 'shortcuts' | 'about'
+  custom?: 'providers' | 'search' | 'preview' | 'data' | 'shortcuts' | 'about' | 'themes'
   keywords?: string
 }
 
 export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'providers', title: 'AI Providers & Models', scope: 'global', custom: 'providers', keywords: 'api key connection model provider modality openai meta' },
   { id: 'search', title: 'Search & Research', scope: 'global', custom: 'search', keywords: 'brave web search research backend' },
-  { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'theme chat view panel deck' },
+  { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'chat view panel deck' },
+  { id: 'themes', title: 'Themes', scope: 'device', custom: 'themes', keywords: 'theme color font size dark pro classic gray design tokens editor theme' },
   { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
   { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
   { id: 'shortcuts', title: 'Keyboard Shortcuts', scope: 'device', custom: 'shortcuts', keywords: 'keys hotkeys bindings rebind f2 delete deck shortcuts' },

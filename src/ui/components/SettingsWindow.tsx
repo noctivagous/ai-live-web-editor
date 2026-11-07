@@ -16,6 +16,9 @@ import {
   SETTING_SECTIONS, fieldsForSection, searchSettings, sectionById,
   type SettingField, type SettingSection,
 } from '../lib/settingsSchema'
+import {
+  UI_THEMES, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, monacoThemeFor, themeById, type UiThemeId,
+} from '../lib/themes'
 import { ModalityPanel, ProviderSetup, useConnections } from './ProviderSetup'
 import { SearchSetup } from './SearchSetup'
 
@@ -28,7 +31,7 @@ import { SearchSetup } from './SearchSetup'
    hand-built components the setup wizard uses. Everything saves on
    change, like the settings it replaces; there is no Apply queue. */
 
-const THEMES = ['vs-dark', 'light', 'hc-black']
+const MONACO_THEMES = ['vs-dark', 'light', 'hc-black']
 const SCOPE_LABEL: Record<SettingSection['scope'], string> = { global: 'Global', project: 'Project', device: 'Device' }
 
 export function SettingsWindow({ initialSection, onClose, config, editorTheme, onTheme, onReplayWizard, onConfigSaved }: {
@@ -253,6 +256,76 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     )
   }
 
+  const themesSection = () => {
+    const active = themeById(prefs.uiTheme)
+    const pick = (id: UiThemeId) => {
+      setPrefs(saveUiPrefs({ uiTheme: id }))
+      // The code editor follows the UI theme; the select below can
+      // still override it afterwards.
+      onTheme(monacoThemeFor(id))
+    }
+    const kebab = (k: string) => k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`)
+    return (
+      <div>
+        <div className="theme-cards" role="radiogroup" aria-label="UI theme">
+          {UI_THEMES.map(t => (
+            <button
+              key={t.id} type="button" role="radio" aria-checked={prefs.uiTheme === t.id}
+              className={`theme-card${prefs.uiTheme === t.id ? ' on' : ''}`}
+              onClick={() => pick(t.id)}
+            >
+              <span className="theme-swatch" style={{ background: t.tokens.panelBg, borderColor: t.tokens.border }}>
+                <span className="theme-swatch-bar" style={{ background: t.tokens.buttonBg, color: t.tokens.text, boxShadow: t.tokens.buttonShadow }}>Button</span>
+                <span className="theme-swatch-row">
+                  <span className="theme-swatch-well" style={{ background: t.tokens.well, boxShadow: t.tokens.wellShadow }} />
+                  <span className="theme-swatch-well" style={{ background: t.tokens.card }} />
+                </span>
+              </span>
+              <span className="theme-card-name">{t.label}</span>
+              <span className="theme-card-font">{t.fontLabel}</span>
+              <span className="theme-card-desc">{t.description}</span>
+            </button>
+          ))}
+        </div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <label className="set-row-label" htmlFor="set-ui-font-size">UI font size</label>
+            <div className="field-hint">Scales the editor’s own interface text, in every theme. The code editor’s font size is separate, under Editor.</div>
+          </div>
+          <div className="set-row-control">
+            <span className="set-slider">
+              <input
+                id="set-ui-font-size" type="range" min={UI_FONT_SIZE_MIN} max={UI_FONT_SIZE_MAX} step={1}
+                value={prefs.uiFontSize}
+                onChange={e => setPrefs(saveUiPrefs({ uiFontSize: Number(e.target.value) }))}
+              />
+              <span className="set-slider-val">{prefs.uiFontSize}px</span>
+            </span>
+          </div>
+        </div>
+        <div className="set-row">
+          <div className="set-row-text">
+            <label className="set-row-label" htmlFor="set-editor-theme">Editor theme</label>
+            <div className="field-hint">The code editor color theme. It follows the UI theme when you switch themes; you can still set it separately here.</div>
+          </div>
+          <div className="set-row-control">
+            <select id="set-editor-theme" className="deck-select" value={editorTheme} onChange={e => onTheme(e.target.value)}>
+              {MONACO_THEMES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)' }}>
+            Design tokens — {active.label}
+          </summary>
+          <div className="theme-tokens" style={{ marginTop: 8 }}>
+            {Object.entries(active.tokens).map(([k, v]) => `--${kebab(k)}: ${v}`).join('\n')}
+          </div>
+        </details>
+      </div>
+    )
+  }
+
   const providersSection = () => {
     const hasKey = Boolean(config?.hasApiKey ?? config?.hasOpenAiKey)
     const keyTone = config === null ? '' : hasKey ? 'good' : 'warn'
@@ -416,7 +489,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
         <div><dt>Launcher</dt><dd className="mono">{config?.launcherUrl || 'unreachable'}</dd></div>
         <div><dt>Workspace</dt><dd className="mono">{config?.workspace || '—'}</dd></div>
         <div><dt>Active project root</dt><dd className="mono">{config?.fsRoot || '—'}</dd></div>
-        <div><dt>Provider</dt><dd>{config?.providerName || config?.providerId || '—'}{config?.modelName ? ` · ${config.modelName}` : ''}</dd></div>
+        <div><dt>Provider</dt><dd>{config?.providerName || config?.providerId || '—'}{config?.modelName ? ` · ${config.modelName}` : ''}{config?.contextWindow ? ` · ${Math.round(config.contextWindow / 1000)}k window` : ''}</dd></div>
       </dl>
       <button onClick={onReplayWizard} className="deck-btn" style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}>
         Replay setup wizard
@@ -495,21 +568,9 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     if (s.custom === 'data') return dataSection()
     if (s.custom === 'shortcuts') return shortcutsSection()
     if (s.custom === 'about') return aboutSection()
+    if (s.custom === 'themes') return themesSection()
     return (
       <div>
-        {s.id === 'appearance' && (
-          <div className="set-row">
-            <div className="set-row-text">
-              <label className="set-row-label" htmlFor="set-editor-theme">Editor theme</label>
-              <div className="field-hint">The code editor color theme.</div>
-            </div>
-            <div className="set-row-control">
-              <select id="set-editor-theme" className="deck-select" value={editorTheme} onChange={e => onTheme(e.target.value)}>
-                {THEMES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
         {s.id === 'project' && (
           <div className="field-hint" style={{ marginBottom: 10 }}>
             Stored in this project's project.ai.json. {designated ? 'This project is designated.' : 'This project is not designated.'} The Preview bar reflects changes within a few seconds.

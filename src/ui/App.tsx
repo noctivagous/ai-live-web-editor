@@ -9,6 +9,7 @@ import { NoticeDialog } from './components/Modal'
 import { SettingsWindow } from './components/SettingsWindow'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { loadUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
+import { applyUiTheme } from './lib/themes'
 import { ImportProgressDialog, ImportReportDialog, OverLimitDialog, ReimportButton } from './components/FolderImport'
 import { SyncConflictsDialog, SyncStatusBar, type ConflictChoice, type ConflictItem } from './components/FolderSync'
 import {
@@ -84,6 +85,12 @@ export default function App() {
     window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
     return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
   }, [])
+  // Settings → Themes: the theme + UI font size live on the document
+  // root (data-ui-theme selects the token block in index.css;
+  // --ui-scale multiplies every CSS font size).
+  useEffect(() => {
+    applyUiTheme(uiPrefsState.uiTheme, uiPrefsState.uiFontSize)
+  }, [uiPrefsState.uiTheme, uiPrefsState.uiFontSize])
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
   // skip autosave for placeholder content and right after a file loads
   const skipSave = useRef(true)

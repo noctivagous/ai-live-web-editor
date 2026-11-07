@@ -9,6 +9,7 @@
  */
 
 import { sanitizeOverrides } from './shortcuts'
+import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, type UiThemeId } from './themes'
 
 export type ChatViewPref = 'chat' | 'panel'
 export type FileSortPref = 'name' | 'type' | 'modified'
@@ -18,6 +19,12 @@ export type FileSortPref = 'name' | 'type' | 'modified'
 export type FilePreviewModePref = 'marked' | 'follow'
 
 export interface UiPrefs {
+  /** UI theme (Settings → Themes): a design-token set in lib/themes. */
+  uiTheme: UiThemeId
+  /** UI font size in px: every CSS font size scales by this over the
+   * default (lib/themes uiScaleFor). The code editor has its own
+   * font size below; this one is for the editor's own chrome. */
+  uiFontSize: number
   chatView: ChatViewPref
   fileSort: FileSortPref
   fileShowHidden: boolean
@@ -34,6 +41,8 @@ export interface UiPrefs {
 }
 
 export const UI_PREFS_DEFAULTS: UiPrefs = {
+  uiTheme: 'dark-2020s',
+  uiFontSize: UI_FONT_SIZE_DEFAULT,
   chatView: 'chat',
   fileSort: 'name',
   fileShowHidden: false,
@@ -66,6 +75,8 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 export function validateUiPrefs(value: unknown): UiPrefs {
   const v = (value && typeof value === 'object') ? value as Record<string, unknown> : {}
   return {
+    uiTheme: isUiThemeId(v.uiTheme) ? v.uiTheme : UI_PREFS_DEFAULTS.uiTheme,
+    uiFontSize: clampInt(v.uiFontSize, UI_FONT_SIZE_MIN, UI_FONT_SIZE_MAX, UI_PREFS_DEFAULTS.uiFontSize),
     chatView: v.chatView === 'panel' ? 'panel' : 'chat',
     fileSort: v.fileSort === 'type' || v.fileSort === 'modified' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,

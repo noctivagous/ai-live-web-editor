@@ -118,3 +118,28 @@ export function withSystemPreamble(preamble: string, messages: unknown): unknown
   const list = Array.isArray(messages) ? messages : []
   return [{ role: 'system', content: preamble }, ...list]
 }
+
+/**
+ * Insert per-turn system context (project brief, codebase map, triggered
+ * skills) just before the newest user message instead of ahead of the whole
+ * history. The brief embeds live plan state, the map changes with the file
+ * tree and skills change with every ask — prepended, any of them changing
+ * re-prices the entire history at the full input rate, because a provider
+ * prompt cache only survives an unchanged prefix. Callers pass contexts
+ * ordered stable -> volatile (brief, map, skills); the constant mode
+ * preambles still go through withSystemPreamble. Falls back to prepending
+ * when the conversation has no user message yet.
+ */
+export function withContextBeforeLastUser(contexts: string[], messages: unknown): unknown {
+  const list = Array.isArray(messages) ? messages : []
+  const parts = contexts
+    .filter((c) => typeof c === 'string' && c.length > 0)
+    .map((content) => ({ role: 'system', content }))
+  if (!parts.length) return messages
+  let idx = -1
+  for (let i = list.length - 1; i >= 0; i--) {
+    if ((list[i] as { role?: string })?.role === 'user') { idx = i; break }
+  }
+  if (idx < 0) return [...parts, ...list]
+  return [...list.slice(0, idx), ...parts, ...list.slice(idx)]
+}

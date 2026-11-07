@@ -11,11 +11,28 @@ export function fmtTokens(n: number): string {
   return `${(n / 1000000).toFixed(1)}M`
 }
 
+/**
+ * Cache-read tokens bill at a fraction of the full input rate and cache
+ * writes carry a premium on Anthropic-shaped pricing. 0.1 / 1.25 are the
+ * published Anthropic multipliers; OpenAI's cached rate is 0.5 on current
+ * models, so treat the result as the same order-of-magnitude estimate it
+ * always was — the split exists so a cached turn no longer prices like a
+ * cold one.
+ */
+export const CACHE_READ_RATE = 0.1
+export const CACHE_WRITE_RATE = 1.25
+
 /** Estimated turn cost in USD from per-1M-token pricing. Null when unpriced. */
 export function turnCost(usage: TurnUsage | null | undefined, pricing?: TokenPricing | null): number | null {
   if (!usage || !pricing) return null
   if (!Number.isFinite(pricing.input) || !Number.isFinite(pricing.output)) return null
-  return (usage.input / 1_000_000) * pricing.input + (usage.output / 1_000_000) * pricing.output
+  const cached = Math.min(Math.max(usage.cachedInput ?? 0, 0), usage.input)
+  const written = Math.min(Math.max(usage.cacheWriteInput ?? 0, 0), usage.input - cached)
+  const fresh = usage.input - cached - written
+  return (fresh / 1_000_000) * pricing.input
+    + (cached / 1_000_000) * pricing.input * CACHE_READ_RATE
+    + (written / 1_000_000) * pricing.input * CACHE_WRITE_RATE
+    + (usage.output / 1_000_000) * pricing.output
 }
 
 export function fmtCost(usd: number): string {

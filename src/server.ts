@@ -458,7 +458,7 @@ app.post('/api/chat', async (req, res) => {
     const { parseSketchMode, setSketchMode, getSketchMode } = await import('./sketchSession.js')
     const parsed = parseSketchMode(workflow)
     if (parsed) setSketchMode(parsed)
-    const { activeToolsForMode } = await import('./agentTools.js')
+    const { activeToolsForMode, fileToolsForTurn } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
     const { projectBrief } = await import('./projectConfig.js')
@@ -466,13 +466,24 @@ app.post('/api/chat', async (req, res) => {
     const { skillInjectionForTurn } = await import('./skills/skills.js')
     const lastUser = [...msgs].reverse().find((m: { role?: string }) => m?.role === 'user') as { content?: unknown } | undefined
     const skillText = typeof lastUser?.content === 'string' ? skillInjectionForTurn(lastUser.content) : null
-    const result = await agent.generate([
-      { role: 'system', content: projectBrief() },
-      ...(skillText ? [{ role: 'system', content: skillText }] : []),
-      ...msgs,
-    ], {
+    const { withContextBeforeLastUser } = await import('./workflowRoute.js')
+    const mode = getSketchMode()
+    let tools = activeToolsForMode(mode)
+    if (mode === 'files') {
+      const { getActivePlan } = await import('./plans/plans.js')
+      const { getSearchBackend } = await import('./searchSession.js')
+      tools = fileToolsForTurn({
+        userText: typeof lastUser?.content === 'string' ? lastUser.content : '',
+        hasActivePlan: Boolean(getActivePlan()),
+        searchAvailable: getSearchBackend() !== 'off',
+      })
+    }
+    const result = await agent.generate(withContextBeforeLastUser([
+      projectBrief(),
+      ...(skillText ? [skillText] : []),
+    ], msgs) as never, {
       maxSteps: 12,
-      activeTools: activeToolsForMode(getSketchMode()),
+      activeTools: tools,
     })
     res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
   } catch (e: any) {

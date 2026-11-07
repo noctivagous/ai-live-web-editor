@@ -18,7 +18,7 @@ import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
 import { mountFsApi } from './fsApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
-import { activeToolsForMode } from './agentTools.js'
+import { activeToolsForMode, fileToolsForTurn } from './agentTools.js'
 import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard, withSketchPreamble } from './sketchSession.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -204,9 +204,23 @@ mountPlanApi(app)
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
       const { projectBrief } = await import('./projectConfig.js')
-      const result = await agent.generate([{ role: 'system', content: projectBrief() }, ...(Array.isArray(messages) ? messages : [])], {
+      const { withContextBeforeLastUser } = await import('./workflowRoute.js')
+      const msgs = Array.isArray(messages) ? messages : []
+      const mode = getSketchMode()
+      let tools = activeToolsForMode(mode)
+      if (mode === 'files') {
+        const { getActivePlan } = await import('./plans/plans.js')
+        const { getSearchBackend } = await import('./searchSession.js')
+        const lastUser = [...msgs].reverse().find((m: { role?: string }) => m?.role === 'user') as { content?: unknown } | undefined
+        tools = fileToolsForTurn({
+          userText: typeof lastUser?.content === 'string' ? lastUser.content : '',
+          hasActivePlan: Boolean(getActivePlan()),
+          searchAvailable: getSearchBackend() !== 'off',
+        })
+      }
+      const result = await agent.generate(withContextBeforeLastUser([projectBrief()], msgs) as never, {
         maxSteps: 12,
-        activeTools: activeToolsForMode(getSketchMode()),
+        activeTools: tools,
       })
       res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
     } catch (e: any) {

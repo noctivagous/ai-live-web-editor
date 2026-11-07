@@ -4,6 +4,12 @@ export interface TurnUsage {
   input: number
   output: number
   total: number
+  /** Input tokens served from the provider prompt cache (a subset of input). Present only when the provider reported it — a reported 0 is kept, absence means "not reported". */
+  cachedInput?: number
+  /** Input tokens written to the prompt cache this turn (a subset of input, Anthropic-shaped reports). */
+  cacheWriteInput?: number
+  /** Reasoning tokens (a subset of output — a breakdown, never added to it). */
+  reasoning?: number
 }
 
 export type VerifySummary = {
@@ -276,6 +282,16 @@ function num(value: unknown): number | null {
  * provider reported nothing — callers must render "not reported",
  * never 0.
  */
+function nestedNum(rec: unknown, keys: string[]): number | null {
+  if (!rec || typeof rec !== 'object') return null
+  const r = rec as Record<string, unknown>
+  for (const k of keys) {
+    const v = num(r[k])
+    if (v !== null) return v
+  }
+  return null
+}
+
 export function toTurnUsage(raw: unknown): TurnUsage | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
@@ -285,7 +301,34 @@ export function toTurnUsage(raw: unknown): TurnUsage | null {
   if (input === null && output === null && total === null) return null
   const i = input ?? 0
   const o = output ?? 0
-  return { input: i, output: o, total: total ?? i + o }
+  const usage: TurnUsage = { input: i, output: o, total: total ?? i + o }
+  // Cache + reasoning splits: without them there is no way to tell a cheap
+  // cached turn from an expensive one, and cost math has to price every
+  // input token at the full rate. Field present (even 0) = reported.
+  const cached = num(r.cachedInputTokens ?? r.cacheReadInputTokens ?? r.cache_read_input_tokens)
+    ?? nestedNum(r.prompt_tokens_details ?? r.promptTokenDetails ?? r.input_tokens_details, ['cached_tokens', 'cachedTokens', 'cache_read_input_tokens'])
+  if (cached !== null) usage.cachedInput = Math.min(cached, usage.input)
+  const cacheWrite = num(r.cacheWriteInputTokens ?? r.cacheCreationInputTokens ?? r.cache_creation_input_tokens)
+    ?? nestedNum(r.prompt_tokens_details ?? r.promptTokenDetails ?? r.input_tokens_details, ['cache_creation_input_tokens', 'cacheWriteTokens', 'cache_creation_tokens'])
+  if (cacheWrite !== null) usage.cacheWriteInput = Math.min(cacheWrite, usage.input)
+  const reasoning = num(r.reasoningTokens ?? r.reasoning_tokens)
+    ?? nestedNum(r.completion_tokens_details ?? r.completionTokenDetails ?? r.outputTokenDetails, ['reasoning_tokens', 'reasoningTokens'])
+  if (reasoning !== null) usage.reasoning = Math.min(reasoning, usage.output)
+  return usage
+}
+
+/** Add two turn usages (a turn's verify-gate follow-up stream is a second bill). */
+export function sumTurnUsage(a: TurnUsage | null, b: TurnUsage | null): TurnUsage | null {
+  if (!a) return b
+  if (!b) return a
+  const out: TurnUsage = { input: a.input + b.input, output: a.output + b.output, total: a.total + b.total }
+  const add = (key: 'cachedInput' | 'cacheWriteInput' | 'reasoning') => {
+    if (a[key] !== undefined || b[key] !== undefined) out[key] = (a[key] ?? 0) + (b[key] ?? 0)
+  }
+  add('cachedInput')
+  add('cacheWriteInput')
+  add('reasoning')
+  return out
 }
 
 export function mapMastraChunk(chunk: unknown): ChatStreamEvent | null {
@@ -383,6 +426,16 @@ export function beginChatSse(
   }
 }
 
+/** Read a finished stream's totalUsage (a value or a promise, gateway-dependent). */
+async function readStreamUsage(streamResult: unknown): Promise<TurnUsage | null> {
+  if (!streamResult || typeof streamResult !== 'object') return null
+  const r = streamResult as { totalUsage?: unknown }
+  const raw = typeof r.totalUsage === 'function' || (r.totalUsage && typeof (r.totalUsage as PromiseLike<unknown>).then === 'function')
+    ? await (r.totalUsage as PromiseLike<unknown>)
+    : r.totalUsage
+  return toTurnUsage(raw)
+}
+
 /** The newest user message's text, for skill trigger matching. */
 function latestUserText(messages: unknown): string {
   if (!Array.isArray(messages)) return ''
@@ -404,6 +457,7 @@ export async function pipeAgentChatStream(
     FILES_ROUTED_PREAMBLE,
     SKETCH_MIXED_PREAMBLE,
     routeChatTurn,
+    withContextBeforeLastUser,
     withSystemPreamble,
   } = await import('./workflowRoute.js')
   const parsed = parseSketchMode(workflow)
@@ -415,10 +469,16 @@ export async function pipeAgentChatStream(
   if (mode === 'sketch' && routed.intent === 'mixed') payload = withSystemPreamble(SKETCH_MIXED_PREAMBLE, messages)
   else if (mode === 'sketch') payload = withSystemPreamble(SKETCH_TURN_PREAMBLE, messages)
   else if (routed.switched) payload = withSystemPreamble(FILES_ROUTED_PREAMBLE, messages)
+  // Per-turn context (brief, map, skills) is collected here and inserted
+  // just before the newest user message further down — ordered stable ->
+  // volatile so the conversation history ahead of it stays a cacheable
+  // prefix (see withContextBeforeLastUser). Only the constant mode
+  // preambles above still lead the payload.
+  const turnContext: string[] = []
   // Project brief (phase-11-06): type, device targets, style set —
   // every agent turn knows what kind of project it is building.
   const { projectBrief } = await import('./projectConfig.js')
-  payload = withSystemPreamble(projectBrief(), payload)
+  turnContext.push(projectBrief())
   // Rung 2 (§1): inject top map signatures on Files turns only above
   // the file-count threshold — below it the greps are cheaper than
   // the map. Best-effort: a map failure never breaks the turn.
@@ -430,7 +490,7 @@ export async function pipeAgentChatStream(
         const { buildMapForRoot } = await import('./codebaseMap/mapStore.js')
         const { mapInjectionText } = await import('./codebaseMap/codebaseMap.js')
         const injection = mapInjectionText(buildMapForRoot(), injectionMode === 'always' ? 0 : undefined)
-        if (injection) payload = withSystemPreamble(injection, payload)
+        if (injection) turnContext.push(injection)
       }
     } catch { /* map injection is an optimisation, not a requirement */ }
   }
@@ -442,9 +502,10 @@ export async function pipeAgentChatStream(
       const { skillInjectionForTurn } = await import('./skills/skills.js')
       const userText = latestUserText(messages)
       const injection = userText ? skillInjectionForTurn(userText) : null
-      if (injection) payload = withSystemPreamble(injection, payload)
+      if (injection) turnContext.push(injection)
     } catch { /* skill injection is an optimisation, not a requirement */ }
   }
+  payload = withContextBeforeLastUser(turnContext, payload)
   // Self mode (§L): snapshot the editor tree before a Files turn
   // can touch it, so the turn is always revertible from the
   // recovery page. Best-effort — a snapshot failure never breaks
@@ -460,7 +521,7 @@ export async function pipeAgentChatStream(
   try {
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const { activeToolsForMode } = await import('./agentTools.js')
+    const { activeToolsForMode, fileToolsForTurn } = await import('./agentTools.js')
     const { verifyGateEnabled } = await import('./env.js')
     const { captureBaseline, runVerifyGate, gatePrompt } = await import('./verify/runGate.js')
     const { shouldTriggerGate } = await import('./verify/gate.js')
@@ -489,14 +550,32 @@ export async function pipeAgentChatStream(
         }
       }
     }
+    // Files turns send a per-turn tool set (core + the groups this turn
+    // triggers) instead of all 28 schemas; Sketch keeps its fixed set.
+    let turnHasActivePlan = false
+    let turnTools = activeToolsForMode(mode)
+    if (mode === 'files') {
+      try {
+        const { getActivePlan } = await import('./plans/plans.js')
+        turnHasActivePlan = Boolean(getActivePlan())
+      } catch { /* plan tools stay text-triggered only */ }
+      let searchAvailable = false
+      try {
+        const { getSearchBackend } = await import('./searchSession.js')
+        searchAvailable = getSearchBackend() !== 'off'
+      } catch { /* research tools stay off */ }
+      turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, searchAvailable })
+    }
     const result = await agent.stream(payload as never, {
       maxSteps: 12,
       abortSignal,
-      activeTools: activeToolsForMode(mode),
+      activeTools: turnTools,
     })
     let model: string | undefined
     const toolTrace: string[] = []
     await streamChunks(result.fullStream)
+    // The verify-gate follow-up stream, kept so its usage joins the turn's.
+    let followResult: unknown = null
     // P0-b host gate: Files turns that wrote files get re-checked here.
     let verification: VerifySummary = { ran: false }
     if (
@@ -526,8 +605,11 @@ export async function pipeAgentChatStream(
         const follow = await agent.stream(followPayload as never, {
           maxSteps: 4,
           abortSignal,
-          activeTools: activeToolsForMode(mode),
+          // The gate prompt names the layout tools, so its own text
+          // triggers the layout group; research stays off for a verify pass.
+          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan }),
         })
+        followResult = follow
         await streamChunks(follow.fullStream)
         verification = {
           ran: true,
@@ -563,11 +645,10 @@ export async function pipeAgentChatStream(
     // missing value is "not reported", never 0.
     let usage: TurnUsage | null = null
     try {
-      const r = result as unknown as { totalUsage?: unknown }
-      const raw = typeof r.totalUsage === 'function' || (r.totalUsage && typeof (r.totalUsage as PromiseLike<unknown>).then === 'function')
-        ? await (r.totalUsage as PromiseLike<unknown>)
-        : r.totalUsage
-      usage = toTurnUsage(raw)
+      usage = await readStreamUsage(result)
+      // The verify-gate follow-up is a second stream with its own bill —
+      // it used to go uncounted, understating every verified turn.
+      if (followResult) usage = sumTurnUsage(usage, await readStreamUsage(followResult))
       if (!usage) {
         console.warn('[chat] provider did not report token usage for this turn')
         const { logServerError } = await import('./serverLog.js')

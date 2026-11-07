@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { liveLayoutSnapshot, liveLayoutSvg } from '../../liveTarget.js'
+import { agentLayoutSnapshotResult, liveLayoutSnapshot, liveLayoutSvg } from '../../liveTarget.js'
 
 const presetEnum = z.enum(['minimal', 'layout', 'standard', 'debug', 'typography', 'paint'])
 const coordinateEnum = z.enum(['viewport', 'document'])
@@ -28,7 +28,8 @@ export const layoutSnapshotTool = createTool({
   execute: async (input: Record<string, any>) => {
     try {
       const { url, ...params } = input
-      return await liveLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout', ...params }, url)
+      // Agent shape: summary + elements + analysis, without the duplicated full snapshot object.
+      return agentLayoutSnapshotResult(await liveLayoutSnapshot({ maxTotal: 300, computedStylePreset: 'layout', ...params }, url))
     } catch (e: any) {
       return { error: e.message }
     }

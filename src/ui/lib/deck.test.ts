@@ -163,6 +163,19 @@ describe('fmtTokens and turnCost', () => {
     assert.equal(turnCost({ input: 1_000_000, output: 0, total: 1_000_000 }, { input: 3, output: 15 }), 3)
     assert.equal(turnCost({ input: 1, output: 1, total: 2 }, undefined), null)
   })
+  it('prices cached input at the cache-read rate and cache writes at the premium', () => {
+    const price = { input: 3, output: 15 }
+    const near = (actual: number | null, expected: number) =>
+      assert.ok(actual !== null && Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`)
+    // Fully cached input: 3 * 0.1.
+    near(turnCost({ input: 1_000_000, output: 0, total: 1_000_000, cachedInput: 1_000_000 }, price), 0.3)
+    // Half cached: 1.5 fresh + 0.15 cached.
+    near(turnCost({ input: 1_000_000, output: 0, total: 1_000_000, cachedInput: 500_000 }, price), 1.65)
+    // Fully cache-written input: 3 * 1.25.
+    near(turnCost({ input: 1_000_000, output: 0, total: 1_000_000, cacheWriteInput: 1_000_000 }, price), 3.75)
+    // Junk splits never push the fresh count negative (10 cached reads bill, writes clamp away).
+    near(turnCost({ input: 10, output: 0, total: 10, cachedInput: 999, cacheWriteInput: 999 }, price), 0.000003)
+  })
   it('formats small costs with more precision', () => {
     assert.equal(fmtCost(0.004), '$0.0040')
     assert.equal(fmtCost(1.5), '$1.50')

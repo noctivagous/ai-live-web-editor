@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { abortSignalFromReq, beginChatSse, describeUpstreamError, isAbortError, mapMastraChunk, previewPartialArgs, summarizeArgs, summarizeResult, toTurnUsage } from './chatStream.js'
+import { abortSignalFromReq, beginChatSse, describeUpstreamError, isAbortError, mapMastraChunk, previewPartialArgs, sumTurnUsage, summarizeArgs, summarizeResult, toTurnUsage } from './chatStream.js'
 
 describe('mapMastraChunk', () => {
   it('maps Mastra payload.text text-delta', () => {
@@ -207,6 +207,57 @@ describe('toTurnUsage', () => {
     assert.equal(toTurnUsage(null), null)
     assert.equal(toTurnUsage({}), null)
     assert.equal(toTurnUsage({ model: 'x' }), null)
+  })
+  it('keeps the cache and reasoning splits (AI SDK shape)', () => {
+    assert.deepEqual(
+      toTurnUsage({ inputTokens: 1000, outputTokens: 200, totalTokens: 1200, cachedInputTokens: 800, reasoningTokens: 50 }),
+      { input: 1000, output: 200, total: 1200, cachedInput: 800, reasoning: 50 },
+    )
+    assert.deepEqual(
+      toTurnUsage({ inputTokens: 1000, outputTokens: 10, cacheCreationInputTokens: 250 }),
+      { input: 1000, output: 10, total: 1010, cacheWriteInput: 250 },
+    )
+  })
+  it('keeps the splits from snake_case gateway detail objects', () => {
+    assert.deepEqual(
+      toTurnUsage({
+        prompt_tokens: 500,
+        completion_tokens: 100,
+        prompt_tokens_details: { cached_tokens: 400 },
+        completion_tokens_details: { reasoning_tokens: 30 },
+      }),
+      { input: 500, output: 100, total: 600, cachedInput: 400, reasoning: 30 },
+    )
+  })
+  it('keeps a reported 0, omits unreported splits, clamps splits to their totals', () => {
+    assert.deepEqual(
+      toTurnUsage({ inputTokens: 100, outputTokens: 5, cachedInputTokens: 0 }),
+      { input: 100, output: 5, total: 105, cachedInput: 0 },
+    )
+    assert.equal(toTurnUsage({ inputTokens: 100, outputTokens: 5, cachedInputTokens: 5000 })?.cachedInput, 100)
+    assert.equal('reasoning' in (toTurnUsage({ inputTokens: 100, outputTokens: 5 }) as object), false)
+  })
+})
+
+describe('sumTurnUsage', () => {
+  it('adds two streams, merging the splits only when reported', () => {
+    assert.deepEqual(
+      sumTurnUsage(
+        { input: 100, output: 20, total: 120, cachedInput: 80 },
+        { input: 50, output: 10, total: 60, cachedInput: 40, reasoning: 5 },
+      ),
+      { input: 150, output: 30, total: 180, cachedInput: 120, reasoning: 5 },
+    )
+    assert.deepEqual(
+      sumTurnUsage({ input: 1, output: 2, total: 3 }, { input: 4, output: 5, total: 9 }),
+      { input: 5, output: 7, total: 12 },
+    )
+  })
+  it('passes nulls through', () => {
+    const u = { input: 1, output: 2, total: 3 }
+    assert.equal(sumTurnUsage(null, null), null)
+    assert.equal(sumTurnUsage(u, null), u)
+    assert.equal(sumTurnUsage(null, u), u)
   })
 })
 

@@ -64,17 +64,33 @@ async function localPool(op: 'inspect' | 'patch' | 'eval' | 'open' | 'snapshot',
   }
 }
 
+/**
+ * Agent-facing shape of a layout snapshot result. The summary already carries
+ * viewport/scroll/counts and elements + analysis ride at the top level, so the
+ * full `snapshot` object — the single largest tool result in a Files turn —
+ * only repeats them (page url/title and the style whitelist are the only
+ * losses). Internal callers that need the whole object (verify gate, SVG
+ * render, /api/layout/snapshot) call liveLayoutSnapshot directly.
+ */
+export function agentLayoutSnapshotResult(result: unknown): unknown {
+  if (!result || typeof result !== 'object') return result
+  const r = result as Record<string, unknown>
+  if (!('snapshot' in r)) return result
+  const { snapshot: _snapshot, ...rest } = r
+  return rest
+}
+
 /** inspect/patch/eval: Vite page bridge unless LIVE_TARGET=pool or `url` is another origin. */
 export async function livePageOp(op: PageOp, payload: Record<string, unknown> = {}) {
   const url = typeof payload.url === 'string' ? payload.url : undefined
   const sketchOnVite = isSketchMode() && isViteAppUrl(url)
   let result: unknown
   if (usePlaywrightLive(url) && !sketchOnVite) {
-    if (op === 'layout-snapshot') return liveLayoutSnapshot(payload, url)
+    if (op === 'layout-snapshot') return agentLayoutSnapshotResult(await liveLayoutSnapshot(payload, url))
     if (op === 'console') return liveConsole(payload, url)
     result = await runPoolOp(op, payload)
   } else if (op === 'layout-snapshot') {
-    result = await liveLayoutSnapshot(payload, url)
+    result = agentLayoutSnapshotResult(await liveLayoutSnapshot(payload, url))
   } else if (op === 'console') {
     result = await liveConsole(payload, url)
   } else {

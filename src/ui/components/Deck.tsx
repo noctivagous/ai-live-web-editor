@@ -508,7 +508,7 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
                   <span className="dslide-title">{turnTitle(s.turn)}{s.slices > 1 ? ` · ${s.slice + 1}/${s.slices}` : ''}</span>
                   {s.turn.progress.total > 0 && <span className="dslide-prog">{s.turn.progress.done}/{s.turn.progress.total}</span>}
                   {s.turn.usage && (
-                    <span className="dslide-tokens" title={s.turn.usage ? `in ${s.turn.usage.input.toLocaleString()} / out ${s.turn.usage.output.toLocaleString()}` : 'tokens used'}>
+                    <span className="dslide-tokens" title={s.turn.usage ? `in ${s.turn.usage.input.toLocaleString()} / out ${s.turn.usage.output.toLocaleString()}${s.turn.usage.cachedInput !== undefined ? ` / ${s.turn.usage.cachedInput.toLocaleString()} cached` : ''}${s.turn.usage.reasoning !== undefined ? ` / ${s.turn.usage.reasoning.toLocaleString()} reasoning` : ''}` : 'tokens used'}>
                       {fmtTokens(s.turn.usage.total)} tok{(() => {
                         const c = turnCost(s.turn.usage, pricing)
                         return c !== null && c > 0 ? ` · ${fmtCost(c)} est` : ''

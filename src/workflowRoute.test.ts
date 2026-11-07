@@ -4,6 +4,7 @@ import {
   classifyTurn,
   lastUserText,
   routeChatTurn,
+  withContextBeforeLastUser,
   withSystemPreamble,
 } from './workflowRoute.js'
 
@@ -52,5 +53,27 @@ describe('workflowRoute', () => {
     const out = withSystemPreamble('routed', [{ role: 'user', content: 'x' }]) as { role: string, content: string }[]
     assert.equal(out[0].content, 'routed')
     assert.equal(out[1].content, 'x')
+  })
+
+  it('inserts turn context before the newest user message, history untouched ahead of it', () => {
+    const history = [
+      { role: 'user', content: 'first ask' },
+      { role: 'assistant', content: 'done' },
+      { role: 'user', content: 'second ask' },
+    ]
+    const out = withContextBeforeLastUser(['brief', 'map'], history) as { role: string, content: string }[]
+    assert.deepEqual(out.map((m) => m.content), ['first ask', 'done', 'brief', 'map', 'second ask'])
+    assert.deepEqual(out.slice(2, 4).map((m) => m.role), ['system', 'system'])
+    // The input array is not mutated.
+    assert.equal(history.length, 3)
+  })
+
+  it('prepends when there is no user message, and no-ops on empty context', () => {
+    const noUser = [{ role: 'assistant', content: 'hi' }]
+    const out = withContextBeforeLastUser(['brief'], noUser) as { role: string, content: string }[]
+    assert.deepEqual(out.map((m) => m.content), ['brief', 'hi'])
+    const msgs = [{ role: 'user', content: 'x' }]
+    assert.equal(withContextBeforeLastUser([], msgs), msgs)
+    assert.equal(withContextBeforeLastUser(['', ''], msgs), msgs)
   })
 })

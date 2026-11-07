@@ -1,6 +1,16 @@
 /** Persist and sync Chat across the 4112 sidebar and /chat-embed (same origin). */
 
-export interface TurnUsage { input: number; output: number; total: number }
+export interface TurnUsage {
+  input: number
+  output: number
+  total: number
+  /** Input tokens served from the provider prompt cache (subset of input); absent = not reported. */
+  cachedInput?: number
+  /** Input tokens written to the prompt cache (subset of input); absent = not reported. */
+  cacheWriteInput?: number
+  /** Reasoning tokens (subset of output); absent = not reported. */
+  reasoning?: number
+}
 export type ToolStep = { id: string, name: string, detail: string, result?: string, status: 'running' | 'done' | 'error', startedAt?: number, endedAt?: number }
 export type LogItem =
   | { role: 'system' | 'user' | 'ai' | 'error' | 'think', text: string, usage?: TurnUsage }

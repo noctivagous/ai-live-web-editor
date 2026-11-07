@@ -1,5 +1,94 @@
 
 - ai live editor
+
+----
+
+project template system
+	Catalog / Templates for premade scenarios ship with the app.
+	This should be bundled with template scenarios: settings that
+	have binding conveniences, render from files, snap together pieces
+	for common needs of apps (mobile, desktop, web) and websites.
+
+
+Designated project type / device target convention stored on filesystem as file.
+Device target segmented control 
+
+Draggable configurable layout ui rects in annotation mode. Rows cols
+
+Within project type different guidance structures setting so that AI makes project within rules for outcomes.
+
+Tools made for different project types just like xcode
+
+Style manager comes with different gui and page styles and AI refers to it as it makes project.
+
+Edit comes with premade component systems like settings and app shell and mastra and AI. Doesn't have to look up common or many scenarios but instead refers first to it database but also has some premade libraries ready.
+
+Will know about paperjs and other libs, state machines, etc. will have noct libs like grids available 
+
+"Install app feature..." Will install e.g. settings system and adapt it to the app. But it will ask questions ahead of time about implementation choices, allow user to add amendments to the plan. It will let the user install say a chat system but collect info about how it should appear in the app.
+
+Conversions like master detail.
+
+----
+
+Feature Graph
+
+
+the AI, when it is planning execution,
+could construct a graph with nodes
+as it constructs it plan and then be
+able to follow that quickly, but it
+would have tools that would allow
+it to update the graph as it encounters
+issues.  this way the plan can have
+deep coverage and be complete
+and accurate. 
+
+----
+
+A feature graph is one that plots all of the features
+of a program, particularly one that is deep and extensive.
+We would like a set of conventions for this.  This way
+when a person generates a feature graph or provides
+one, an AI can build a larger app by tracking progress
+relative to the feature graph and modify it as there
+are changes.  it is a guideline.  an example of a feature
+graph is that OpenOffice or LibreOffice has many
+features but they could be described in regions on
+a graph with nodes and subnodes.  e.g. the settings window
+is a window that has a set of parameter in it and this links
+to what shows up on the page or in the ui.  Then the AI
+can query this graph and update the status of
+it.  If the user wants something different, the user
+can have the app modified which updates a feature
+graph if the AI updates it but it is so that parametric components
+can generate large and deep apps.
+
+
+what is the equivalent of xforms for network graphs?
+
+The closest equivalent is **YANG** (specifically the `ietf-network-topology` module defined in [RFC 8345](https://www.rfc-editor.org/rfc/rfc8345)), which is the IETF's standardized data model for describing network topologies as graphs. Like XForms provides a structured, extensible model for forms (model + view + submission), YANG provides a structured, extensible model for network graphs with:
+
+- **Nodes** (graph vertices)
+- **Links** (graph edges)
+- **Termination points** (where links anchor to nodes)
+
+It's designed to be augmented with technology-specific models (L2, L3, TE topologies, etc.) — similar to how XForms separates the data model from the view layer.
+
+If you're looking for a more **general-purpose XML graph format** (not network-specific), **GraphML** is the closest analog — it's an XML schema for arbitrary graph structures with extensible attributes on nodes and edges.
+
+| Format | Scope | Standard |
+|--------|-------|----------|
+| **YANG** (`ietf-network-topology`) | Network topologies specifically | IETF RFC 8345 |
+| **GraphML** | Any graph structure | W3C-ish / open standard |
+| **NML** (Network Markup Language) | Network topologies (XML + RDF) | OGF |
+
+If your use case is specifically about *collecting/authoring* network topology data through a form-like interface (the "XForms" angle), there's no single dominant standard — but **NETCONF/RESTCONF** with YANG models is the de facto mechanism for programmatically reading/writing network topology data.
+
+
+
+----
+
 - since we are making it specialized for web apps we have
 the opportunity to add tools and app functionality so that
 the AI works more efficiently with JS, React components, CSS, HTML,

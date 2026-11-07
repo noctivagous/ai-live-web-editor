@@ -8,6 +8,13 @@ projects/*/dist/
 projects/.chrome-data/
 projects/*/.chrome-data/
 projects/.active
+projects/*
+!projects/appkit-pilot
+!projects/demo
+!projects/demo2
+!projects/lumen
+!projects/shadcn-pilot
+
 .env
 providers.json
 .DS_Store

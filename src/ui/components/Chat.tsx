@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type DeviceTarget, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
+import { PanelView } from './Panel'
 import {
   DEFAULT_CHAT_LOG,
   createSendGuard,
@@ -107,6 +108,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const [workingLabel, setWorkingLabel] = useState(() => loadChat(projectId).workingLabel)
   const [workflow, setWorkflow] = useState<ChatWorkflow>('files')
   const [deckOpen, setDeckOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
   const [sketch, setSketch] = useState<WorkflowSnapshot | null>(null)
   // Page annotations from the live page. Only the embed iframe hears the page
   // directly (postMessage); it re-publishes so the sidebar shows the same chips.
@@ -555,6 +557,8 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         onSearchBackend={(backend) => void setSearchBackend(backend)}
         onClear={clearChat}
         onOpenDeck={openDeck}
+        panelActive={panelOpen}
+        onTogglePanel={() => setPanelOpen(o => !o)}
       />
       <SketchPanel
         workflow={workflow}
@@ -562,18 +566,31 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         sending={sending}
         onSketchAction={(action) => void sketchAction(action)}
       />
-      <TurnStrip turns={turns} pricing={pricing} onJump={(turn) => {
-        document.getElementById(turnAnchor(turn.index))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      }} />
-      <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 12.5, minHeight: 0 }}>
-        {turns.map(turn => (
-          <TurnView key={turn.index} turn={turn} anchorId={turnAnchor(turn.index)} onNeedSetup={onNeedSetup} embed={embed} />
-        ))}
-        {sending && !log.some((item, idx) => idx === log.length - 1 && (item.role === 'tools' || item.role === 'ai' || item.role === 'think')) && (
-          <div className="dcard dcard-reason"><div className="dcard-label">Working</div><pre className="dcard-pre plain">{workingLabel || 'starting…'}</pre></div>
-        )}
-      </div>
-      <WorkingSet files={touchedFiles} onOpen={onOpenPath} />
+      {panelOpen ? (
+        <PanelView
+          turns={turns}
+          sending={sending}
+          workingLabel={workingLabel}
+          onOpenPath={onOpenPath}
+          onNeedSetup={onNeedSetup}
+          embed={embed}
+        />
+      ) : (
+        <>
+          <TurnStrip turns={turns} pricing={pricing} onJump={(turn) => {
+            document.getElementById(turnAnchor(turn.index))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+          }} />
+          <div ref={scroller} style={{ flex: 1, overflow: 'auto', padding: 10, fontSize: 12.5, minHeight: 0 }}>
+            {turns.map(turn => (
+              <TurnView key={turn.index} turn={turn} anchorId={turnAnchor(turn.index)} onNeedSetup={onNeedSetup} embed={embed} />
+            ))}
+            {sending && !log.some((item, idx) => idx === log.length - 1 && (item.role === 'tools' || item.role === 'ai' || item.role === 'think')) && (
+              <div className="dcard dcard-reason"><div className="dcard-label">Working</div><pre className="dcard-pre plain">{workingLabel || 'starting…'}</pre></div>
+            )}
+          </div>
+          <WorkingSet files={touchedFiles} onOpen={onOpenPath} />
+        </>
+      )}
       <ChatComposer
         input={input}
         sending={sending}

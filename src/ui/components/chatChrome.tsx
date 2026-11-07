@@ -1,12 +1,12 @@
 import React from 'react'
-import { Coins, Eraser, Folder, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
+import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
 import type { ChatWorkflow, DeviceTarget, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onSearchBackend, onClear, onOpenDeck }: {
+export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onSearchBackend, onClear, onOpenDeck, panelActive, onTogglePanel }: {
   workflow: ChatWorkflow
   deviceTarget: DeviceTarget
   /** Self mode (§L): the workspace is this editor itself. */
@@ -27,6 +27,9 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
   onSearchBackend?: (backend: SearchBackendId) => void
   onClear: () => void
   onOpenDeck: () => void
+  /** Panel view: stationary indicator presentation of the same chat. */
+  panelActive?: boolean
+  onTogglePanel?: () => void
 }) {
   const availableSearch = (searchOptions || []).filter(o => o.available)
   return (
@@ -78,6 +81,9 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
       <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>
       {showDeckButton && (
         <button type="button" className="deck-btn btn-icon" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}><Layers size={12} />Deck</button>
+      )}
+      {onTogglePanel && (
+        <button type="button" className={`deck-btn btn-icon${panelActive ? ' on' : ''}`} onClick={onTogglePanel} title={panelActive ? 'Back to the scrolling chat view' : 'Panel view — stationary indicators instead of scrolling text'} style={{ padding: '4px 8px' }} aria-pressed={Boolean(panelActive)}><Gauge size={12} />Panel</button>
       )}
       {sending && (
         <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>

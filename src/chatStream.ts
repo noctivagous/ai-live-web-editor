@@ -383,6 +383,16 @@ export function beginChatSse(
   }
 }
 
+/** The newest user message's text, for skill trigger matching. */
+function latestUserText(messages: unknown): string {
+  if (!Array.isArray(messages)) return ''
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { role?: string, content?: unknown }
+    if (m?.role === 'user' && typeof m.content === 'string') return m.content
+  }
+  return ''
+}
+
 export async function pipeAgentChatStream(
   messages: unknown,
   res: ChatSseResponse,
@@ -419,6 +429,17 @@ export async function pipeAgentChatStream(
       const injection = mapInjectionText(buildMapForRoot())
       if (injection) payload = withSystemPreamble(injection, payload)
     } catch { /* map injection is an optimisation, not a requirement */ }
+  }
+  // Skills (§4): a body loads only when this turn triggers it —
+  // an explicit ask trigger, library evidence in package.json, or
+  // the project type. Untriggered turns pay nothing. Best-effort.
+  if (mode === 'files') {
+    try {
+      const { skillInjectionForTurn } = await import('./skills/skills.js')
+      const userText = latestUserText(messages)
+      const injection = userText ? skillInjectionForTurn(userText) : null
+      if (injection) payload = withSystemPreamble(injection, payload)
+    } catch { /* skill injection is an optimisation, not a requirement */ }
   }
   // Self mode (§L): snapshot the editor tree before a Files turn
   // can touch it, so the turn is always revertible from the

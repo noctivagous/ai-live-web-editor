@@ -173,18 +173,37 @@ Phase-11-05 §§1, 3.
 Phase-11-05 §2, phase-11-06 §H. No `SKILL.md` loader exists yet;
 guidelines currently grow the agent instructions instead.
 
-- [ ] Adopt `SKILL.md` folders (frontmatter + concise body; bodies
-  cite catalog/template names, not file bodies)
-- [ ] Metadata (~100 tokens per skill: `name` + `description`)
+- [x] Adopt `SKILL.md` folders (frontmatter + concise body; bodies
+  cite catalog/template names, not file bodies). **Landed
+  2026-11-06:** `skills/<name>/SKILL.md` + loader in
+  `src/skills/skills.ts` (frontmatter parser, no new deps);
+  malformed files are ignored, never half-loaded.
+- [x] Metadata (~100 tokens per skill: `name` + `description`)
   always visible in instructions; body (<5k tokens) loads only
   when the task triggers it — a plain copy fix must not pay the
-  layout body tokens
-- [ ] First skills: `making-layouts` (catalog primitives first,
+  layout body tokens. **Landed 2026-11-06:** the index rides the
+  agent instructions (test-bounded ≤130 tokens/skill line);
+  matched bodies inject into the Files-turn preamble under a
+  combined 5k-token budget, and the `read-skill` tool loads one
+  on demand mid-turn. Verified live against a stub provider: a
+  layout ask carried the making-layouts body; a copy-fix ask
+  carried none (request 2,558 chars smaller). Design call:
+  making-layouts is trigger-only — keying it to project type
+  would tax every turn of an app project, copy fixes included.
+- [x] First skills: `making-layouts` (catalog primitives first,
   templates second, mobile/tablet-ready by default),
   plus knowledge packs as skills (Paper.js, state machines,
-  Noct libs / grids) per phase-11-06 §H
-- [ ] Skill format contract documented (frontmatter required,
-  body <5k tokens, one task per skill) so future skills stay cheap
+  Noct libs / grids) per phase-11-06 §H. **Landed 2026-11-06:**
+  all four ship — making-layouts (project reuse → find-component
+  → place-template → custom; format contract; responsive by
+  default), paper-js and state-machines (dependency-triggered via
+  package.json evidence), noct-grids (type-triggered for
+  canvas-tool/game + ask triggers; its body states plainly that
+  the importable-lib packaging remains the §H follow-on).
+- [x] Skill format contract documented (frontmatter required,
+  body <5k tokens, one task per skill) so future skills stay cheap.
+  **Landed 2026-11-06:** `skills/README.md`; the loader flags
+  over-budget bodies and the tests enforce the shipped set.
 
 ## 5. Yardstick — prove it, then tune
 

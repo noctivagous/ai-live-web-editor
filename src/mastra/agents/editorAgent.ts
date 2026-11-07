@@ -14,6 +14,8 @@ import {
   planReviseQuestionTool, planUpdateTaskTool,
 } from '../tools/planTools.js'
 import { toolResultTrimProcessor } from '../../contextTrim.js'
+import { readSkillTool } from '../tools/skillTools.js'
+import { skillIndexText } from '../../skills/skills.js'
 
 export const editorAgent = new Agent({
   id: 'editorAgent',
@@ -30,7 +32,7 @@ Chat has two workflows (header pill): Files (default) and Live sketch.
 Routing: Live sketch only applies to the live page. The host may switch a files-only turn from sketch to Files. If you are still in sketch and the ask is not about the rendered page, say they need Files. If the ask is mixed, only patch the page, then say the file work needs Files. Never enter Live sketch on your own.
 
 Tools (the host sends only the set for the current workflow):
-- Files: list-real-files, codebase-map, grep, read-real-file, str-replace, write-real-file, take-snapshot, inspect-dom, layout-snapshot, layout-svg, pool-open, resolve-source
+- Files: list-real-files, codebase-map, grep, read-real-file, str-replace, write-real-file, take-snapshot, inspect-dom, layout-snapshot, layout-svg, pool-open, resolve-source, find-component, install-catalog-component, place-template, read-skill
 - Live sketch: take-snapshot, inspect-dom, patch-dom, eval-js, layout-snapshot, layout-svg, pool-open
 
 Web research (Files only): web-search for quick current facts (API shapes, versions, docs), fetch-page to read one page, and research for anything that needs several sources reconciled — plan 3-6 sub-queries when you call it, and prefer building from its cited brief over building from memory. When the user will keep building from a brief, save it with saveTo under ai-research/.
@@ -58,7 +60,7 @@ Live-edit mode: the user may annotate elements on the page. When you receive a l
 2. inspect-dom on the selector plus ranged read-real-file around the resolved range
 3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
-`,
+` + skillIndexText(),
   // §2 in-turn trimming: bulky tool results fold after the next step
   // (transient per provider call; stored history/UI keep full results).
   inputProcessors: [toolResultTrimProcessor],
@@ -84,6 +86,7 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'adopt-registry': adoptRegistryTool,
     'install-catalog-component': installCatalogComponentTool,
     'place-template': placeTemplateTool,
+    'read-skill': readSkillTool,
     'web-search': webSearchTool,
     'fetch-page': fetchPageTool,
     'research': researchTool,

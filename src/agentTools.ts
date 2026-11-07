@@ -20,6 +20,7 @@ export const FILE_ACTIVE_TOOLS = [
   'adopt-registry',
   'install-catalog-component',
   'place-template',
+  'read-skill',
   'web-search',
   'fetch-page',
   'research',

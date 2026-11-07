@@ -407,7 +407,15 @@ app.post('/api/chat', async (req, res) => {
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
     const { projectBrief } = await import('./projectConfig.js')
-    const result = await agent.generate([{ role: 'system', content: projectBrief() }, ...(Array.isArray(messages) ? messages : [])], {
+    const msgs = Array.isArray(messages) ? messages : []
+    const { skillInjectionForTurn } = await import('./skills/skills.js')
+    const lastUser = [...msgs].reverse().find((m: { role?: string }) => m?.role === 'user') as { content?: unknown } | undefined
+    const skillText = typeof lastUser?.content === 'string' ? skillInjectionForTurn(lastUser.content) : null
+    const result = await agent.generate([
+      { role: 'system', content: projectBrief() },
+      ...(skillText ? [{ role: 'system', content: skillText }] : []),
+      ...msgs,
+    ], {
       maxSteps: 12,
       activeTools: activeToolsForMode(getSketchMode()),
     })

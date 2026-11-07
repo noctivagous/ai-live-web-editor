@@ -3,6 +3,31 @@
 
 ----
 
+separate agent tools for separate agent work
+outside of regular chat, such as code audits,
+that make use of the same overlay window
+as the planning feature.  these tools will
+allow for specialized sets of agent tools
+for various tasks.
+
+----
+
+made part of project template system
+will be GUI components inventory.
+here are three artifacts.   somehow we
+want the agent to be able to install GUI components
+rapidly from a catalog and a selection. They have
+a variety of components (which can be
+built on top of shadcn).  we are addressing the
+issue that when AI builds out UI it doesn't
+go beyond superficial.  It doesn't have available
+to it different variations of the same UI control
+or element, so it can't build professional looking
+apps without the user putting out a lot of effort.
+
+
+----
+
 project template system
 	Catalog / Templates for premade scenarios ship with the app.
 	This should be bundled with template scenarios: settings that

@@ -21,6 +21,7 @@
  */
 import type { ProcessLLMRequestArgs, ProcessLLMRequestResult, Processor } from '@mastra/core/processors'
 import { parseFile } from './codebaseMap/extract.js'
+import { currentAgentSettings } from './agentSettings.js'
 
 /** Results at or below this size are never worth folding. */
 export const TRIM_THRESHOLD_CHARS = 1500
@@ -150,6 +151,7 @@ export class ToolResultTrimProcessor implements Processor {
   readonly name = 'Tool result trim (§2)'
 
   async processLLMRequest({ prompt }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
+    if (!currentAgentSettings().contextTrim) return undefined
     if (!Array.isArray(prompt)) return undefined
     const { prompt: next, changed, stats } = trimPrompt(prompt as unknown as LooseMessage[])
     if (!changed) return undefined

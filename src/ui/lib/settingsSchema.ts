@@ -16,7 +16,7 @@
  */
 
 export type SettingScope = 'global' | 'project' | 'device'
-export type SettingStore = 'project' | 'prefs'
+export type SettingStore = 'project' | 'prefs' | 'agent'
 export type SettingControl = 'select' | 'toggle' | 'slider' | 'text' | 'checkboxes'
 
 export interface SettingOption { value: string, label: string }
@@ -53,6 +53,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
   { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
   { id: 'shortcuts', title: 'Keyboard Shortcuts', scope: 'device', custom: 'shortcuts', keywords: 'keys hotkeys bindings rebind f2 delete deck shortcuts' },
+  { id: 'agent', title: 'Agent & Chat', scope: 'global', keywords: 'agent chat default workflow sketch context trimming codebase map injection tokens' },
   { id: 'project', title: 'Project', scope: 'project', keywords: 'type format device targets style appkit catalog manifest' },
   { id: 'plans', title: 'Plans & Workflow', scope: 'project', keywords: 'plan level mutability default planning' },
   { id: 'preview', title: 'Preview & Live App', scope: 'global', custom: 'preview', keywords: 'playwright pool browser live target preview' },
@@ -61,6 +62,25 @@ export const SETTING_SECTIONS: SettingSection[] = [
 ]
 
 export const SETTING_FIELDS: SettingField[] = [
+  // Agent & Chat — all three are launcher-global agent settings
+  // (server): the workflow session itself is launcher-side state.
+  {
+    id: 'defaultWorkflow', section: 'agent', label: 'Default workflow', control: 'select', store: 'agent',
+    hint: 'A freshly started launcher opens chats in this workflow. Files edits the project on disk; Sketch patches the live page. Switching workflow in a running session is unchanged.',
+    options: [{ value: 'files', label: 'Files' }, { value: 'sketch', label: 'Sketch' }],
+    keywords: 'chat new mode',
+  },
+  {
+    id: 'contextTrim', section: 'agent', label: 'Context trimming', control: 'toggle', store: 'agent',
+    hint: 'Older tool results in a running turn are folded to short summaries before each model call, so long turns cost fewer tokens. The full results stay in the chat history.',
+    keywords: 'tokens trim fold tool results context window',
+  },
+  {
+    id: 'mapInjection', section: 'agent', label: 'Codebase map in context', control: 'select', store: 'agent',
+    hint: 'Adds the generated codebase map (files, imports, component signatures) to Files turns. Auto adds it only for projects with 15 or more files.',
+    options: [{ value: 'auto', label: 'Auto (15+ files)' }, { value: 'always', label: 'Always' }, { value: 'off', label: 'Off' }],
+    keywords: 'tokens index signatures codebase map',
+  },
   // Appearance — device prefs (uiPrefs instance).
   {
     id: 'chatView', section: 'appearance', label: 'Default chat view', control: 'select', store: 'prefs',

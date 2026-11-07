@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import {
-  getProjectConfig, postProjectConfig, setPlaywrightPool,
-  type LauncherConfig, type ProjectConfig,
+  getAgentSettings, getProjectConfig, postAgentSettings, postProjectConfig, setPlaywrightPool,
+  type AgentSettings, type LauncherConfig, type ProjectConfig,
 } from '../lib/api'
 import {
   loadUiPrefs, replaceUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, UI_PREFS_DEFAULTS, UI_PREFS_KEY, type UiPrefs,
@@ -22,7 +22,8 @@ import { SearchSetup } from './SearchSetup'
    Declarative sections render generically from the settings model
    (lib/settingsSchema.ts) with values read/written through their
    instance stores — project.ai.json for Project scope, uiPrefs for
-   Device scope. Workflow sections (providers, search) mount the same
+   Device scope, agent-settings.json for the agent behavior switches.
+   Workflow sections (providers, search) mount the same
    hand-built components the setup wizard uses. Everything saves on
    change, like the settings it replaces; there is no Apply queue. */
 
@@ -44,6 +45,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const [projectCfg, setProjectCfg] = useState<ProjectConfig | null>(null)
   const [designated, setDesignated] = useState(false)
   const [prefs, setPrefs] = useState<UiPrefs>(() => loadUiPrefs())
+  const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [poolOn, setPoolOn] = useState(false)
   const [poolSaving, setPoolSaving] = useState(false)
@@ -139,6 +141,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   useEffect(() => {
     let live = true
     void getProjectConfig().then(r => { if (live) { setProjectCfg(r.config); setDesignated(r.designated) } }).catch(() => {})
+    void getAgentSettings().then(s => { if (live) setAgentSettings(s) }).catch(() => {})
     return () => { live = false }
   }, [])
 
@@ -146,13 +149,15 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const activeSection = sectionById(section) ?? SETTING_SECTIONS[0]
 
   const displayValue = (f: SettingField): string | boolean | string[] => {
-    const raw = (f.store === 'project' ? projectCfg : prefs) as Record<string, unknown> | null
+    const raw = (f.store === 'project' ? projectCfg : f.store === 'agent' ? agentSettings : prefs) as Record<string, unknown> | null
     const v = raw?.[f.id]
-    if (f.control === 'toggle') return v === true
+    if (f.control === 'toggle') return v === undefined && f.id === 'contextTrim' ? true : v === true
     if (f.control === 'checkboxes') return Array.isArray(v) ? v.map(String) : []
     if (v === undefined || v === null) {
       if (f.id === 'planLevel') return '1'
       if (f.id === 'planMutability') return '5'
+      if (f.id === 'mapInjection') return 'auto'
+      if (f.id === 'defaultWorkflow') return 'files'
       return ''
     }
     return String(v)
@@ -166,6 +171,14 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     setSaveError(null)
     if (f.store === 'prefs') {
       setPrefs(saveUiPrefs({ [f.id]: coerced } as Partial<UiPrefs>))
+      return
+    }
+    if (f.store === 'agent') {
+      try {
+        setAgentSettings(await postAgentSettings({ [f.id]: coerced } as Partial<AgentSettings>))
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : String(e))
+      }
       return
     }
     try {

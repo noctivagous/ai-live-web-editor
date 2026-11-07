@@ -424,10 +424,14 @@ export async function pipeAgentChatStream(
   // the map. Best-effort: a map failure never breaks the turn.
   if (mode === 'files') {
     try {
-      const { buildMapForRoot } = await import('./codebaseMap/mapStore.js')
-      const { mapInjectionText } = await import('./codebaseMap/codebaseMap.js')
-      const injection = mapInjectionText(buildMapForRoot())
-      if (injection) payload = withSystemPreamble(injection, payload)
+      const { currentAgentSettings } = await import('./agentSettings.js')
+      const injectionMode = currentAgentSettings().mapInjection
+      if (injectionMode !== 'off') {
+        const { buildMapForRoot } = await import('./codebaseMap/mapStore.js')
+        const { mapInjectionText } = await import('./codebaseMap/codebaseMap.js')
+        const injection = mapInjectionText(buildMapForRoot(), injectionMode === 'always' ? 0 : undefined)
+        if (injection) payload = withSystemPreamble(injection, payload)
+      }
     } catch { /* map injection is an optimisation, not a requirement */ }
   }
   // Skills (§4): a body loads only when this turn triggers it —

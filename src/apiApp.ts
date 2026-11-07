@@ -10,6 +10,7 @@ import { mountPageBridge } from './pageBridge.js'
 import { mountPoolPage } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
+import { mountAgentSettingsApi } from './agentSettingsApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
@@ -66,6 +67,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountPoolPage(app)
   mountWorkflowApi(app)
   mountProjectConfigApi(app)
+  mountAgentSettingsApi(app)
   mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)

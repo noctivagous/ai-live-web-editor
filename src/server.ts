@@ -14,6 +14,7 @@ import { markLauncherOwner } from './liveTarget.js'
 import { mountPoolPage, openPoolBrowser } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
+import { mountAgentSettingsApi } from './agentSettingsApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
@@ -62,6 +63,7 @@ app.use(express.json({ limit: '20mb' }))
 mountPoolPage(app)
 mountWorkflowApi(app)
 mountProjectConfigApi(app)
+mountAgentSettingsApi(app)
 mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)

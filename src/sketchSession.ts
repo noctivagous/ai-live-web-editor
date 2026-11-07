@@ -1,4 +1,5 @@
 /** In-memory Live sketch session: mode, patch log, undo/discard/accept. No disk. */
+import { currentAgentSettings } from './agentSettings.js'
 
 export const SKETCH_WRITE_BLOCKED =
   'Live sketch is on. Accept or switch to Files to write disk.'
@@ -98,7 +99,10 @@ export function withSketchPreamble(messages: unknown): unknown {
   return [{ role: 'system', content: SKETCH_TURN_PREAMBLE }, ...list]
 }
 
-let live: SketchState = emptySketchState()
+// A fresh launcher process starts in the configured default
+// workflow (Settings → Agent & Chat); switching afterwards is
+// session state, as before.
+let live: SketchState = { ...emptySketchState(), mode: currentAgentSettings().defaultWorkflow }
 
 export function getSketchState(): SketchState {
   return live

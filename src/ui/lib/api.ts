@@ -569,3 +569,24 @@ export async function placeTemplate(id: string) {
 export function askAi(text: string) {
   window.dispatchEvent(new CustomEvent('ai-live:ask-ai', { detail: { text } }))
 }
+
+/** Launcher-global agent behavior settings (Settings → Agent & Chat). */
+export interface AgentSettings {
+  defaultWorkflow: 'files' | 'sketch'
+  contextTrim: boolean
+  mapInjection: 'auto' | 'always' | 'off'
+}
+
+export async function getAgentSettings(): Promise<AgentSettings> {
+  const r = await fetch('/api/agent-settings')
+  const j = await r.json() as { ok: boolean, settings: AgentSettings }
+  return j.settings
+}
+
+export async function postAgentSettings(patch: Partial<AgentSettings>): Promise<AgentSettings> {
+  const r = await fetch('/api/agent-settings', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
+  })
+  const j = await r.json() as { ok: boolean, settings: AgentSettings }
+  return j.settings
+}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { before, describe, it } from 'node:test'
 import { ToolResultTrimProcessor, trimPrompt, TRIM_THRESHOLD_CHARS } from './contextTrim.js'
+import { saveAgentSettings, setAgentSettingsPath } from './agentSettings.js'
 
 type Part = Record<string, unknown>
 type Msg = { role: string, content: unknown }
@@ -116,6 +117,16 @@ describe('trimPrompt (§2 in-turn trimming)', () => {
 })
 
 describe('ToolResultTrimProcessor', () => {
+  // Hermetic agent settings: the processor consults the Agent & Chat
+  // settings, so point them at a temp file instead of the repo's.
+  before(async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trim-proc-'))
+    setAgentSettingsPath(path.join(dir, 'agent-settings.json'))
+  })
+
   it('returns a modified prompt only when something folded', async () => {
     const proc = new ToolResultTrimProcessor()
     assert.equal(proc.id, 'tool-result-trim')
@@ -131,5 +142,30 @@ describe('ToolResultTrimProcessor', () => {
     const result = await proc.processLLMRequest({ prompt } as never) as { prompt?: Msg[] } | undefined
     assert.ok(result?.prompt)
     assert.ok(!partText(result!.prompt![2]).includes('DEEP_MARKER_LINE'))
+  })
+
+  it('does nothing while the Agent & Chat context-trim setting is off', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trim-toggle-'))
+    setAgentSettingsPath(path.join(dir, 'agent-settings.json'))
+    try {
+      const proc = new ToolResultTrimProcessor()
+      const prompt: Msg[] = [
+        { role: 'user', content: [{ type: 'text', text: 'go' }] },
+        call('a', 'read-real-file'),
+        readResult('a'),
+        call('b', 'grep'),
+        toolMsg('b', 'grep', { type: 'text', value: 'ok' }),
+      ]
+      saveAgentSettings({ contextTrim: false })
+      assert.equal(await proc.processLLMRequest({ prompt } as never), undefined)
+      saveAgentSettings({ contextTrim: true })
+      const result = await proc.processLLMRequest({ prompt } as never) as { prompt?: Msg[] } | undefined
+      assert.ok(result?.prompt)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

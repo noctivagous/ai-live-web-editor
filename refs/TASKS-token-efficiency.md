@@ -126,21 +126,47 @@ and 20k file reads currently stay in context for every later step.
 
 Phase-11-05 §§1, 3.
 
-- [ ] Tier `find-component` results: search returns names +
+- [x] Tier `find-component` results: search returns names +
   one-liners + prop names only (~300 tokens total); full entry
-  (props, slots, emits, examples) only on exact `tag` lookup
-- [ ] Library "Insert" / copy-own: write the catalog component file
+  (props, slots, emits, examples) only on exact `tag` lookup.
+  **Landed 2026-11-06:** `entrySummary`/`searchSummaries` in
+  catalog.ts (one-liner = first sentence, ≤120 chars); the tool
+  returns `tier: 'summary'` for search and `tier: 'full'` only for
+  a tag. Test-bounded: a 6-result search serialises ≤1,800 chars.
+- [x] Library "Insert" / copy-own: write the catalog component file
   into the project so it lands in the project registry/map (§1)
-  and later turns import it instead of re-describing markup
-- [ ] "Ask AI to use it" seeds a chat turn naming the component
-- [ ] Seed one starter (`projects/lumen`) with the catalog installed
-  so the registry/injection path is exercised by default
-- [ ] `catalog/templates/` alongside components: named, previewable
+  and later turns import it instead of re-describing markup.
+  **Landed 2026-11-06:** the Library panel (left panel, beside
+  Files) lists the catalog with Insert (POST /api/catalog/install,
+  the §1 copy-own path) and opens the placed file.
+- [x] "Ask AI to use it" seeds a chat turn naming the component.
+  **Landed 2026-11-06:** Library rows dispatch `ai-live:ask-ai`;
+  Chat sends it as a normal turn naming the tag and the
+  install-then-import instruction.
+- [x] Seed one starter (`projects/lumen`) with the catalog installed
+  so the registry/injection path is exercised by default.
+  **Landed 2026-11-06:** Button installed into lumen
+  (`src/components/ui/button.tsx`, recorded in
+  `.ai-live/components.json`, origin catalog), wired as the header
+  "New" action in App.jsx, deps added (class-variance-authority,
+  cn ^0.5.2, radix-ui); `npm run build` passes and the map shows
+  App → renders <Button>, usedBy 1. Note: lumen has no Tailwind, so
+  the variant classes are inert there until lumen adopts the token
+  theme — the registry/map path is what the seed exercises.
+- [x] `catalog/templates/` alongside components: named, previewable
   arrangements (module, compound, multi-column) in the same
   manifest; a template install is one write + `str-replace`
-  customisation, not a layout generated from scratch
-- [ ] Templates get Insert + Ask-AI actions (same mechanics as
-  components)
+  customisation, not a layout generated from scratch.
+  **Landed 2026-11-06:** `catalog/templates.json` + three sources
+  (hero-module, multi-column-3, pricing-section), each a
+  self-contained section with top-of-file constants and no package
+  dependencies; `templateSummary()` joins the brief; the
+  `place-template` tool writes once, never replaces, and rebuilds
+  the project map.
+- [x] Templates get Insert + Ask-AI actions (same mechanics as
+  components). **Landed 2026-11-06:** Library Templates section
+  (POST /api/catalog/place-template + `ai-live:ask-ai` naming the
+  template id and the place-then-customise instruction).
 
 ## 4. Skills / knowledge packs (progressive disclosure)
 

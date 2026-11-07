@@ -148,6 +148,48 @@ export function findComponents(
 }
 
 /**
+ * Tier-1 summary of a catalog entry (§3 tiering): tag, category, a
+ * one-line description and prop NAMES only — no types, no slot/emit
+ * detail, no examples. A search of these costs ~300 tokens total;
+ * the full entry is one exact-tag lookup away.
+ */
+export interface CatalogSummary {
+  tag: string
+  category: string
+  description: string
+  props: string[]
+  runtime?: 'lit' | 'react'
+  stock: 'shadcn' | 'appkit'
+}
+
+function oneLiner(text: string, max = 120): string {
+  const first = text.split(/(?<=[.!])\s/)[0] || text
+  const flat = first.replace(/\s+/g, ' ').trim()
+  return flat.length <= max ? flat : flat.slice(0, max - 1).trimEnd() + '…'
+}
+
+export function entrySummary(entry: CatalogEntry): CatalogSummary {
+  return {
+    tag: entry.tag,
+    category: entry.category,
+    description: oneLiner(entry.description),
+    props: entry.props.map(pr => pr.name),
+    ...(entry.runtime ? { runtime: entry.runtime } : {}),
+    stock: entryStock(entry),
+  }
+}
+
+/** Tier-1 search: the find-component search path returns summaries, never full entries. */
+export function searchSummaries(
+  query: string,
+  limit = 6,
+  catalog: Catalog = loadCatalog(),
+  opts: { includeAppkit?: boolean } = {},
+): CatalogSummary[] {
+  return findComponents(query, limit, catalog, opts).map(entrySummary)
+}
+
+/**
  * Exact-tag lookup. Deliberately NOT stock-filtered: naming a
  * component exactly is an explicit request, so an AppKit tag
  * resolves even while that stock is off.

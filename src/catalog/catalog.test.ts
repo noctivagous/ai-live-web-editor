@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { catalogSummary, findComponents, getComponent, loadCatalog } from './catalog.js'
+import { catalogSummary, entrySummary, findComponents, getComponent, loadCatalog, searchSummaries } from './catalog.js'
 import { setAppkitEnabled } from './catalogSession.js'
 import { extractCatalog, extractEntryFromSource } from './extract.js'
 import { extractReactEntry } from './extractReact.js'
@@ -199,4 +199,24 @@ test('react extractor reads cva variants and inline props from a shadcn-style so
   assert.equal(entry?.props.find(p => p.name === 'className')?.type, 'string')
   assert.deepEqual(entry?.dependencies, ['class-variance-authority', 'cn', 'radix-ui'])
   assert.ok(entry?.description.includes('native <button>'))
+})
+
+test('§3 tiering: search summaries carry names + prop names only, full entry stays one tag away', () => {
+  setAppkitEnabled(false)
+  const catalog = loadCatalog()
+  const button = getComponent('Button', catalog)!
+  const summary = entrySummary(button)
+  assert.equal(summary.tag, 'Button')
+  assert.equal(summary.stock, 'shadcn')
+  assert.deepEqual(summary.props, ['variant', 'size', 'asChild', 'className'])
+  assert.ok(!('slots' in summary) && !('examples' in summary), 'no full-entry fields leak into tier 1')
+  assert.ok(summary.description.length <= 121, `one-liner is ${summary.description.length} chars`)
+  assert.ok(!summary.description.includes('Renders a native'), 'second sentence is dropped')
+
+  const results = searchSummaries('button dialog form table input select', 6, catalog)
+  assert.ok(results.length > 0)
+  const serialized = JSON.stringify(results)
+  assert.ok(serialized.length <= 1800, `tier-1 search payload ${serialized.length} chars (~${Math.round(serialized.length / 4)} tokens) stays near the ~300-token budget`)
+  const full = JSON.stringify(getComponent(results[0].tag, catalog))
+  assert.ok(full.length > serialized.length / results.length, 'a full entry costs more than a summary')
 })

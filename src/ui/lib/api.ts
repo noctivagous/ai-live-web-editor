@@ -500,3 +500,51 @@ export async function fetchOverlaySource(): Promise<string> {
   if (!r.ok) throw new Error(`overlay fetch failed: ${r.status}`)
   return r.text()
 }
+
+// --- Library (§3): tiered catalog + templates for the Library panel ---
+
+export interface CatalogSummaryItem {
+  tag: string
+  category: string
+  description: string
+  props: string[]
+  runtime?: 'lit' | 'react'
+  stock: 'shadcn' | 'appkit'
+}
+
+export interface TemplateItem {
+  id: string
+  name: string
+  kind: 'module' | 'compound' | 'multi-column'
+  description: string
+  sourceFile: string
+  target: string
+}
+
+export async function getCatalog(q = '') {
+  const r = await fetch(`${API}/api/catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`)
+  return r.json() as Promise<{ ok: boolean, components: CatalogSummaryItem[], templates: TemplateItem[], error?: string }>
+}
+
+export async function installCatalogComponent(tag: string) {
+  const r = await fetch(`${API}/api/catalog/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag }),
+  })
+  return r.json() as Promise<{ ok: boolean, tag: string, dest?: string, error?: string }>
+}
+
+export async function placeTemplate(id: string) {
+  const r = await fetch(`${API}/api/catalog/place-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  return r.json() as Promise<{ ok: boolean, id: string, dest?: string, error?: string }>
+}
+
+/** Seed a chat turn from outside the chat panel (Library "Ask AI", plan execute). */
+export function askAi(text: string) {
+  window.dispatchEvent(new CustomEvent('ai-live:ask-ai', { detail: { text } }))
+}

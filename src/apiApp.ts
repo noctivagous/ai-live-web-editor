@@ -14,6 +14,7 @@ import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
+import { mountCatalogApi } from './catalog/catalogApi.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { activeToolsForMode } from './agentTools.js'
 import { getSketchMode, parseSketchMode, setSketchMode, sketchWriteGuard, withSketchPreamble } from './sketchSession.js'
@@ -68,6 +69,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 mountResearchApi(app)
 mountPlanApi(app)
   mountCodebaseMapApi(app)
+  mountCatalogApi(app)
 
   app.get('/api/fs/health', (_req, res) => {
     const root = getFsRoot()

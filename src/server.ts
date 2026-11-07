@@ -18,6 +18,7 @@ import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
+import { mountCatalogApi } from './catalog/catalogApi.js'
 import { buildAndPersistMap, createMapRebuilder } from './codebaseMap/mapStore.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
@@ -64,6 +65,7 @@ mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)
 mountCodebaseMapApi(app)
+mountCatalogApi(app)
 
 ensureWorkspace()
 try { buildAndPersistMap() } catch { /* map is generated lazily by the tool too */ }

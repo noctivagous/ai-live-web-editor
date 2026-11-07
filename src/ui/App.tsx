@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { FolderOpen, Import, Plus, Save, Settings } from 'lucide-react'
 import { FileTree } from './components/FileTree'
+import { Library } from './components/Library'
 import { MonacoEditor } from './components/MonacoEditor'
 import { Preview } from './components/Preview'
 import { Chat } from './components/Chat'
@@ -40,6 +41,7 @@ function connTone(status: string): string {
 
 export default function App() {
   const [files, setFiles] = useState<string[]>([])
+  const [leftView, setLeftView] = useState<'files' | 'library'>('files')
   const [activePath, setActivePath] = useState('/index.html')
   const [content, setContent] = useState('// loading...')
   const [status, setStatus] = useState('connecting to :4112...')
@@ -860,12 +862,24 @@ export default function App() {
             style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
           />
         )}
-        <div className="panel" style={{ width: leftW, flexShrink: 0 }}>
-          <div className="panel-head">Files <span className="sub">{files.length}</span></div>
-          <FileTree files={files} active={activePath} onSelect={loadFile} onNew={async () => {
-            const p = prompt('Path e.g. /src/new.tsx'); if (!p) return;
-            await writeFile(p, '// new'); loadFiles(); loadFile(p)
-          }} />
+        <div className="panel" style={{ width: leftW, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div className="panel-head" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}>Files</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates">Library</button>
+            {leftView === 'files' && <span className="sub">{files.length}</span>}
+          </div>
+          {leftView === 'files' ? (
+            <FileTree files={files} active={activePath} onSelect={loadFile} onNew={async () => {
+              const p = prompt('Path e.g. /src/new.tsx'); if (!p) return;
+              await writeFile(p, '// new'); loadFiles(); loadFile(p)
+            }} />
+          ) : (
+            <Library
+              key={activeProject}
+              onOpenPath={(path) => { void loadFile(path); loadFiles() }}
+              onNotice={setNotice}
+            />
+          )}
         </div>
         <VDivider onMouseDown={colDrag(setLeftW, 1)} title="Drag to resize file tree" />
 

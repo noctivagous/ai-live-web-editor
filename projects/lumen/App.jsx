@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Button } from './src/components/ui/button'
 
 const THEMES = [
   { id: 'lumen', name: 'Lumen', swatch: '#c45c26' },
@@ -684,7 +685,7 @@ export default function App() {
               style={search}
               aria-label="Search"
             />
-            <button type="button" style={primaryBtn}>New</button>
+            <Button type="button" style={primaryBtn}>New</Button>
             <div style={avatar} title="Avery Chen">AC</div>
           </div>
         </header>

@@ -256,6 +256,18 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     return () => window.removeEventListener('ai-live:plan-execute', onExecute)
   }, [])
 
+  // The Library panel's "Ask AI to use it" seeds a normal chat turn
+  // naming the component or template (§3).
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const d = (e as CustomEvent).detail as { text?: string } | undefined
+      if (!d?.text) return
+      void sendTextRef.current(d.text)
+    }
+    window.addEventListener('ai-live:ask-ai', onAsk)
+    return () => window.removeEventListener('ai-live:ask-ai', onAsk)
+  }, [])
+
   async function sendText(userText: string) {
     if (!userText.trim() || sending) return
     // Synchronous double-submit guard: `sending` state arrives a render

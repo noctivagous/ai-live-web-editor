@@ -7,6 +7,7 @@ import { getConsoleTool, getNetworkFailuresTool } from '../tools/verifyTools.js'
 import { resolveSourceTool } from '../tools/resolveSourceTool.js'
 import { findComponentTool } from '../tools/catalogTools.js'
 import { adoptRegistryTool, codebaseMapTool, installCatalogComponentTool } from '../tools/codebaseMapTools.js'
+import { placeTemplateTool } from '../tools/templateTools.js'
 import { fetchPageTool, researchTool, webSearchTool } from '../tools/webTools.js'
 import {
   planAddQuestionTool, planFinishTool, planRemoveQuestionTool,
@@ -82,6 +83,7 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'codebase-map': codebaseMapTool,
     'adopt-registry': adoptRegistryTool,
     'install-catalog-component': installCatalogComponentTool,
+    'place-template': placeTemplateTool,
     'web-search': webSearchTool,
     'fetch-page': fetchPageTool,
     'research': researchTool,

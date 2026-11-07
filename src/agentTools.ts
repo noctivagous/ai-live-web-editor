@@ -19,6 +19,7 @@ export const FILE_ACTIVE_TOOLS = [
   'codebase-map',
   'adopt-registry',
   'install-catalog-component',
+  'place-template',
   'web-search',
   'fetch-page',
   'research',

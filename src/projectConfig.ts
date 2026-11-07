@@ -18,6 +18,7 @@ import {
   type DeviceTarget,
 } from './deviceSession.js'
 import { catalogSummary } from './catalog/catalog.js'
+import { templateSummary } from './catalog/templates.js'
 import { searchAvailable, searchBackendLabel } from './research/searchBackend.js'
 import { getActivePlan } from './plans/plans.js'
 
@@ -144,6 +145,8 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)
   const catalog = catalogSummary()
   if (catalog) lines.push(catalog)
+  const templates = templateSummary()
+  if (templates) lines.push(templates)
   if (searchAvailable()) {
     lines.push(`Web research is available via ${searchBackendLabel()}: web-search / fetch-page for quick lookups, research for multi-source briefs — build from cited briefs, not memory, when external facts matter.`)
   }

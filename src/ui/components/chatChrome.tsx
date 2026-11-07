@@ -1,26 +1,34 @@
 import React from 'react'
-import { Coins, Eraser, Folder, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
-import type { ChatWorkflow, DeviceTarget, SelfCheck, WorkflowSnapshot } from '../lib/api'
+import { Coins, Eraser, Folder, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
+import type { ChatWorkflow, DeviceTarget, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onClear, onOpenDeck }: {
+export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onSearchBackend, onClear, onOpenDeck }: {
   workflow: ChatWorkflow
   deviceTarget: DeviceTarget
   /** Self mode (§L): the workspace is this editor itself. */
   selfMode?: boolean
   selfCheck?: SelfCheck | null
+  /** Web search (§N): resolved backend + available options. */
+  searchBackend?: SearchBackendId
+  searchOptions?: SearchOption[]
+  /** Planning (§O): the active plan's summary; click reopens the overlay. */
+  plan?: WorkflowSnapshot['plan']
+  onOpenPlan?: () => void
   sending: boolean
   workingLabel: string
   showDeckButton: boolean
   tokenTotal: number | null
   onWorkflowMode: (mode: ChatWorkflow) => void
   onDeviceTarget: (target: DeviceTarget) => void
+  onSearchBackend?: (backend: SearchBackendId) => void
   onClear: () => void
   onOpenDeck: () => void
 }) {
+  const availableSearch = (searchOptions || []).filter(o => o.available)
   return (
     <div style={{ padding: '9px 12px', borderBottom: '1px solid #1e1e23', fontSize: 12, fontWeight: 600, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
       AI Chat
@@ -33,6 +41,29 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, sendin
         <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('tablet')} title="Tablet (768px)"><Tablet size={13} /></button>
         <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('desktop')} title="Desktop (1280px)"><Monitor size={13} /></button>
       </div>
+      {availableSearch.length > 0 && (
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} title="Web search source for the agent's web-search and research tools">
+          <Search size={13} />
+          <select
+            className="deck-select"
+            style={{ fontSize: 12, padding: '2px 6px' }}
+            value={searchBackend || 'off'}
+            disabled={sending}
+            onChange={e => onSearchBackend?.(e.target.value as SearchBackendId)}
+            aria-label="Web search source"
+          >
+            {availableSearch.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            <option value="off">Search off</option>
+          </select>
+        </label>
+      )}
+      {plan && (
+        <button type="button" className="pill" onClick={onOpenPlan}
+          title={`Active plan: ${plan.title} (${plan.status}). Reopen the planner.`}
+          style={{ cursor: 'pointer', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          Plan · {plan.title} · {plan.status}
+        </button>
+      )}
       {selfMode && (
         <span className="pill warn" title="Self mode: the workspace is this editor's own repo, served from source. Writes are confined to src/ui. Recovery: /self-recovery">
           SELF — editing this editor

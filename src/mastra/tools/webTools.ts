@@ -3,23 +3,29 @@ import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getFsRoot } from '../../launcher.js'
-import { braveSearch } from '../../research/brave.js'
 import { fetchPageText } from '../../research/fetchPage.js'
 import { runResearch } from '../../research/research.js'
+import { webSearch } from '../../research/searchBackend.js'
 
 export const webSearchTool = createTool({
   id: 'web-search',
   description:
-    'Search the web (Brave Search API, the editor\'s own key). Use for current facts: API shapes, library docs, versions, prior art. Returns compact results (title, url, snippet) — follow up with fetch-page or research when a snippet is not enough.',
+    'Search the web using the search source chosen in the chat header (the active provider\'s built-in web search, or Brave Search). Use for current facts: API shapes, library docs, versions, prior art. Returns compact results (title, url, snippet) — follow up with fetch-page or research when a snippet is not enough.',
   inputSchema: z.object({
     query: z.string().describe('The search query'),
     count: z.number().int().positive().max(10).optional().describe('Max results (default 6)'),
-    freshness: z.enum(['day', 'week', 'month', 'year']).optional().describe('Only results from this window'),
+    freshness: z.enum(['day', 'week', 'month', 'year']).optional().describe('Only results from this window (Brave backend)'),
   }),
   execute: async ({ query, count, freshness }) => {
-    const r = await braveSearch(query, { count, freshness })
+    const r = await webSearch(query, { count, freshness })
     if (r.ok === false) return { ok: false, error: r.error }
-    return { ok: true, results: r.results }
+    return {
+      ok: true,
+      via: r.backendLabel,
+      results: r.results,
+      ...(r.answer ? { answer: r.answer } : {}),
+      ...(r.searched === false ? { note: 'The provider answered from its own knowledge without searching; treat the answer as ungrounded.' } : {}),
+    }
   },
 })
 

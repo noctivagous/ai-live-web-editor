@@ -11,7 +11,8 @@
  * unavailable, the brief is the evidence pack, labelled as such.
  */
 import { openaiApiKey, openaiBaseUrl, openaiModelName } from '../env.js'
-import { braveSearch, type BraveResult } from './brave.js'
+import type { BraveResult } from './brave.js'
+import { webSearch } from './searchBackend.js'
 import { fetchPageText } from './fetchPage.js'
 
 export interface ResearchSource extends BraveResult {
@@ -65,7 +66,7 @@ export async function synthesizeWithActiveModel(question: string, evidence: stri
 
 export function defaultResearchDeps(): ResearchDeps {
   return {
-    search: (q) => braveSearch(q, { count: 6 }),
+    search: (q) => webSearch(q, { count: 6 }),
     fetchText: async (url) => {
       const r = await fetchPageText(url)
       if (r.ok === false) return { ok: false, error: r.error }

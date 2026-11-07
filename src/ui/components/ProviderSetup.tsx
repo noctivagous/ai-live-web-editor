@@ -392,6 +392,11 @@ export function ProviderSetup({ payload, reload, onChanged }: {
               </div>
               <div className="pcard-meta">
                 <ModalityChips models={conn?.verifiedModels} declared={preset.modalities} />
+                {preset.webSearch && (
+                  <span className="pchips">
+                    <span className="pchip" title="This provider searches the web itself — no separate search key needed. Pick it as the source in the chat header's Search setting.">Web search</span>
+                  </span>
+                )}
                 {conn && (
                   <span className="pcard-model mono" title={conn.model}>{conn.model}</span>
                 )}

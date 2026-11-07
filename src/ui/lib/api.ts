@@ -268,6 +268,14 @@ export interface SelfCheck {
   tail?: string
 }
 
+export type SearchBackendId = 'provider' | 'brave' | 'off'
+
+export interface SearchOption {
+  id: 'provider' | 'brave'
+  label: string
+  available: boolean
+}
+
 export interface WorkflowSnapshot {
   ok: boolean
   mode: ChatWorkflow
@@ -277,7 +285,93 @@ export interface WorkflowSnapshot {
   /** Self mode (§L): true while the editor itself is the workspace. */
   selfMode?: boolean
   selfCheck?: SelfCheck | null
+  /** Web search (§N): the resolved backend + available options for the header setting. */
+  searchBackend?: SearchBackendId
+  searchOptions?: SearchOption[]
+  /** Planning (§O): the active plan's summary, for the header pill. */
+  plan?: PlanSummary | null
   error?: string
+}
+
+/* ── Plans (§O) ─────────────────────────────────────────── */
+
+export interface PlanQuestion {
+  id: string
+  label: string
+  control: 'choice' | 'text'
+  options?: string[]
+  default: string
+  answer?: string
+  note?: string
+  revised?: boolean
+}
+
+export interface PlanConsideration {
+  id: string
+  title: string
+  text: string
+  note?: string
+  revised?: boolean
+}
+
+export interface PlanTask {
+  id: string
+  text: string
+  status: 'todo' | 'doing' | 'done'
+  detail?: string
+}
+
+export interface PlanDoc {
+  slug: string
+  title: string
+  kind: 'feature' | 'app' | 'install' | 'fix' | 'refactor'
+  level: 1 | 2 | 3
+  status: 'draft' | 'approved' | 'executing' | 'done'
+  goal: string
+  mutability?: { goal: number; steps: number; methods: number }
+  considerations: PlanConsideration[]
+  questions: PlanQuestion[]
+  tasks: PlanTask[]
+  review?: { summary: string; at: number }
+  createdAt: number
+  updatedAt: number
+}
+
+export interface PlanSummary {
+  slug: string
+  title: string
+  status: string
+  level: number
+}
+
+export async function getPlans() {
+  const r = await fetch(`${API}/api/plans`)
+  return r.json() as Promise<{ ok: boolean, plans: (PlanSummary & { kind: string, questions: number, tasks: number, tasksDone: number, updatedAt: number })[], active: string | null }>
+}
+
+export async function createPlan(input: { goal: string, kind: string, level: number, title?: string }) {
+  return postJson<{ ok: boolean, plan?: PlanDoc, error?: string }>('/api/plans', input)
+}
+
+export async function getPlan(slug: string) {
+  const r = await fetch(`${API}/api/plans/${encodeURIComponent(slug)}`)
+  return r.json() as Promise<{ ok: boolean, plan?: PlanDoc, error?: string }>
+}
+
+export async function draftPlan(slug: string) {
+  return postJson<{ ok: boolean, plan?: PlanDoc, error?: string }>(`/api/plans/${encodeURIComponent(slug)}/draft`, {})
+}
+
+export async function patchPlan(slug: string, patch: Record<string, unknown>) {
+  return postJson<{ ok: boolean, plan?: PlanDoc, error?: string }>(`/api/plans/${encodeURIComponent(slug)}`, patch)
+}
+
+export async function activatePlan(slug: string) {
+  return postJson<{ ok: boolean, plan?: PlanDoc, error?: string }>(`/api/plans/${encodeURIComponent(slug)}/activate`, {})
+}
+
+export async function revisePlanItem(slug: string, target: 'question' | 'consideration', id: string) {
+  return postJson<{ ok: boolean, plan?: PlanDoc, error?: string }>(`/api/plans/${encodeURIComponent(slug)}/revise`, { target, id })
 }
 
 export async function getWorkflow() {
@@ -308,7 +402,7 @@ export async function postProjectConfig(patch: Record<string, unknown>) {
   return r.json() as Promise<{ ok: boolean, config: ProjectConfig, designated: boolean }>
 }
 
-export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept', deviceTarget?: DeviceTarget }) {
+export async function postWorkflow(body: { mode?: ChatWorkflow, action?: 'undo' | 'discard' | 'accept', deviceTarget?: DeviceTarget, searchBackend?: SearchBackendId }) {
   const r = await fetch(`${API}/api/workflow`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

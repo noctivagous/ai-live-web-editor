@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type DeviceTarget, type WorkflowSnapshot } from '../lib/api'
+import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type DeviceTarget, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import {
@@ -202,6 +202,14 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     } catch { /* ignore */ }
   }
 
+  async function setSearchBackend(backend: SearchBackendId) {
+    try {
+      const data = await postWorkflow({ searchBackend: backend })
+      applySnapshot(data)
+      publishWorkflowChanged()
+    } catch { /* ignore */ }
+  }
+
   function guidedKeyError(hasKey: boolean): string {
     if (hasKey) {
       return 'The OpenAI-compatible provider rejected this API key.\n\n'
@@ -215,19 +223,51 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       + '3. Ask the agent to edit or generate files.'
   }
 
-  async function send() {
-    if (!input.trim() || sending) return
+  function send() {
+    // /plan (§O): the planner opens as an overlay; the command itself
+    // is not a chat turn. /plan, /plan-1|2|3, optionally + a goal.
+    const planCmd = input.trim().match(/^\/plan(?:-([123]))?(?:\s+(.+))?$/)
+    if (planCmd) {
+      setInput('')
+      window.dispatchEvent(new CustomEvent('ai-live:plan-open', {
+        detail: { level: planCmd[1] ? Number(planCmd[1]) : undefined, goal: planCmd[2]?.trim() || undefined },
+      }))
+      setLog(l => [...l, { role: 'system', text: 'Planner opened — it floats over the files and preview, and this chat stays live. Ask here anytime to add, drop or reword a plan question.' }])
+      return
+    }
+    void sendText(input)
+  }
+
+  // The plan overlay's Approve button hands execution to the chat:
+  // the work happens here, in the open, with the plan tools.
+  const sendTextRef = useRef<(text: string) => Promise<void>>(async () => {})
+  useEffect(() => {
+    const onExecute = (e: Event) => {
+      const d = (e as CustomEvent).detail as { slug?: string, title?: string } | undefined
+      if (!d?.slug) return
+      void sendTextRef.current(
+        `Execute the plan "${d.title || d.slug}" now. Read ai-plans/${d.slug}.md first, then work its tasks in order. ` +
+        'For each task: call plan-update-task with status "doing" when you start it and "done" (one-line detail of what was produced) when it lands. ' +
+        'Unanswered questions proceed with their default proposals. ' +
+        'When every task is done, call plan-finish with the review summary.',
+      )
+    }
+    window.addEventListener('ai-live:plan-execute', onExecute)
+    return () => window.removeEventListener('ai-live:plan-execute', onExecute)
+  }, [])
+
+  async function sendText(userText: string) {
+    if (!userText.trim() || sending) return
     // Synchronous double-submit guard: `sending` state arrives a render
     // late, so a second Enter/click would otherwise open a second stream
     // and both replies would append to one log.
     if (!sendGuardRef.current.tryStart()) return
     // Fast path: the top bar already knows the key state.
     if (keyKnown === false) {
-      setLog(l => [...l, { role: 'user', text: input }, { role: 'error', text: guidedKeyError(false) }])
+      setLog(l => [...l, { role: 'user', text: userText }, { role: 'error', text: guidedKeyError(false) }])
       setInput('')
       return
     }
-    const userText = input
     setLog(l => [...l, { role: 'user', text: userText }])
     setInput('')
     setSending(true)
@@ -326,6 +366,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       setWorkingLabel('')
     }
   }
+  sendTextRef.current = sendText
 
   function stop() {
     publishChatAbort(projectId)
@@ -489,12 +530,17 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         deviceTarget={sketch?.deviceTarget ?? 'desktop'}
         selfMode={sketch?.selfMode}
         selfCheck={sketch?.selfCheck}
+        searchBackend={sketch?.searchBackend}
+        searchOptions={sketch?.searchOptions}
+        plan={sketch?.plan}
+        onOpenPlan={() => window.dispatchEvent(new CustomEvent('ai-live:plan-open', { detail: {} }))}
         sending={sending}
         workingLabel={workingLabel}
         showDeckButton
         tokenTotal={chatTokens}
         onWorkflowMode={(mode) => void setWorkflowMode(mode)}
         onDeviceTarget={(target) => void setDeviceTarget(target)}
+        onSearchBackend={(backend) => void setSearchBackend(backend)}
         onClear={clearChat}
         onOpenDeck={openDeck}
       />
@@ -542,6 +588,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           onWorkflowMode={(mode) => void setWorkflowMode(mode)}
           deviceTarget={sketch?.deviceTarget ?? 'desktop'}
           onDeviceTarget={(target) => void setDeviceTarget(target)}
+          onSearchBackend={(backend) => void setSearchBackend(backend)}
           onClear={clearChat}
           sketch={sketch}
           onSketchAction={(action) => void sketchAction(action)}

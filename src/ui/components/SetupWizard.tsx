@@ -135,9 +135,11 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
         {step === 3 && (
           <div>
             <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#d4d4d8', margin: '0 0 12px' }}>
-              Optional: give the agent web search. With a Brave key it can look
-              things up and compile research briefs before building. You can
-              skip this and add the key later — it is the same card in
+              Optional: web search for the agent. If your provider's card
+              shows a Web search chip, it already searches on its own —
+              choose that source in the chat header and skip this step.
+              Otherwise a Brave key gives the agent search and research
+              briefs. You can add it later — it is the same card in
               Settings, under Search.
             </p>
             <SearchSetup onStatus={setBrave} />

@@ -10,7 +10,7 @@ import {
 } from '../lib/deck'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { Markdown } from './Markdown'
-import type { ChatWorkflow, DeviceTarget, WorkflowSnapshot } from '../lib/api'
+import type { ChatWorkflow, DeviceTarget, SearchBackendId, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 
 /* Deck rendering, ported from web-artifacts/agentic-chat-deck_* (v2):
@@ -257,7 +257,7 @@ function packKey(pack: Record<number, number[][]>): string {
   return Object.keys(pack).sort().map(k => `${k}:${pack[Number(k)].map(s => s.join(',')).join('|')}`).join(';')
 }
 
-export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, onOpenPath, workflow, onWorkflowMode, deviceTarget, onDeviceTarget, onClear, sketch, onSketchAction, input, onInput, onSend, onStop, annot, inIframe, onPick, onSubmit, onInsertToken, pricing }: {
+export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, onOpenPath, workflow, onWorkflowMode, deviceTarget, onDeviceTarget, onSearchBackend, onClear, sketch, onSketchAction, input, onInput, onSend, onStop, annot, inIframe, onPick, onSubmit, onInsertToken, pricing }: {
   turns: DeckTurn[]
   sending: boolean
   workingLabel: string
@@ -268,6 +268,7 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
   onWorkflowMode: (mode: ChatWorkflow) => void
   deviceTarget: DeviceTarget
   onDeviceTarget: (target: DeviceTarget) => void
+  onSearchBackend: (backend: SearchBackendId) => void
   onClear: () => void
   sketch: WorkflowSnapshot | null
   onSketchAction: (action: 'undo' | 'discard' | 'accept') => void
@@ -431,12 +432,17 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
         deviceTarget={deviceTarget}
         selfMode={sketch?.selfMode}
         selfCheck={sketch?.selfCheck}
+        searchBackend={sketch?.searchBackend}
+        searchOptions={sketch?.searchOptions}
+        plan={sketch?.plan}
+        onOpenPlan={() => window.dispatchEvent(new CustomEvent('ai-live:plan-open', { detail: {} }))}
         sending={sending}
         workingLabel={workingLabel}
         showDeckButton={false}
         tokenTotal={tokenTotal}
         onWorkflowMode={onWorkflowMode}
         onDeviceTarget={onDeviceTarget}
+        onSearchBackend={onSearchBackend}
         onClear={onClear}
         onOpenDeck={() => {}}
       />

@@ -18,7 +18,8 @@ import {
   type DeviceTarget,
 } from './deviceSession.js'
 import { catalogSummary } from './catalog/catalog.js'
-import { braveApiKey } from './env.js'
+import { searchAvailable, searchBackendLabel } from './research/searchBackend.js'
+import { getActivePlan } from './plans/plans.js'
 
 export const PROJECT_CONFIG_FILE = 'project.ai.json'
 
@@ -143,8 +144,20 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)
   const catalog = catalogSummary()
   if (catalog) lines.push(catalog)
-  if (braveApiKey()) {
-    lines.push('Web research is available: web-search / fetch-page for quick lookups, research for multi-source briefs — build from cited briefs, not memory, when external facts matter.')
+  if (searchAvailable()) {
+    lines.push(`Web research is available via ${searchBackendLabel()}: web-search / fetch-page for quick lookups, research for multi-source briefs — build from cited briefs, not memory, when external facts matter.`)
+  }
+  const plan = getActivePlan()
+  if (plan) {
+    const done = plan.tasks.filter(t => t.status === 'done').length
+    const qList = plan.questions.map(q => `${q.id}: ${q.label} [default: ${q.default}]${q.answer ? ` [answer: ${q.answer}]` : ''}`).join(' · ')
+    lines.push(
+      `ACTIVE PLAN "${plan.title}" (${plan.slug}, ${plan.kind}, level ${plan.level}, status ${plan.status}) — full record at ai-plans/${plan.slug}.md. ` +
+      (plan.status === 'executing' || plan.status === 'approved'
+        ? `Work the plan's tasks in order (${done}/${plan.tasks.length} done); mark each with plan-update-task as you start and finish it, and call plan-finish with a review summary at the end. `
+        : `The plan is still being shaped. `) +
+      `If the user asks to add, drop or reword a plan question, use plan-add-question / plan-remove-question / plan-revise-question — edit the plan in place, never restart it or re-ask settled questions. Questions: ${qList || '(none yet)'}`,
+    )
   }
   return lines.join('\n')
 }

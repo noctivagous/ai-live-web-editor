@@ -363,6 +363,22 @@ export function syncFromLegacy() {
   writeStore(store)
 }
 
+/**
+ * The active connection as a provider-native web-search target
+ * (§N): set only when its preset declares a search mechanism
+ * this editor implements and a key is on file.
+ */
+export function activeSearchTarget(): { name: string, baseUrl: string, model: string, apiKey: string } | null {
+  const store = getStore()
+  const active = store.connections.find(c => c.id === store.activeId)
+  if (!active || !active.model || !active.baseUrl) return null
+  const preset = presetById(active.presetId)
+  if (preset?.webSearch !== 'responses') return null
+  const key = connectionKey(active)
+  if (!key && !preset?.noKey) return null
+  return { name: active.name, baseUrl: active.baseUrl, model: active.model, apiKey: key || 'not-needed' }
+}
+
 /** Agent model config from the active connection; null when none applies. */
 export function resolveConnectionModel() {
   const store = getStore()

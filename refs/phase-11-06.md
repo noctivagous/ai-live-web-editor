@@ -417,9 +417,29 @@ wizard — status/save/test/remove over `/api/research/*`,
 key written via the `.env` upsert and applied live, never
 returned to the client beyond its last4):
 
-- **`web-search`** — one Brave web search, compact results
+- **`web-search`** — one web search, compact results
   (title, url, snippet). `fetch-page` beside it: one URL in,
   readable text out. These are the quick-lookup tier.
+
+**Search backends (added same day, user's direction):** Brave
+is one backend, not the only one — many providers ground
+answers natively, and then the user needs nothing extra.
+Presets declare the capability (`webSearch: 'responses'` —
+the Responses API `tools: [{type: 'web_search'}]` shape;
+Meta Model API search grounding + OpenAI at first, others
+flip on as their call shapes are verified; capable presets
+show a Web search chip on their card in the provider tab).
+The **chat header carries a Search setting** listing only
+the backends available right now — the active provider's
+`<name> web search`, Brave Search, or Search off — riding
+the workflow snapshot like the device target
+(`src/searchSession.ts`). Default resolution prefers the
+provider (nothing extra), then Brave, then off. Both tools
+call one dispatcher (`research/searchBackend.ts`); the
+provider backend returns the raw hits (Meta
+`web_search_call.results`, OpenAI `action.sources`,
+citations merged) plus the provider's grounded answer, and
+says so plainly when the model answered without searching.
 - **`research`** — the compiler. The calling agent plans the
   fan-out (it passes the sub-queries); the tool runs the
   searches in parallel, dedupes by URL, fetches the top pages,
@@ -442,6 +462,201 @@ the remedy in the message, never a stack trace.
 Available in Files mode generally (research helps every
 project), and essential in self mode, where the brief often
 *is* the spec for what gets built next.
+
+## O. The planning system (new, 2026-11-06)
+
+Source material: the user's own design writings (uploaded
+2026-11-06; corpus kept verbatim at `~/workspace/rillan-corpus/`
+— the main text is the core, with prelim-menus, iform-samples,
+usermodeswithAI, judgment-evaluation,
+fromTechnicalOutlinesToAProject and the rest as support).
+The feature itself is NOT named after the corpus — in the
+product it is simply planning: `/plan`. The corpus's thesis:
+today's AI executes immediately after the
+prompt and generates volumes the user must inspect and revise
+after the fact. The fix is a different sequence with the
+user steering *before and during*, not after:
+
+1. **Preliminary questions.** Before generating or executing,
+   the AI collects what it needs: clarification menus (keyed
+   options + Other + the AI's stated default — Enter accepts
+   the default), detail-collection menus whose every question
+   carries a default proposal ("if you say nothing, it
+   proceeds with this"), staged project questionnaires
+   (Requirements → Considerations → Questionnaire), and
+   followup sequences that go general → specific with an
+   exit to execution at any point. Menus are editable and
+   regenerable in place; the user can add or change the
+   questions themselves; answered menus persist as history
+   the user can branch back to. Depth is a setting (menu
+   length 1–5, guidance level), never a drag: defaults and
+   skip paths everywhere.
+2. **Plans notification.** A preview of what is about to
+   happen — sections/tasks as an editable list (change,
+   reorder, add, delete), expected length/format/structure,
+   optional samples — with parameters the user adjusts just
+   before execution.
+3. **Execution with a checklist.** The AI displays the plan
+   as a checklist and checks items off as it works.
+4. **Post-generation review.** A summary of what was done,
+   documentation and an overview diagram (Mermaid) for large
+   outputs, and an explicit evaluation pass (judgment file:
+   is everything in order? is what should be there there?
+   does it actually work — do all the buttons work?), then
+   post-production fixes.
+
+Cross-cutting: **mutability settings** (0–10 each: goal,
+main steps, materials & methods, who generates the steps)
+tell the AI how much freedom it has and therefore how much
+it must ask; **warnings before complying** — when a request
+conflicts with the project's state ("that is there for a
+reason", "it already exists"), the AI says so first, within
+the user's rules; and **modes** (quick one-off = skip the
+steps; enhanced quick = a few questions; walkthrough =
+slideshow, help inside each step).
+
+### How it lands in this editor (UX settled in discussion, 2026-11-06)
+
+- **`/plan` opens a planning overlay.** Slash commands in
+  the composer: `/plan` (at the project's default level),
+  `/plan-1`, `/plan-2`, `/plan-3` (extensiveness levels,
+  default **1 — the lightest**). The overlay floats over
+  the file manager + middle section of the app shell with
+  a ~5pt margin — the chat stays live on the right, so the
+  user keeps talking to the agent while planning. Inside,
+  the planning sequence runs as **slides** (wizard/Deck
+  pattern), and slide 1 also picks the plan **kind**
+  (new app, feature, install (§I), fix, refactor) — the
+  kind loads the matching §D question pack.
+- **Slides by level.** Shared spine: Goal → Questions →
+  Plan → (approve) → Execute → Review.
+  - **Level 1 (default):** Goal (one statement) → one
+    questions slide (3–6 questions, each with the agent's
+    default proposal; Enter/skip accepts the defaults) →
+    Plan (short editable task list) → Approve.
+  - **Level 2:** adds a Considerations slide before the
+    questions (implications, risks, alternatives the agent
+    surfaces), a followup question round (general →
+    specific), the files the plan will touch on the Plan
+    slide, and an evaluation checklist on Review.
+  - **Level 3:** the full staged questionnaire
+    (Requirements → Considerations → Questionnaire as
+    slide groups), mutability settings (goal / steps /
+    methods, 0–10), plan variants to choose between, and a
+    generated Mermaid overview in Review.
+- **Plan file.** Everything the overlay shows is backed by
+  `ai-plans/<slug>.md` in the project (the §I location),
+  distilled from the corpus's form format: goal + level +
+  mutability line, a **questions table** (question |
+  default proposal | answer), the ordered **task
+  checklist**, and a closing **review section** (summary,
+  evaluation, diagram). The user can edit the file directly
+  at any time; the overlay re-reads it. §I installs become
+  one plan kind among others.
+- **Form schema: an XForms-style model (user's direction,
+  2026-11-06).** The plan's forms follow XForms' separation
+  even though XForms itself is dead: a **model** (question
+  definitions — id, label, control, options, default
+  proposal), an **instance** (the user's answers + notes),
+  and the slides as the UI layer bound to both. That
+  separation is what lets the **agent revise the questions
+  from chat mid-plan** (add/remove/reword in the model)
+  without redoing the planning stack — answers are keyed
+  to stable question ids and survive model edits. An XML
+  serialization of model+instance sits next to the `.md`
+  (`ai-plans/<slug>.xml`) as the machine-readable schema.
+  Every Considerations and Questions item also carries a
+  one-line **note** field (right side of the item) — the
+  user's annotation lives in the instance, beside the
+  answer. (An earlier "noted" checkbox on considerations
+  was dropped: it recorded acknowledgment nothing used;
+  notes supersede it.)
+- **Lifecycle.** draft (agent asks + proposes defaults) →
+  amended (user answers/edits, in the overlay, the file,
+  or chat) → approved (explicit go) → executing (checklist
+  state lives in the file; the overlay's Execute slide and
+  a plan card in chat both render it live; overlay may be
+  closed and reopened with `/plan`) → review (summary +
+  gate results appended; the file stays as the record).
+- **Settings.** The default level + mutability defaults
+  ride `project.ai.json` + the brief, per project; the
+  header/Preview surfaces can show the active plan's state.
+  Self mode's own defaults are strict (goal fixed, steps
+  proposed by the agent, approval always required); plan
+  files are `.md` documents, so in self mode they get the
+  same write treatment as research briefs (outside the
+  src/ui code scope).
+- **Evaluation** is the gate (§D outcome rules) plus the
+  judgment pass in the review section — checked against
+  the plan, not just the code.
+
+### Build order (first us, then users — the user's direction)
+
+- **Slice 1 — self mode dogfood.** The plan-file format +
+  template, an agent instruction + brief line making
+  multi-step self work start from a plan in `ai-plans/`,
+  approval as the gate, checklist state in the file, review
+  appended at the end. No new UI: this formalizes how the
+  editor's own development already runs (propose → approve →
+  execute → verify) into an in-repo artifact, and every
+  later slice gets built *through* it.
+- **Slice 2 — the `/plan` overlay.** Slash-command parsing,
+  the overlay shell (file-manager + middle, 5pt margin,
+  slides), Goal/Questions/Plan slides at level 1–2,
+  Approve → execution with live checklist + the chat plan
+  card, Review slide with gate results.
+- **Slice 3 — depth.** Level 3 (staged questionnaire,
+  mutability, variants, Mermaid overview), per-kind
+  question packs (§D), the warnings pass, walkthrough
+  mode on the same slide machinery.
+
+### Built 2026-11-06 (slices 1+2 landed together, at the user's direction)
+
+Shipped ahead of the demo-first order on the user's word:
+the full overlay + plan files + tools in one pass (the
+demo, `plan-mode-demo`, settled the design first; its final
+revision added the note+update boxes and the questions-grid
+fix). What exists now:
+
+- `src/plans/plans.ts` — the store: canonical
+  `ai-plans/<slug>.json` + rendered `.md` / `.xml` views
+  (the XForms-style model/instance split), id-keyed
+  add/remove, a JSON model-call helper, `draftPlanContent`
+  (level-aware drafting) and `reviseWithModel` (revise one
+  question/consideration from its note — answers and notes
+  are never touched by a revision).
+- `src/plans/planApi.ts` — REST on both servers: list /
+  create / get / patch (answers, notes, tasks, status
+  transitions validated) / draft / questions add-remove /
+  revise / activate; the workflow snapshot carries the
+  active plan summary.
+- Agent tools (`planTools.ts`, Files mode): plan-add-
+  question, plan-remove-question, plan-revise-question,
+  plan-update-task, plan-finish. The brief carries the
+  active plan (status, task progress, question ids +
+  defaults + answers) with the rule: edit the plan in
+  place, never restart it.
+- `PlanOverlay.tsx` — the shell overlay (files + middle,
+  ~5pt margin, chat live), slides Goal → Considerations
+  (L2+) → Questions → Plan → Execute → Review; note boxes
+  with **Update question / Update consideration** buttons;
+  level segmented in the header; mutability sliders at
+  level 3; File button opens the plan .md. Chat intercepts
+  `/plan`, `/plan-1|2|3` (+ optional goal text); Approve
+  hands execution to the chat as a turn that works the
+  tasks via the plan tools; the Execute slide polls task
+  state; the header gains a Plan pill that reopens the
+  overlay.
+- Verified: 235/235 tests (4 new), tsc + ui:build clean;
+  live API round-trip against a stub model (draft pack,
+  note-driven revision preserving answer+note, honest 422
+  with no model); Playwright drove /plan-2 → overlay
+  geometry (stops 10px short of the chat panel) →
+  Questions slide with note boxes.
+- Not yet (slice 3 remains): level-3 staged questionnaire
+  groups and plan variants, per-kind question packs (§D),
+  the warnings pass, walkthrough mode, gate results on the
+  Review slide (today: summary + task/answer recap).
 
 ## Integration points (where each piece hooks into the code, 2026-11-06)
 

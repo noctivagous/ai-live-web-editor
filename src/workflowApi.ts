@@ -20,6 +20,8 @@ import {
 import { getDeviceTarget, parseDeviceTarget, setDeviceTarget } from './deviceSession.js'
 import { getAppkitEnabled, setAppkitEnabled } from './catalog/catalogSession.js'
 import { getSelfCheck, isSelfWorkspace } from './selfMode.js'
+import { planSnapshotField } from './plans/planApi.js'
+import { parseSearchBackend, searchSnapshot, setSearchChoice } from './searchSession.js'
 
 function restoreFailed(result: unknown): string | null {
   if (!result || typeof result !== 'object') return 'restore returned nothing'
@@ -102,10 +104,15 @@ function workflowSnapshot() {
     ...snapshotPublic(getSketchState()),
     deviceTarget: getDeviceTarget(),
     appkitCatalog: getAppkitEnabled(),
+    // Web search (§N): resolved backend + the available options,
+    // rendered by the chat header's Search setting.
+    ...searchSnapshot(),
     // Self mode (§L): badge + last self-check result, present
     // only while the editor itself is the workspace.
     selfMode: isSelfWorkspace(),
     selfCheck: getSelfCheck(),
+    // Planning (§O): the active plan's summary, for the header pill.
+    plan: planSnapshotField(),
   }
 }
 
@@ -122,6 +129,8 @@ export function mountWorkflowApi(app: Express) {
       const device = parseDeviceTarget(body.deviceTarget)
       if (device) setDeviceTarget(device)
       if (typeof body.appkitCatalog === 'boolean') setAppkitEnabled(body.appkitCatalog)
+      const search = parseSearchBackend(body.searchBackend)
+      if (search) setSearchChoice(search)
       const action = body.action
       if (action === 'undo') {
         const { undone } = undoLastSketch()

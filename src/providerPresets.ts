@@ -54,6 +54,14 @@ export interface ProviderPreset {
   noKey?: boolean
   /** Extra path probed before /models (xAI lists chat models here). */
   modelsPath?: string
+  /**
+   * Provider-native web search (§N): the provider grounds
+   * answers in live web results itself, so no separate search
+   * key is needed. 'responses' = the Responses API shape
+   * (tools: [{type: 'web_search'}], Meta Model API + OpenAI).
+   * Only set where that call shape is implemented.
+   */
+  webSearch?: 'responses'
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -63,6 +71,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     defaultBaseUrl: 'https://api.openai.com/v1', envKey: 'OPENAI_API_KEY', authHeader: 'bearer',
     keyPrefixes: ['sk-proj-', 'sk-'], getKeyUrl: 'https://platform.openai.com/api-keys',
     suggested: ['gpt-4o-mini', 'gpt-4o'], modalities: ['text', 'image', 'audio'],
+    webSearch: 'responses',
   },
   {
     slotId: 'anthropic', name: 'Anthropic', providerId: 'openai-compatible', section: 'frontier',
@@ -77,6 +86,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     defaultBaseUrl: 'https://api.meta.ai/v1', envKey: 'MODEL_API_KEY', authHeader: 'bearer',
     keyPrefixes: ['LLM|'], getKeyUrl: 'https://dev.meta.ai/docs/',
     suggested: ['muse-spark-1.3'], modalities: ['text', 'image', 'audio'],
+    webSearch: 'responses',
   },
   {
     slotId: 'google', name: 'Google', providerId: 'openai-compatible', section: 'frontier',

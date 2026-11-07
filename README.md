@@ -16,8 +16,7 @@ projects/
 
 ```bash
 npm run install:all
-npm run ui:build    # once, after UI changes
-npm run dev
+npm run dev    # the UI is served from source (Vite HMR) — no ui:build step
 ```
 
 Open [http://localhost:4112/](http://localhost:4112/). That process also starts Vite for the **active** project on port 5173.
@@ -89,9 +88,10 @@ aiLiveEditor({
 
 | Command | What it is |
 |---|---|
-| `npm run dev` | Launcher on 4112 + Vite for the active project on 5173 |
+| `npm run dev` | Launcher on 4112 (UI served from source, HMR) + Vite for the active project on 5173 |
+| `npm run dev:built` | Launcher serving the built UI bundle instead (`AI_LIVE_UI=build`) |
 | `npm run dev:pool` | Playwright live target (`LIVE_TARGET=pool`): no Vite page bridge. Chrome opens the app at `:5173/` plus `/pool` |
-| `npm run ui:build` | Rebuild the 4112 UI into `src/ui-dist` |
+| `npm run ui:build` | Build the 4112 UI into `src/ui-dist` (verification gate / `dev:built`) |
 | `npm run ui:dev` | UI hot-reload on :3000 (proxies `/api` to 4112) |
 | `npm run projects:dev` | Vite for `projects/lumen` only (launcher already does this) |
 

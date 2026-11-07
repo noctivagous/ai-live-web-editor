@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool } from './env.js'
+import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool, uiServing } from './env.js'
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
 import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, SELF_PROJECT_ID, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
@@ -602,10 +602,15 @@ async function revertTo(hash) {
 </script>
 </body></html>`)
   })
+}
+if (uiServing() === 'source') {
   // The UI itself: src/ui served from source through Vite dev
-  // middleware (HMR) — no ui:build in the loop. Inline config,
-  // equivalent to vite.config.ts minus its build-only parts and
-  // its dev proxy (API routes are this server's own, above).
+  // middleware (HMR) — the default, so editing the editor needs no
+  // ui:build in the loop. Self mode has run this way since §L; the
+  // serving choice is now independent of it (AI_LIVE_UI=build serves
+  // the static bundle). Inline config, equivalent to vite.config.ts
+  // minus its build-only parts and its dev proxy (API routes are
+  // this server's own, above).
   const { createServer: createViteServer } = await import('vite')
   const reactPlugin = (await import('@vitejs/plugin-react')).default
   const vite = await createViteServer({
@@ -613,6 +618,14 @@ async function revertTo(hash) {
     plugins: [reactPlugin()],
     appType: 'spa',
     server: { middlewareMode: true },
+  })
+  // The project-page overlay iframes /chat-embed on this origin:
+  // serve the real embed entry, not the SPA index.
+  app.get('/chat-embed', async (_req, res, next) => {
+    try {
+      const raw = fs.readFileSync(path.join(EDITOR_ROOT, 'src/ui/chat-embed.html'), 'utf-8')
+      res.type('html').send(await vite.transformIndexHtml('/chat-embed.html', raw))
+    } catch (e) { next(e) }
   })
   app.use(vite.middlewares)
 } else {
@@ -629,7 +642,7 @@ app.use('/projects', (req, res, next) => {
   express.static(getFsRoot())(req, res, next)
 })
 
-// Fallback to UI index (in self mode the Vite middlewares above
+// Fallback to UI index (in source mode the Vite middlewares above
 // answer first; this remains for the built bundle).
 app.get('*', (req, res) => {
   const index = path.join(uiDist, 'index.html')

@@ -112,6 +112,21 @@ export function playwrightPoolEnabled(): boolean {
   return false
 }
 
+export type UiServing = 'source' | 'build'
+
+/**
+ * How the launcher serves its own UI. Default is `source`: src/ui served
+ * live through Vite dev middleware, so editing the editor needs no
+ * `npm run ui:build` in the loop (self mode has run this way since §L).
+ * AI_LIVE_UI=build serves the static src/ui-dist bundle instead — the
+ * bundle stays the verification gate and the no-Vite fallback.
+ */
+export function uiServing(env: NodeJS.ProcessEnv = process.env): UiServing {
+  const v = (env.AI_LIVE_UI || '').trim().toLowerCase()
+  if (v === 'build' || v === 'built' || v === 'dist') return 'build'
+  return 'source'
+}
+
 /** Host verification gate. AI_LIVE_VERIFY=0 disables the automatic post-edit gate. */
 export function verifyGateEnabled(): boolean {
   const v = (process.env.AI_LIVE_VERIFY || '').trim().toLowerCase()

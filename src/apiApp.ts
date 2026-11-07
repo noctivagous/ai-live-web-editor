@@ -205,22 +205,25 @@ mountMemoryApi(app)
       if (parsed) setSketchMode(parsed)
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
-      const { projectBrief } = await import('./projectConfig.js')
       const { withContextBeforeLastUser } = await import('./workflowRoute.js')
+      const { buildTurnContext, latestUserText } = await import('./turnContext.js')
       const msgs = Array.isArray(messages) ? messages : []
+      const userText = latestUserText(msgs)
       const mode = getSketchMode()
       let tools = activeToolsForMode(mode)
       if (mode === 'files') {
         const { getActivePlan } = await import('./plans/plans.js')
         const { getSearchBackend } = await import('./searchSession.js')
-        const lastUser = [...msgs].reverse().find((m: { role?: string }) => m?.role === 'user') as { content?: unknown } | undefined
         tools = fileToolsForTurn({
-          userText: typeof lastUser?.content === 'string' ? lastUser.content : '',
+          userText,
           hasActivePlan: Boolean(getActivePlan()),
           searchAvailable: getSearchBackend() !== 'off',
         })
       }
-      const briefed = withContextBeforeLastUser([projectBrief()], msgs)
+      // The shared turn-context stack (brief + map + skills), identical
+      // to the streamed route — see turnContext.ts. This copy used to
+      // send the brief only.
+      const briefed = withContextBeforeLastUser(await buildTurnContext(userText, { mode }), msgs)
       // Same thread memory as the streamed route (chatMemory.ts).
       const { prepareMemoryTurn } = await import('./mastra/chatMemory.js')
       const prepared = await prepareMemoryTurn(briefed)
@@ -260,10 +263,13 @@ mountMemoryApi(app)
       const { projectBrief } = await import('./projectConfig.js')
       const { mastra } = await import('./mastra/index.js')
       const agent = mastra.getAgent('editorAgent')
-      const briefed = `${projectBrief()}\n\n${prompt}`
+      // The brief arrives as its own system context message (the shared
+      // insertion helper), not glued onto the prompt — see server.ts.
+      const { withContextBeforeLastUser } = await import('./workflowRoute.js')
+      const briefedMessages = withContextBeforeLastUser([projectBrief()], [{ role: 'user', content: prompt }])
       const messages = mode === 'sketch'
-        ? withSketchPreamble([{ role: 'user', content: briefed }])
-        : [{ role: 'user', content: briefed }]
+        ? withSketchPreamble(briefedMessages)
+        : briefedMessages
       const result = await agent.generate(messages as any, {
         maxSteps: 12,
         activeTools: activeToolsForMode(mode),

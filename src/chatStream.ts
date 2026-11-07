@@ -437,14 +437,7 @@ async function readStreamUsage(streamResult: unknown): Promise<TurnUsage | null>
 }
 
 /** The newest user message's text, for skill trigger matching. */
-function latestUserText(messages: unknown): string {
-  if (!Array.isArray(messages)) return ''
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i] as { role?: string, content?: unknown }
-    if (m?.role === 'user' && typeof m.content === 'string') return m.content
-  }
-  return ''
-}
+
 
 export async function pipeAgentChatStream(
   messages: unknown,
@@ -460,6 +453,7 @@ export async function pipeAgentChatStream(
     withContextBeforeLastUser,
     withSystemPreamble,
   } = await import('./workflowRoute.js')
+  const { buildTurnContext, latestUserText } = await import('./turnContext.js')
   const parsed = parseSketchMode(workflow)
   if (parsed) setSketchMode(parsed)
   const routed = routeChatTurn(getSketchMode(), messages)
@@ -469,42 +463,13 @@ export async function pipeAgentChatStream(
   if (mode === 'sketch' && routed.intent === 'mixed') payload = withSystemPreamble(SKETCH_MIXED_PREAMBLE, messages)
   else if (mode === 'sketch') payload = withSystemPreamble(SKETCH_TURN_PREAMBLE, messages)
   else if (routed.switched) payload = withSystemPreamble(FILES_ROUTED_PREAMBLE, messages)
-  // Per-turn context (brief, map, skills) is collected here and inserted
-  // just before the newest user message further down — ordered stable ->
-  // volatile so the conversation history ahead of it stays a cacheable
-  // prefix (see withContextBeforeLastUser). Only the constant mode
-  // preambles above still lead the payload.
-  const turnContext: string[] = []
-  // Project brief (phase-11-06): type, device targets, style set —
-  // every agent turn knows what kind of project it is building.
-  const { projectBrief } = await import('./projectConfig.js')
-  turnContext.push(projectBrief())
-  // Rung 2 (§1): inject top map signatures on Files turns only above
-  // the file-count threshold — below it the greps are cheaper than
-  // the map. Best-effort: a map failure never breaks the turn.
-  if (mode === 'files') {
-    try {
-      const { currentAgentSettings } = await import('./agentSettings.js')
-      const injectionMode = currentAgentSettings().mapInjection
-      if (injectionMode !== 'off') {
-        const { buildMapForRoot } = await import('./codebaseMap/mapStore.js')
-        const { mapInjectionText } = await import('./codebaseMap/codebaseMap.js')
-        const injection = mapInjectionText(buildMapForRoot(), injectionMode === 'always' ? 0 : undefined)
-        if (injection) turnContext.push(injection)
-      }
-    } catch { /* map injection is an optimisation, not a requirement */ }
-  }
-  // Skills (§4): a body loads only when this turn triggers it —
-  // an explicit ask trigger, library evidence in package.json, or
-  // the project type. Untriggered turns pay nothing. Best-effort.
-  if (mode === 'files') {
-    try {
-      const { skillInjectionForTurn } = await import('./skills/skills.js')
-      const userText = latestUserText(messages)
-      const injection = userText ? skillInjectionForTurn(userText) : null
-      if (injection) turnContext.push(injection)
-    } catch { /* skill injection is an optimisation, not a requirement */ }
-  }
+  // Per-turn context (brief, map, skills) is assembled by the shared
+  // builder (turnContext.ts — the same stack every chat surface uses)
+  // and inserted just before the newest user message — ordered stable
+  // -> volatile so the conversation history ahead of it stays a
+  // cacheable prefix (see withContextBeforeLastUser). Only the
+  // constant mode preambles above still lead the payload.
+  const turnContext = await buildTurnContext(latestUserText(messages), { mode })
   payload = withContextBeforeLastUser(turnContext, payload)
   // Server-side thread memory (one thread per project root): the first
   // turn seeds the thread from the client payload as-is; later turns

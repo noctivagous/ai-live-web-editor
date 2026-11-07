@@ -463,11 +463,9 @@ app.post('/api/chat', async (req, res) => {
     const { activeToolsForMode, fileToolsForTurn } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const { projectBrief } = await import('./projectConfig.js')
     const msgs = Array.isArray(messages) ? messages : []
-    const { skillInjectionForTurn } = await import('./skills/skills.js')
-    const lastUser = [...msgs].reverse().find((m: { role?: string }) => m?.role === 'user') as { content?: unknown } | undefined
-    const skillText = typeof lastUser?.content === 'string' ? skillInjectionForTurn(lastUser.content) : null
+    const { buildTurnContext, latestUserText } = await import('./turnContext.js')
+    const userText = latestUserText(msgs)
     const { withContextBeforeLastUser } = await import('./workflowRoute.js')
     const mode = getSketchMode()
     let tools = activeToolsForMode(mode)
@@ -475,15 +473,14 @@ app.post('/api/chat', async (req, res) => {
       const { getActivePlan } = await import('./plans/plans.js')
       const { getSearchBackend } = await import('./searchSession.js')
       tools = fileToolsForTurn({
-        userText: typeof lastUser?.content === 'string' ? lastUser.content : '',
+        userText,
         hasActivePlan: Boolean(getActivePlan()),
         searchAvailable: getSearchBackend() !== 'off',
       })
     }
-    const briefed = withContextBeforeLastUser([
-      projectBrief(),
-      ...(skillText ? [skillText] : []),
-    ], msgs)
+    // The shared turn-context stack (brief + map + skills), identical
+    // to the streamed route — see turnContext.ts.
+    const briefed = withContextBeforeLastUser(await buildTurnContext(userText, { mode }), msgs)
     // Same thread memory as the streamed route (chatMemory.ts).
     const { prepareMemoryTurn } = await import('./mastra/chatMemory.js')
     const prepared = await prepareMemoryTurn(briefed)
@@ -526,10 +523,14 @@ app.post('/api/live-edit/submit', async (req, res) => {
     const { activeToolsForMode } = await import('./agentTools.js')
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')
-    const briefed = `${projectBrief()}\n\n${prompt}`
+    // The brief arrives as its own system context message (the shared
+    // insertion helper), not glued onto the prompt — the prompt stays
+    // a clean user turn, as on every other surface.
+    const { withContextBeforeLastUser } = await import('./workflowRoute.js')
+    const briefedMessages = withContextBeforeLastUser([projectBrief()], [{ role: 'user', content: prompt }])
     const messages = mode === 'sketch'
-      ? withSketchPreamble([{ role: 'user', content: briefed }])
-      : [{ role: 'user', content: briefed }]
+      ? withSketchPreamble(briefedMessages)
+      : briefedMessages
     const result = await agent.generate(messages as any, {
       maxSteps: 12,
       activeTools: activeToolsForMode(mode),

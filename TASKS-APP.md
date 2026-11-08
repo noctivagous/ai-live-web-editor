@@ -3,6 +3,19 @@
 
 ---
 
+some things we'll have to address in the future:
+app orientation packs.  can configure the entire
+app around different software situations.  our
+current one would be App Development.
+	- API design
+	- AI work
+	    - enables AI conventions in the UI that aren't usually
+	    available unless opt-in.
+	- kernel development
+	- graphic design
+	
+---
+
 command bar.  only contains commands after search
 results like "Update Feature Graph"
 
@@ -70,6 +83,20 @@ for planning.  There can be an Agent Actions app menu
 in the app menu bar.  The user then has starting
 points.
 
+----
+
+in the header bar, to the right of the model chosen
+can be be a dropdown button, MCP.  opening it will open
+an MCP server manager menu that should be complete
+for the feature. Right now editing and managing MCP servers is
+a hassle and if there are too many tools it becomes
+an issue.  So when closed if there are too many tools
+enabled it will have an alert, threshold set in Settings
+under a new section, MCP.  We want to first build out
+an artifact for our MCP manager menu that is user-friendly
+for entering new servers, testing them, disabling
+individual ones, their tools, etc. 
+ 
 ----
 
 the software project can have facets.

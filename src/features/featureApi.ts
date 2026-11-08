@@ -2,7 +2,8 @@ import type { Express } from 'express'
 import {
   addEdge, addNode, createFeatureGraph, getFeatureGraph, getNode, graphRollup,
   lintGraph, nodeSummary,
-  parseFeatureEdgeType, parseFeatureNodeKind, parseFeatureStatus, saveFeatureGraph,
+  parseFeatureEdgeType, parseFeatureNodeKind, parseFeatureStatus, removeEdge, removeNode,
+  renameNode, reparentNode, saveFeatureGraph,
   setNodeParam, setNodeStatus,
 } from './features.js'
 import { buildNode, writeNodeConfig } from './buildNode.js'
@@ -144,5 +145,54 @@ export function mountFeatureApi(app: Express) {
     }
     saveFeatureGraph(graph)
     res.json({ ok: true, totalEdges: graph.edges.length })
+  })
+
+  app.post('/api/features/unlinks', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const type = parseFeatureEdgeType(req.body?.type)
+    if (!type) return res.status(400).json({ ok: false, error: 'Unknown edge type' })
+    const from = typeof req.body?.from === 'string' ? req.body.from : ''
+    const to = typeof req.body?.to === 'string' ? req.body.to : ''
+    if (!removeEdge(graph, { from, to, type })) {
+      return res.status(404).json({ ok: false, error: 'No such edge' })
+    }
+    saveFeatureGraph(graph)
+    res.json({ ok: true, totalEdges: graph.edges.length })
+  })
+
+  /** Rename and/or reparent a node — the pane's structural editing,
+   * through the same store functions as the feature-edit-node tool. */
+  app.post('/api/features/edit', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    if (!getNode(graph, id)) return res.status(404).json({ ok: false, error: `No node with id ${id}` })
+    if (typeof req.body?.name === 'string' && !renameNode(graph, id, req.body.name)) {
+      return res.status(400).json({ ok: false, error: 'Name refused (empty)' })
+    }
+    if ('parentId' in (req.body ?? {})) {
+      const parentId = typeof req.body.parentId === 'string' ? req.body.parentId : undefined
+      const problem = reparentNode(graph, id, parentId)
+      if (problem) return res.status(422).json({ ok: false, error: problem })
+    }
+    saveFeatureGraph(graph)
+    res.json({ ok: true, node: getNode(graph, id) })
+  })
+
+  app.post('/api/features/remove-node', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    const mode = req.body?.mode === 'cascade' ? 'cascade' : 'lift'
+    const result = removeNode(graph, id, mode)
+    if (!result) return res.status(404).json({ ok: false, error: `No node with id ${id}` })
+    saveFeatureGraph(graph)
+    res.json({
+      ok: true,
+      removed: result.removed.map(nodeSummary),
+      lifted: result.lifted,
+      rollup: graphRollup(graph).overall,
+    })
   })
 }

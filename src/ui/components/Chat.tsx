@@ -35,6 +35,7 @@ import {
 } from '../lib/annotationSync'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { loadUiPrefs, saveUiPrefs, type ChatViewPref } from '../lib/uiPrefs'
+import { graphUpdateTarget, launchGraphUpdate, parseGraphUpdateCommand } from '../lib/graphUpdate'
 import { WRITE_TOOLS } from '../../agentTools'
 import { slideTurnsOrDefault } from '../lib/deck'
 
@@ -242,6 +243,25 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       setInput('')
       window.dispatchEvent(new CustomEvent('ai-live:graph-open', {}))
       setLog(l => [...l, { role: 'system', text: 'Feature graph opened — the map of the whole app. Select a node for its bindings and connections, or generate a plan from any region.' }])
+      return
+    }
+    // /graph-update <target>: the agent builds or reconciles a
+    // durable graph while the pane watches it land. `feature` is
+    // the first target; other graphs plug into the same verb.
+    const graphUpdate = parseGraphUpdateCommand(input)
+    if (graphUpdate) {
+      setInput('')
+      const target = graphUpdateTarget(graphUpdate.target)
+      if (!target) {
+        setLog(l => [...l, { role: 'system', text: `No graph called “${graphUpdate.target}”. /graph-update takes a target — today that is just: feature.` }])
+        return
+      }
+      if (!target.ready) {
+        setLog(l => [...l, { role: 'system', text: `The ${target.label.toLowerCase()} is not a /graph-update target yet — the command is ready for it, the graph is not built. For now: /graph-update feature.` }])
+        return
+      }
+      launchGraphUpdate(target.id)
+      setLog(l => [...l, { role: 'system', text: '/graph-update feature launched — the graph pane is open; each change the agent makes lands there as it happens.' }])
       return
     }
     void sendText(input)

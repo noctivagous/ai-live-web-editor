@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Check, Circle, CircleDot, Clock, Loader2, Minus, RefreshCw, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, Circle, CircleDot, Clock, Loader2, Minus, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import {
-  getFeatureLint, getFeatureReconcile, getFeatures, planFromGraph, setFeatureNodeStatus, setFeatureParam,
+  addFeatureNode, editFeatureNode, getFeatureLint, getFeatureReconcile, getFeatures, linkFeatures,
+  planFromGraph, removeFeatureNode, setFeatureNodeStatus, setFeatureParam, unlinkFeatures,
   type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphProblemItem,
 } from '../lib/api'
+import { launchGraphUpdate } from '../lib/graphUpdate'
 
 /**
  * The feature graph overlay: floats over the file manager + middle
@@ -14,6 +16,15 @@ import {
  * through the same /api/features store the agent's tools use, and
  * "Plan from here" generates a plan from a subtree or pack via
  * /api/plans/from-graph, then hands over to the plan overlay.
+ *
+ * The pane is also the watching surface for /graph-update: the
+ * Build/Update button launches the command (lib/graphUpdate), the
+ * agent's tool writes land in the store, and this pane polls the
+ * store — diffing each load against the last so new and changed
+ * nodes flash, and every change (the agent's or the user's own
+ * edits below) is narrated in the feed under the header. Editing
+ * here — rename, reparent, add/remove nodes and connections —
+ * goes through the same store functions as the agent's tools.
  */
 
 const STATUSES: FeatureNodeStatus[] = ['proposed', 'planned', 'building', 'done', 'verified', 'blocked', 'dropped']
@@ -38,7 +49,37 @@ const STATUS_MARK: Record<FeatureNodeStatus, ReactNode> = {
   dropped: <Minus size={12} aria-hidden />,
 }
 
-interface Connection { label: string, node: FeatureNodeItem }
+interface Connection { label: string, node: FeatureNodeItem, edge: FeatureEdgeItem }
+
+interface FeedEntry { id: number, time: string, text: string }
+
+const EDGE_TYPES = ['depends-on', 'configures', 'renders', 'data-flows', 'derived-from']
+const NODE_KINDS = ['region', 'feature', 'screen', 'component', 'setting', 'data', 'service']
+
+/** What changed between two graph snapshots, in words for the feed. */
+function diffGraphs(prev: FeatureGraphItem, next: FeatureGraphItem): { feed: string[], flash: Record<string, 'added' | 'changed'> } {
+  const feed: string[] = []
+  const flash: Record<string, 'added' | 'changed'> = {}
+  const prevById = new Map(prev.nodes.map(n => [n.id, n]))
+  const nextById = new Map(next.nodes.map(n => [n.id, n]))
+  const nameOf = (id: string) => nextById.get(id)?.name ?? prevById.get(id)?.name ?? id
+  for (const n of next.nodes) {
+    const p = prevById.get(n.id)
+    if (!p) { flash[n.id] = 'added'; feed.push(`Node added — ${n.name} (${n.kind})`) }
+    else if (p.status !== n.status) { flash[n.id] = 'changed'; feed.push(`Status — ${n.name}: ${p.status} → ${n.status}`) }
+    else if (p.name !== n.name) { flash[n.id] = 'changed'; feed.push(`Renamed — ${p.name} → ${n.name}`) }
+    else if ((p.parent ?? '') !== (n.parent ?? '')) { flash[n.id] = 'changed'; feed.push(`Moved — ${n.name} → ${n.parent ? nameOf(n.parent) : 'top level'}`) }
+  }
+  for (const p of prev.nodes) {
+    if (!nextById.has(p.id)) feed.push(`Node removed — ${p.name}`)
+  }
+  const key = (e: FeatureEdgeItem) => `${e.from}|${e.to}|${e.type}`
+  const prevEdges = new Map(prev.edges.map(e => [key(e), e]))
+  const nextEdges = new Map(next.edges.map(e => [key(e), e]))
+  for (const [k, e] of nextEdges) if (!prevEdges.has(k)) feed.push(`Connection added — ${nameOf(e.from)} ${e.type} ${nameOf(e.to)}`)
+  for (const [k, e] of prevEdges) if (!nextEdges.has(k)) feed.push(`Connection removed — ${nameOf(e.from)} ${e.type} ${nameOf(e.to)}`)
+  return { feed, flash }
+}
 
 export function GraphOverlay({ onClose, onShowLibrary, style }: {
   onClose: () => void
@@ -54,16 +95,58 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [feed, setFeed] = useState<FeedEntry[]>([])
+  const [flash, setFlash] = useState<Record<string, 'added' | 'changed'>>({})
+  const [addForm, setAddForm] = useState<{ parentId: string, name: string, kind: string } | null>(null)
+  const [linkDraft, setLinkDraft] = useState<{ type: string, toId: string }>({ type: 'depends-on', toId: '' })
+  const prevGraphRef = useRef<FeatureGraphItem | null>(null)
+  const firstLoadRef = useRef(false)
+  const feedIdRef = useRef(0)
 
   const load = useCallback(async (silent = false) => {
     try {
       const d = await getFeatures()
-      if (d.ok) { setGraph(d.graph); setRollup(d.rollup); setError('') }
+      if (d.ok) {
+        // Diff against the previous snapshot: this is what makes
+        // the pane a watching surface — changes flash on the node
+        // rows and are narrated in the feed, whoever made them.
+        const prev = prevGraphRef.current
+        const next = d.graph
+        // First load just sets the baseline. After that, a null
+        // graph diffs against empty — so a graph the agent builds
+        // from nothing flashes in node by node.
+        const base = prev ?? (firstLoadRef.current ? { title: '', nodes: [], edges: [] } : null)
+        if (base && next) {
+          const { feed: entries, flash: flashes } = diffGraphs(base, next)
+          if (entries.length) {
+            const time = new Date().toLocaleTimeString([], { hour12: false })
+            const shown = entries.slice(0, 6)
+            if (entries.length > shown.length) shown.push(`…and ${entries.length - shown.length} more changes`)
+            setFeed(f => [...shown.map(text => ({ id: ++feedIdRef.current, time, text })), ...f].slice(0, 9))
+          }
+          if (Object.keys(flashes).length) {
+            setFlash(f => ({ ...f, ...flashes }))
+            const ids = Object.keys(flashes)
+            window.setTimeout(() => {
+              setFlash(f => {
+                const copy = { ...f }
+                for (const id of ids) delete copy[id]
+                return copy
+              })
+            }, 2600)
+          }
+        }
+        prevGraphRef.current = next
+        firstLoadRef.current = true
+        setGraph(d.graph); setRollup(d.rollup); setError('')
+      }
       else if (!silent) setError(d.error || 'Feature graph failed to load')
-      const lint = await getFeatureLint().catch(() => null)
-      if (lint?.ok) setProblems(lint.problems)
-      const rec = await getFeatureReconcile().catch(() => null)
-      if (rec?.ok) setDrift(rec.drift)
+      if (!silent) {
+        const lint = await getFeatureLint().catch(() => null)
+        if (lint?.ok) setProblems(lint.problems)
+        const rec = await getFeatureReconcile().catch(() => null)
+        if (rec?.ok) setDrift(rec.drift)
+      }
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Feature graph failed to load')
     } finally {
@@ -72,9 +155,10 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
   }, [])
 
   useEffect(() => { void load() }, [load])
-  // The agent can change the graph from chat while this is open.
+  // The agent can change the graph from chat while this is open —
+  // and during a /graph-update run this poll is the live view.
   useEffect(() => {
-    const t = window.setInterval(() => { void load(true) }, 5000)
+    const t = window.setInterval(() => { void load(true) }, 2500)
     return () => window.clearInterval(t)
   }, [load])
 
@@ -88,24 +172,95 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
   function connections(node: FeatureNodeItem): Connection[] {
     const out: Connection[] = []
     const edges: FeatureEdgeItem[] = graph?.edges ?? []
-    const push = (label: string, id: string) => { const n = byId.get(id); if (n) out.push({ label, node: n }) }
+    const push = (label: string, id: string, edge: FeatureEdgeItem) => { const n = byId.get(id); if (n) out.push({ label, node: n, edge }) }
     for (const e of edges) {
       if (e.from === node.id) {
-        if (e.type === 'configures') push('configures', e.to)
-        else if (e.type === 'depends-on') push('depends on', e.to)
-        else if (e.type === 'renders') push('renders', e.to)
-        else if (e.type === 'data-flows') push('data flows to', e.to)
-        else if (e.type === 'derived-from') push('derived from', e.to)
+        if (e.type === 'configures') push('configures', e.to, e)
+        else if (e.type === 'depends-on') push('depends on', e.to, e)
+        else if (e.type === 'renders') push('renders', e.to, e)
+        else if (e.type === 'data-flows') push('data flows to', e.to, e)
+        else if (e.type === 'derived-from') push('derived from', e.to, e)
       }
       if (e.to === node.id) {
-        if (e.type === 'configures') push('configured by', e.from)
-        else if (e.type === 'depends-on') push('needed by', e.from)
-        else if (e.type === 'renders') push('rendered by', e.from)
-        else if (e.type === 'data-flows') push('data flows from', e.from)
-        else if (e.type === 'derived-from') push('realized by', e.from)
+        if (e.type === 'configures') push('configured by', e.from, e)
+        else if (e.type === 'depends-on') push('needed by', e.from, e)
+        else if (e.type === 'renders') push('rendered by', e.from, e)
+        else if (e.type === 'data-flows') push('data flows from', e.from, e)
+        else if (e.type === 'derived-from') push('realized by', e.from, e)
       }
     }
     return out
+  }
+
+  /** Ids that may not become the node's parent: itself and its subtree. */
+  function descendantIds(id: string): Set<string> {
+    const out = new Set<string>([id])
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const n of graph?.nodes ?? []) {
+        if (n.parent && out.has(n.parent) && !out.has(n.id)) { out.add(n.id); grew = true }
+      }
+    }
+    return out
+  }
+
+  async function rename(node: FeatureNodeItem, name: string) {
+    if (!name.trim() || name.trim() === node.name) return
+    setBusy(node.id)
+    const r = await editFeatureNode(node.id, { name: name.trim() })
+    setBusy('')
+    if (!r.ok) setError(r.error || 'Rename failed')
+    await load(true)
+  }
+
+  async function reparent(node: FeatureNodeItem, parentId: string) {
+    setBusy(node.id)
+    const r = await editFeatureNode(node.id, { parentId: parentId || null })
+    setBusy('')
+    if (!r.ok) setError(r.error || 'Move failed')
+    await load(true)
+  }
+
+  async function removeConn(c: Connection) {
+    setBusy('conn')
+    const r = await unlinkFeatures(c.edge.from, c.edge.to, c.edge.type)
+    setBusy('')
+    if (!r.ok) setError(r.error || 'Connection removal failed')
+    await load(true)
+  }
+
+  async function addConn(node: FeatureNodeItem, toId: string, type: string) {
+    if (!toId) return
+    setBusy('conn')
+    const r = await linkFeatures(node.id, toId, type)
+    setBusy('')
+    if (!r.ok) setError(r.error || 'Connection failed')
+    await load(true)
+  }
+
+  async function removeSelNode(node: FeatureNodeItem, mode: 'lift' | 'cascade') {
+    setBusy('remove')
+    const r = await removeFeatureNode(node.id, mode)
+    setBusy('')
+    if (!r.ok) { setError(r.error || 'Remove failed'); return }
+    setSelectedId(null)
+    await load(true)
+  }
+
+  async function submitAddForm() {
+    if (!addForm || !addForm.name.trim()) return
+    setBusy('add')
+    const r = await addFeatureNode({
+      name: addForm.name.trim(),
+      kind: addForm.kind,
+      ...(addForm.parentId ? { parentId: addForm.parentId } : {}),
+    })
+    setBusy('')
+    if (!r.ok) { setError(r.error || 'Add failed'); return }
+    setAddForm(null)
+    if (r.node) setSelectedId(r.node.id)
+    await load(true)
   }
 
   async function changeStatus(node: FeatureNodeItem, status: FeatureNodeStatus) {
@@ -180,11 +335,33 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
     <div className="graph-bar"><div className="graph-bar-fill" style={{ width: `${r.pct}%` }} /></div>
   )
 
+  const addFormEl = addForm ? (
+    <div className="graph-add-form">
+      <input
+        className="graph-param-input"
+        placeholder={addForm.kind === 'region' ? 'Region name' : 'Node name'}
+        value={addForm.name}
+        autoFocus
+        onChange={e => setAddForm({ ...addForm, name: e.target.value })}
+        onKeyDown={e => { if (e.key === 'Enter') void submitAddForm(); if (e.key === 'Escape') setAddForm(null) }}
+      />
+      <select
+        className="deck-select"
+        value={addForm.kind}
+        onChange={e => setAddForm({ ...addForm, kind: e.target.value })}
+      >
+        {NODE_KINDS.filter(k => addForm.parentId ? k !== 'region' : true).map(k => <option key={k} value={k}>{k}</option>)}
+      </select>
+      <button type="button" className="deck-btn" disabled={busy === 'add' || !addForm.name.trim()} onClick={() => void submitAddForm()}>Add</button>
+      <button type="button" className="deck-btn" onClick={() => setAddForm(null)}>Cancel</button>
+    </div>
+  ) : null
+
   const renderNode = (node: FeatureNodeItem, depth: number): React.ReactNode => (
     <div key={node.id}>
       <button
         type="button"
-        className={`graph-node${selectedId === node.id ? ' sel' : ''}`}
+        className={`graph-node${selectedId === node.id ? ' sel' : ''}${flash[node.id] ? ` flash-${flash[node.id]}` : ''}`}
         style={{ paddingLeft: 8 + depth * 16 }}
         onClick={() => setSelectedId(node.id)}
       >
@@ -216,20 +393,44 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
           </span>
         )}
         <span className="graph-head-spacer" />
+        {graph && graph.nodes.length > 0 && (
+          <button
+            type="button"
+            className="deck-btn"
+            onClick={() => launchGraphUpdate('feature')}
+            title="Launches /graph-update feature — the agent reconciles the graph with the codebase, and each change lands here as it happens"
+          >
+            <Sparkles size={13} />Update graph
+          </button>
+        )}
         <button type="button" className="deck-btn" onClick={() => void load()} title="Reload the graph"><RefreshCw size={13} /></button>
         <button type="button" className="deck-btn" onClick={onClose} aria-label="Close feature graph"><X size={14} /></button>
       </div>
 
       {error && <div className="graph-error">{error}</div>}
       {notice && <div className="graph-notice">{notice}</div>}
+      {feed.length > 0 && (
+        <div className="graph-feed" aria-label="Recent graph changes">
+          {feed.map(f => (
+            <div key={f.id} className="graph-feed-row"><span className="graph-feed-time mono">{f.time}</span><span>{f.text}</span></div>
+          ))}
+        </div>
+      )}
 
       {!loaded ? (
         <div className="graph-empty">Loading the feature graph…</div>
       ) : !graph || graph.nodes.length === 0 ? (
         <div className="graph-empty">
           <p>No feature graph in this project yet.</p>
-          <p>The graph is the durable map of the whole app — regions, features, settings, and how they configure each other. Ask the agent in chat to start one, or install a feature pack (Admin, Settings, Printing, Auth) and plan from it.</p>
-          {onShowLibrary && <button type="button" className="deck-btn" onClick={onShowLibrary}>Open the Library</button>}
+          <p>The graph is the durable map of the whole app — regions, features, settings, and how they configure each other. Have the agent build it from the codebase and watch it land here, node by node — or install a feature pack (Admin, Settings, Printing, Auth) and plan from it.</p>
+          <div className="graph-empty-actions">
+            <button type="button" className="deck-btn graph-build-btn" onClick={() => launchGraphUpdate('feature')}>
+              <Sparkles size={13} />Build the graph
+            </button>
+            {onShowLibrary && <button type="button" className="deck-btn" onClick={onShowLibrary}>Open the Library</button>}
+          </div>
+          <p className="graph-cmd-hint mono">launches /graph-update feature</p>
+          <p className="graph-cmd-note">/graph-update takes a target — feature is the first graph; others will use the same command.</p>
         </div>
       ) : (
         <div className="graph-body">
@@ -242,7 +443,9 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
                     <button type="button" className="graph-region-name" onClick={() => setSelectedId(region.id)}>{region.name}</button>
                     {r && <span className="graph-region-roll">{bar(r)}<span>{r.pct}%</span></span>}
                     <button type="button" className="deck-btn" disabled={busy === 'plan'} onClick={() => void planFrom({ nodeId: region.id })}>Plan from here</button>
+                    <button type="button" className="deck-btn" onClick={() => setAddForm({ parentId: region.id, name: '', kind: 'feature' })} title={`Add a node under ${region.name}`}><Plus size={12} />Add</button>
                   </div>
+                  {addForm && addForm.parentId === region.id && addFormEl}
                   {childrenOf(region.id).map(n => renderNode(n, 0))}
                   {childrenOf(region.id).length === 0 && <div className="graph-region-empty">No features yet.</div>}
                 </section>
@@ -254,12 +457,28 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
                 {topLevel.map(n => renderNode(n, 0))}
               </section>
             )}
+            <div className="graph-main-foot">
+              {addForm && !addForm.parentId && addFormEl}
+              {!addForm && (
+                <button type="button" className="deck-btn" onClick={() => setAddForm({ parentId: '', name: '', kind: 'region' })}>
+                  <Plus size={12} />Add a region or top-level node
+                </button>
+              )}
+            </div>
           </div>
 
           <aside className="graph-rail">
             {selected ? (
               <>
-                <div className="graph-insp-name">{selected.name}</div>
+                <input
+                  key={`${selected.id}:${selected.name}`}
+                  className="graph-insp-name-input"
+                  defaultValue={selected.name}
+                  disabled={busy === selected.id}
+                  title="Rename — Enter or Tab to save"
+                  onBlur={e => void rename(selected, e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                />
                 <div className="graph-insp-row">
                   <span className="graph-chip">{selected.kind}</span>
                   {selected.pack && <span className="graph-chip pack">{selected.pack}</span>}
@@ -273,6 +492,20 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
                     onChange={e => void changeStatus(selected, e.target.value as FeatureNodeStatus)}
                   >
                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label className="graph-insp-label">Inside
+                  <select
+                    className="deck-select"
+                    value={selected.parent ?? ''}
+                    disabled={busy === selected.id}
+                    onChange={e => void reparent(selected, e.target.value)}
+                    title="Which node contains this one — containment is the parent field"
+                  >
+                    <option value="">Top level</option>
+                    {(graph?.nodes ?? []).filter(n => !descendantIds(selected.id).has(n.id)).map(n => (
+                      <option key={n.id} value={n.id}>{n.name}</option>
+                    ))}
                   </select>
                 </label>
                 {(selected.component || selected.template) && (
@@ -294,23 +527,64 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
                   </div>
                 )}
                 {selected.note && <div className="graph-insp-note">{selected.note}</div>}
-                {connections(selected).length > 0 && (
-                  <div className="graph-insp-block">
-                    <div className="graph-insp-label">Connections</div>
-                    {connections(selected).map((c, i) => (
-                      <button key={i} type="button" className="graph-conn" onClick={() => setSelectedId(c.node.id)}>
+                <div className="graph-insp-block">
+                  <div className="graph-insp-label">Connections</div>
+                  {connections(selected).map((c, i) => (
+                    <div key={i} className="graph-conn-row">
+                      <button type="button" className="graph-conn" onClick={() => setSelectedId(c.node.id)}>
                         <span className="graph-conn-label">{c.label}</span>
                         <span className="graph-mark" style={{ color: STATUS_COLOR[c.node.status] }}>{STATUS_MARK[c.node.status]}</span>
                         <span>{c.node.name}</span>
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        className="graph-conn-x"
+                        disabled={busy === 'conn'}
+                        title={`Remove this connection (${c.edge.type})`}
+                        onClick={() => void removeConn(c)}
+                      ><X size={11} /></button>
+                    </div>
+                  ))}
+                  <div className="graph-add-conn">
+                    <span className="graph-conn-this">{selected.name}</span>
+                    <select className="deck-select" value={linkDraft.type} onChange={e => setLinkDraft({ ...linkDraft, type: e.target.value })}>
+                      {EDGE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <select className="deck-select" value={linkDraft.toId} onChange={e => setLinkDraft({ ...linkDraft, toId: e.target.value })}>
+                      <option value="">Choose a node…</option>
+                      {(graph?.nodes ?? []).filter(n => n.id !== selected.id).map(n => (
+                        <option key={n.id} value={n.id}>{n.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="deck-btn"
+                      disabled={busy === 'conn' || !linkDraft.toId}
+                      onClick={() => void addConn(selected, linkDraft.toId, linkDraft.type)}
+                    >Link</button>
                   </div>
-                )}
+                </div>
                 <div className="graph-insp-actions">
                   <button type="button" className="deck-btn" disabled={busy === 'plan'} onClick={() => void planFrom({ nodeId: selected.id })}>Plan from this node</button>
                   {selected.pack && (
                     <button type="button" className="deck-btn" disabled={busy === 'plan'} onClick={() => void planFrom({ packId: selected.pack })}>Plan the {selected.pack} pack</button>
                   )}
+                </div>
+                <div className="graph-danger-row">
+                  <button
+                    type="button"
+                    className="deck-btn"
+                    disabled={busy === 'remove'}
+                    title="Remove this node; its children move up to its parent"
+                    onClick={() => void removeSelNode(selected, 'lift')}
+                  >Remove — lift children</button>
+                  <button
+                    type="button"
+                    className="deck-btn graph-danger"
+                    disabled={busy === 'remove'}
+                    title="Remove this node and everything inside it"
+                    onClick={() => void removeSelNode(selected, 'cascade')}
+                  >Remove subtree</button>
                 </div>
               </>
             ) : (
@@ -422,6 +696,30 @@ const GRAPH_CSS = `
 .graph-param-color { display:flex; align-items:center; gap:7px; }
 .graph-param-color input[type="color"] { width:34px; height:22px; padding:0; border:1px solid var(--border-strong); border-radius:5px; background:none; cursor:pointer; }
 .graph-lint-badge { color:var(--amber-text); border:1px solid var(--amber); border-radius:9px; padding:1px 8px; font-size:calc(11.5px * var(--ui-scale, 1)); font-weight:600; }
+.graph-feed { border-bottom:1px solid var(--border-soft); padding:6px 12px; display:flex; flex-direction:column; gap:2px; max-height:104px; overflow-y:auto; background:var(--accent-soft-bg); }
+.graph-feed-row { display:flex; gap:9px; font-size:calc(12px * var(--ui-scale, 1)); align-items:baseline; }
+.graph-feed-time { opacity:.55; font-size:calc(11px * var(--ui-scale, 1)); flex:none; }
+.graph-node.flash-added { animation:graph-flash-added 2.6s ease-out; }
+.graph-node.flash-changed { animation:graph-flash-changed 2.6s ease-out; }
+@keyframes graph-flash-added { 0% { background:var(--green); color:#fff; } 100% { background:transparent; } }
+@keyframes graph-flash-changed { 0% { background:var(--amber); color:#111; } 100% { background:transparent; } }
+.graph-bar-fill { transition:width .8s ease; }
+.graph-empty-actions { display:flex; gap:8px; align-items:center; margin-top:12px; }
+.graph-build-btn { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+.graph-cmd-hint { margin-top:10px; opacity:.75; font-size:calc(12px * var(--ui-scale, 1)); }
+.graph-cmd-note { opacity:.55; font-size:calc(12px * var(--ui-scale, 1)); }
+.graph-add-form { display:flex; gap:6px; align-items:center; padding:6px 4px; flex-wrap:wrap; }
+.graph-add-form .graph-param-input { width:170px; }
+.graph-main-foot { padding:2px 4px; }
+.graph-insp-name-input { font-weight:700; font-size:calc(14px * var(--ui-scale, 1)); background:var(--bg); color:inherit; border:1px solid var(--border-strong); border-radius:6px; padding:4px 8px; width:100%; box-sizing:border-box; font-family:inherit; }
+.graph-conn-row { display:flex; align-items:center; gap:2px; }
+.graph-conn-row .graph-conn { flex:1; }
+.graph-conn-x { background:none; border:none; color:inherit; opacity:.55; cursor:pointer; padding:3px; border-radius:5px; display:inline-flex; }
+.graph-conn-x:hover { opacity:1; background:var(--border-soft); color:var(--red-text); }
+.graph-add-conn { display:flex; gap:5px; align-items:center; flex-wrap:wrap; margin-top:3px; }
+.graph-conn-this { font-size:calc(12px * var(--ui-scale, 1)); font-weight:600; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.graph-danger-row { display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--border-soft); padding-top:10px; }
+.graph-danger:hover { color:var(--red-text); border-color:var(--red); }
 .graph-lint-kind { color:var(--amber-text); font-size:calc(11px * var(--ui-scale, 1)); min-width:86px; }
 .graph-overlay .mono { font-family:monospace; }
 `

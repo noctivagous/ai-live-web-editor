@@ -502,6 +502,26 @@ export async function setFeatureParam(id: string, name: string, value: string) {
   return postJson<{ ok: boolean, configFile?: string, error?: string }>('/api/features/param', { id, name, value })
 }
 
+export async function addFeatureNode(input: { name: string, kind: string, parentId?: string }) {
+  return postJson<{ ok: boolean, node?: FeatureNodeItem, error?: string }>('/api/features/nodes', input)
+}
+
+export async function editFeatureNode(id: string, patch: { name?: string, parentId?: string | null }) {
+  return postJson<{ ok: boolean, node?: FeatureNodeItem, error?: string }>('/api/features/edit', { id, ...patch })
+}
+
+export async function removeFeatureNode(id: string, mode: 'lift' | 'cascade') {
+  return postJson<{ ok: boolean, removed?: unknown[], lifted?: number, error?: string }>('/api/features/remove-node', { id, mode })
+}
+
+export async function linkFeatures(from: string, to: string, type: string) {
+  return postJson<{ ok: boolean, totalEdges?: number, error?: string }>('/api/features/links', { from, to, type })
+}
+
+export async function unlinkFeatures(from: string, to: string, type: string) {
+  return postJson<{ ok: boolean, totalEdges?: number, error?: string }>('/api/features/unlinks', { from, to, type })
+}
+
 export interface GraphProblemItem { kind: string, message: string, nodeId?: string }
 
 export async function getFeatureLint() {

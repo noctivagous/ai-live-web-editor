@@ -1,4 +1,4 @@
-import type { ConfigNode, ConfigParse, ScalarKind } from './configDoc'
+import type { ConfigNode, ConfigParse, ScalarKind } from './configDoc.ts'
 
 /**
  * An offset XML parser that lands on the same neutral tree shape

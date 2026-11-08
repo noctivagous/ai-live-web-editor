@@ -32,7 +32,7 @@ import {
   appendBlock as mdAppend, deleteBlock as mdDelete, parseMarkdown, replaceQuoteText,
   replaceText as mdReplaceText, setHeadingLevel, spliceRange, toggleTaskItem,
   type MdBlock,
-} from './markdownDoc'
+} from './markdownDoc.ts'
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 

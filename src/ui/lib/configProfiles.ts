@@ -10,8 +10,8 @@
  * Adding a config kind is adding one profile object here.
  */
 
-import { fieldMetaFor, groupTopLevelKeys, type JsonProfile } from './jsonProfiles'
-import type { ConfigFormat } from './configDoc'
+import { fieldMetaFor, groupTopLevelKeys, type JsonProfile } from './jsonProfiles.ts'
+import type { ConfigFormat } from './configDoc.ts'
 
 export type ConfigProfile = JsonProfile
 export { fieldMetaFor, groupTopLevelKeys }

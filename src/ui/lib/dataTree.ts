@@ -1,6 +1,6 @@
-import { parseJsonDocument, replaceScalarValue, type JsonNode, type JsonScalar } from './jsonDoc'
-import { parseConfig, replaceConfigScalar, serialiseScalar, type ConfigFormat, type ConfigNode } from './configDoc'
-import { parseXmlConfig, replaceXmlScalar, escapeXmlAttribute, escapeXmlText } from './xmlDoc'
+import { parseJsonDocument, replaceScalarValue, type JsonNode, type JsonScalar } from './jsonDoc.ts'
+import { parseConfig, replaceConfigScalar, serialiseScalar, type ConfigFormat, type ConfigNode } from './configDoc.ts'
+import { parseXmlConfig, replaceXmlScalar, escapeXmlAttribute, escapeXmlText } from './xmlDoc.ts'
 
 /**
  * The neutral TREE model behind the structured-data core: JSON,

@@ -294,6 +294,15 @@ select.pill:disabled{cursor:default; opacity:.7}
 .deck-btn .kbd{font-family:var(--mono); font-size:calc(10.5px * var(--ui-scale, 1)); color:var(--faint)}
 .deck-btn svg, .tool-pill svg, .ws-chip svg{flex-shrink:0}
 
+/* Button bars that must stay orderly when they wrap (Files/Library/
+   Actions/Graph switcher, chat Clear/Deck/Panel cluster): equal grid
+   columns instead of ragged flex flow. Narrow bars wrap 4→2+2 or to a
+   single column, always aligned. */
+.panel-head.btn-grid, .btn-grid{
+  display:grid; gap:4px 6px; align-items:center;
+  grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
+}
+
 .deck-input, .deck-select{
   width:100%; background:var(--well); border:1px solid var(--border);
   box-shadow:var(--well-shadow);

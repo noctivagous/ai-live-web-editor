@@ -1178,7 +1178,7 @@ export default function App() {
             intact) in the facets layout. */}
         <div style={{ display: route.kind === 'workbench' ? 'contents' : 'none' }}>
         <div className="panel" style={{ width: leftW, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div className="panel-head" style={{ display: 'flex', gap: 6, rowGap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="panel-head btn-grid" style={{ gap: 6 }}>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}><FolderOpen size={13} />Files</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates"><LibraryBig size={13} />Library</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)"><Zap size={13} />Actions</button>

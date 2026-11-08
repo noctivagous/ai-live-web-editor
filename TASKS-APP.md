@@ -1,23 +1,71 @@
 
-- ai live editor
+- ai live editor (ALE)
 
 ---
 
 some things we'll have to address in the future:
-app orientation packs.  can configure the entire
-app around different software situations.  our
-current one would be App Development.
+app orientation packs.  can configure the 
+app and UI around different software development 
+situations.  our current app orientation pack 
+would be App Development.   we have to decide
+what an app orientation pack can customize in ai-live-editor,
+but we think it should be able to customize anything but
+have a basic set of utilities for the stock of the app: 
+the header bars, the pane views, the layout of 
+the pane views.  then the point is to let people make
+use of the built-in software development resources
+and toolset, especially that we have an AI chat,
+to be able to make their own app orientation packs.
+at the same time, whatever their needs and requirements
+are, they can make use of the app being located inside
+the browser, that it can run and analyze things dynamically.
+This then relates to a second topic, which is AI chat
+para-contexts or sub-contexts, which is another section in this text.
+That topic relates to the AI chat being utilized on the side
+in a way that is different than software development,
+utilizing the same machinery we put in for AI chat but
+for purposes within the app under development or 
+to the side of the ALE app.
+
+app orientation pack examples:
+
 	- API design
 	- AI work
 	    - enables AI conventions in the UI that aren't usually
 	    available unless opt-in.
 	- kernel development
 	- graphic design
+	- electronic schematics
 	
 ---
 
 command bar.  only contains commands after search
 results like "Update Feature Graph"
+
+---
+
+AI Chat Incarnations - ParaContexts Sub Contexts
+
+That topic relates to the AI chat being utilized 
+in a way that is different than direct changes 
+to the code base for software development,
+utilizing the same machinery we put in for AI chat for
+software development but able to swap out tools
+for entirely different purposes, able to place the AI
+chat inside the running that is under development (embedded) or 
+within the ALE app to achieve goals that are different (para/sub).
+
+examples:
+ - embedded: the software developer is working on an app
+ for Game of Life (Conway) and puts together, using
+ the an AI chat incarnation plan file with tools (AI chat incarnation pack),
+ an AI chat embedded in the window of the Game of Life app
+ so that the AI can change the rules, the grid, etc., and report back,
+ then communicate to the main AI chat for software development.
+ implication: the main AI chat is built out of an AI Chat incarnation pack
+ - para/sub: within the ALE app the user wants to make an AI chat
+ to operate on specific file types.
+
 
 ---
 

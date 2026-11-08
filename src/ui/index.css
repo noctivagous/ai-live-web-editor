@@ -396,9 +396,21 @@ select.pill:disabled{cursor:default; opacity:.7}
 .seg button svg{flex-shrink:0}
 .seg button.on{background:var(--button-bg-primary); color:var(--on-primary)}
 .seg button:disabled{opacity:.45; cursor:default}
-/* Chat view switcher box: the Clear/Deck/Stationary/Stream/Panel buttons
-   in their own recessed outline container (well tokens, like inputs). */
-.chat-viewbox { background: var(--well); box-shadow: var(--well-shadow); border: 1px solid var(--border); border-radius: 10px; padding: 5px; }
+/* Flat segmented control: square ends, no arc caps. Same tokens as
+   .seg, with separators between segments.
+   Control sizes (apply .ctl-xs … .ctl-xl to .seg or .segf; no size
+   class keeps the current small look): */
+.segf { display:inline-flex; background:var(--seg-bg); box-shadow:var(--seg-shadow); border:1px solid var(--border); border-radius:0; overflow:hidden; flex-shrink:0; }
+.segf button { background:transparent; border:0; border-right:1px solid var(--border); color:var(--muted); font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit; }
+.segf button:last-child { border-right:0; }
+.segf button svg { flex-shrink:0; }
+.segf button.on { background:var(--button-bg-primary); color:var(--on-primary); }
+.segf button:disabled { opacity:.45; cursor:default; }
+.seg.ctl-xs button, .segf.ctl-xs button { font-size:calc(10.5px * var(--ui-scale, 1)); padding:2px 8px; }
+.seg.ctl-sm button, .segf.ctl-sm button { font-size:calc(11.5px * var(--ui-scale, 1)); padding:4px 10px; }
+.seg.ctl-md button, .segf.ctl-md button { font-size:calc(13px * var(--ui-scale, 1)); padding:6px 14px; }
+.seg.ctl-lg button, .segf.ctl-lg button { font-size:calc(14.5px * var(--ui-scale, 1)); padding:8px 18px; }
+.seg.ctl-xl button, .segf.ctl-xl button { font-size:calc(16px * var(--ui-scale, 1)); padding:10px 22px; }
 .sketch-panel{
   padding:8px 12px 10px; border-bottom:1px solid var(--border-soft);
   display:flex; flex-direction:column; gap:6px;

@@ -3,7 +3,6 @@ import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, Monitor, Mouse
 import type { ChatViewPref } from '../lib/uiPrefs'
 import type { ChatWorkflow, DeviceTarget, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
-import { ButtonGrid } from './ButtonGrid'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
@@ -80,21 +79,23 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
               : ''}
         </span>
       )}
-      <div className="chat-viewbox" role="group" aria-label="Chat actions and view" style={{ flex: '1 1 100%' }}>
-      <ButtonGrid>
+      {(showDeckButton || onChatView) && (
+        <div className="segf ctl-md" role="group" aria-label="Chat view">
+          {onChatView && (
+            <>
+              <button type="button" className={chatView === 'chat' ? 'on' : ''} onClick={() => onChatView('chat')} title="Stream view — the chat as a scrolling stream of messages" aria-pressed={chatView === 'chat'}><Waves size={12} />Stream</button>
+              <button type="button" className={chatView === 'stationary' ? 'on' : ''} onClick={() => onChatView('stationary')} title="Stationary view — the latest message stays pinned at the top, activity in fixed columns below, fades instead of scrolling" aria-pressed={chatView === 'stationary'}><Pin size={12} />Stationary</button>
+            </>
+          )}
+          {showDeckButton && (
+            <button type="button" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)"><Layers size={12} />Deck</button>
+          )}
+          {onChatView && (
+            <button type="button" className={chatView === 'panel' ? 'on' : ''} onClick={() => onChatView('panel')} title="Panel view — stationary indicators instead of text" aria-pressed={chatView === 'panel'}><Gauge size={12} />Panel</button>
+          )}
+        </div>
+      )}
       <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>
-      {showDeckButton && (
-        <button type="button" className="deck-btn btn-icon" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}><Layers size={12} />Deck</button>
-      )}
-      {onChatView && (
-        <>
-          <button type="button" className={`deck-btn btn-icon${chatView === 'stationary' ? ' on' : ''}`} onClick={() => onChatView('stationary')} title="Stationary view — the latest message stays pinned at the top, activity in fixed columns below, fades instead of scrolling" style={{ padding: '4px 8px' }} aria-pressed={chatView === 'stationary'}><Pin size={12} />Stationary</button>
-          <button type="button" className={`deck-btn btn-icon${chatView === 'chat' ? ' on' : ''}`} onClick={() => onChatView('chat')} title="Stream view — the chat as a scrolling stream of messages" style={{ padding: '4px 8px' }} aria-pressed={chatView === 'chat'}><Waves size={12} />Stream</button>
-          <button type="button" className={`deck-btn btn-icon${chatView === 'panel' ? ' on' : ''}`} onClick={() => onChatView('panel')} title="Panel view — stationary indicators instead of text" style={{ padding: '4px 8px' }} aria-pressed={chatView === 'panel'}><Gauge size={12} />Panel</button>
-        </>
-      )}
-      </ButtonGrid>
-      </div>
       <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ maxWidth: 'min(320px, 100%)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
       {sending && (
         <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>

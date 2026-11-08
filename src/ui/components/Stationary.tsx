@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Check, Loader2, X } from 'lucide-react'
 import { formatElapsed, type DeckTurn } from '../lib/deck'
 import { deriveStationary, type EarlierEntry, type StationaryNote } from '../lib/stationary'
 import type { ToolStep } from '../lib/chatSession'
 import { Markdown } from './Markdown'
+import { FailureDetailsDialog, errorFailureReport, stepFailureReport, type FailureReport } from './Modal'
 
 /* Stationary view: the chat with fixed homes instead of a scroll.
    The latest message holds the top edge of the pane — a WORKING
@@ -42,12 +43,20 @@ export function StationaryView({ turns, sending, workingLabel }: {
 }) {
   const m = deriveStationary(turns, { sending })
   const t = m.activityTotals
+  const [failure, setFailure] = useState<FailureReport | null>(null)
 
   const earlierCount = m.notes.length + m.earlier.length
   const fadeFor = (i: number) => Math.max(0.45, 0.92 - i * 0.06)
+  const current = turns[turns.length - 1]
+  const turnOf = (index: number) => turns.find(t => t.index === index)
+  const contextOf = (index: number) => {
+    const t = turnOf(index)
+    return t ? { index: t.index, intent: t.intent } : { index, intent: null }
+  }
 
   return (
     <div className="statview" aria-label="Stationary view">
+      {failure && <FailureDetailsDialog report={failure} onClose={() => setFailure(null)} />}
       {m.intent !== null && (
         <div className="st-intent" title={m.intent}><span className="st-intent-label">You</span>{m.intent}</div>
       )}
@@ -63,7 +72,12 @@ export function StationaryView({ turns, sending, workingLabel }: {
             {m.live && <Loader2 size={11} aria-hidden className="st-spin" />}
           </div>
           {m.pinned.kind === 'error' ? (
-            <pre className="st-pin-text">{m.pinned.text}</pre>
+            <>
+              <pre className="st-pin-text">{m.pinned.text}</pre>
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="deck-btn" onClick={() => setFailure(errorFailureReport(m.pinned!.text, contextOf(m.pinned!.turnIndex)))}>Details</button>
+              </div>
+            </>
           ) : (
             <div className="st-pin-text"><Markdown text={m.pinned.text} /></div>
           )}
@@ -99,6 +113,14 @@ export function StationaryView({ turns, sending, workingLabel }: {
                   <span className="st-step-name">{step.name}</span>
                   <span className="st-step-detail">{step.detail}</span>
                   <span className="st-step-ms">{stepElapsed(step)}</span>
+                  {step.status === 'error' && current && (
+                    <button
+                      type="button"
+                      className="deck-btn"
+                      style={{ marginLeft: 'auto', padding: '1px 7px', fontSize: 'calc(10.5px * var(--ui-scale, 1))' }}
+                      onClick={() => setFailure(stepFailureReport(step, { index: current.index, intent: current.intent }))}
+                    >Details</button>
+                  )}
                 </div>
               ))}
             </div>
@@ -120,7 +142,14 @@ export function StationaryView({ turns, sending, workingLabel }: {
               {(e.kind === 'working' || e.kind === 'final') ? (
                 <div className="st-old-text"><Markdown text={e.text} /></div>
               ) : (
-                <pre className="st-old-text">{e.text}</pre>
+                <>
+                  <pre className="st-old-text">{e.text}</pre>
+                  {e.kind === 'error' && (
+                    <div style={{ marginTop: 6 }}>
+                      <button type="button" className="deck-btn" onClick={() => setFailure(errorFailureReport(e.text, contextOf(e.turnIndex)))}>Details</button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ))}

@@ -13,6 +13,7 @@ import { loadUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs'
 import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { Markdown } from './Markdown'
+import { FailureDetailsDialog, errorFailureReport, stepFailureReport } from './Modal'
 import type { ChatWorkflow, DeviceTarget, SearchBackendId, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 
@@ -58,8 +59,9 @@ function StatusGlyph({ status }: { status: ToolStep['status'] | DeckTurn['status
   return <Circle size={12} className="step-glyph pending" aria-hidden />
 }
 
-function StepRow({ step }: { step: ToolStep }) {
+function StepRow({ step, turn }: { step: ToolStep, turn?: DeckTurn }) {
   const [open, setOpen] = useState(false)
+  const [details, setDetails] = useState(false)
   const hasResult = Boolean(step.result && step.result !== step.detail)
   const elapsed = stepElapsed(step)
   return (
@@ -78,17 +80,28 @@ function StepRow({ step }: { step: ToolStep }) {
           ? <ChevronDown size={12} className="step-chev" aria-hidden />
           : <ChevronRight size={12} className="step-chev" aria-hidden />)}
       </button>
+      {step.status === 'error' && (
+        <button type="button" className="deck-btn" style={{ marginLeft: 22 }} onClick={() => setDetails(true)}>Details</button>
+      )}
       {open && hasResult && <div className="step-result">{step.result}</div>}
+      {details && (
+        <FailureDetailsDialog
+          report={stepFailureReport(step, turn ? { index: turn.index, intent: turn.intent } : undefined)}
+          onClose={() => setDetails(false)}
+        />
+      )}
     </div>
   )
 }
 
-export function DeckCardView({ card, onNeedSetup, embed }: {
+export function DeckCardView({ card, onNeedSetup, embed, turn }: {
   card: DeckCard
   onNeedSetup: () => void
   embed?: boolean
+  turn?: DeckTurn
 }) {
   const [open, setOpen] = useState(false)
+  const [details, setDetails] = useState(false)
   switch (card.kind) {
     case 'intent':
       return (
@@ -114,7 +127,7 @@ export function DeckCardView({ card, onNeedSetup, embed }: {
         <div className="dcard dcard-tools">
           <div className="dcard-label">{TOOL_GROUP_LABEL[card.group]} <span className="dcard-count">{card.steps.length}</span></div>
           <div className="step-list">
-            {card.steps.map(s => <StepRow key={s.id} step={s} />)}
+            {card.steps.map(s => <StepRow key={s.id} step={s} turn={turn} />)}
           </div>
         </div>
       )
@@ -130,10 +143,19 @@ export function DeckCardView({ card, onNeedSetup, embed }: {
         <div className="dcard dcard-error">
           <div className="dcard-label error">Error</div>
           <pre className="dcard-pre plain">{card.text.slice(0, 8000)}</pre>
-          {looksLikeKeyError(card.text) && (
-            <button className="deck-btn" style={{ marginTop: 8 }} onClick={onNeedSetup}>
-              {embed ? 'Open launcher Settings' : 'Review setup'}
-            </button>
+          <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+            <button className="deck-btn" onClick={() => setDetails(true)}>Details</button>
+            {looksLikeKeyError(card.text) && (
+              <button className="deck-btn" onClick={onNeedSetup}>
+                {embed ? 'Open launcher Settings' : 'Review setup'}
+              </button>
+            )}
+          </div>
+          {details && (
+            <FailureDetailsDialog
+              report={errorFailureReport(card.text, turn ? { index: turn.index, intent: turn.intent } : undefined)}
+              onClose={() => setDetails(false)}
+            />
           )}
         </div>
       )
@@ -152,7 +174,7 @@ export function TurnView({ turn, anchorId, onNeedSetup, embed }: {
   return (
     <section className="deck-turn" id={anchorId}>
       {turn.cards.map((c, i) => (
-        <DeckCardView key={i} card={c} onNeedSetup={onNeedSetup} embed={embed} />
+        <DeckCardView key={i} card={c} onNeedSetup={onNeedSetup} embed={embed} turn={turn} />
       ))}
     </section>
   )
@@ -524,7 +546,7 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
                 </div>
                 <div className="dslide-cards">
                   {s.cards.map((c, j) => (
-                    <DeckCardView key={j} card={c} onNeedSetup={onNeedSetup} />
+                    <DeckCardView key={j} card={c} onNeedSetup={onNeedSetup} turn={s.turn} />
                   ))}
                   {s.slice === s.slices - 1 && s.turn.files.length > 0 && (
                     <WorkingSet files={s.turn.files} onOpen={onOpenPath} />

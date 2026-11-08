@@ -27,4 +27,29 @@ describe('StationaryView markdown', () => {
     assert.match(out, /<strong>first<\/strong>/, 'earlier final renders markdown')
     assert.doesNotMatch(out, /\*\*second\*\*/, 'raw markdown markers are gone')
   })
+
+  it('failed activity steps and error pins expose a Details button', () => {
+    const failed = html([
+      { role: 'user', text: 'check the env' },
+      {
+        role: 'tools',
+        steps: [
+          { id: '1', name: 'data-inspect', detail: 'data-inspect .env', status: 'error', result: 'data-inspect failed: no profile' },
+        ],
+      },
+      { role: 'error', text: 'Chat failed: boom' },
+    ])
+    // One for the activity step, one for the pinned error.
+    assert.equal(failed.split('Details').length - 1, 2)
+  })
+
+  it('earlier turn errors expose a Details button', () => {
+    const out = html([
+      { role: 'user', text: 'first ask' },
+      { role: 'error', text: 'Chat failed: earlier boom' },
+      { role: 'user', text: 'second ask' },
+      { role: 'ai', text: 'second final' },
+    ])
+    assert.match(out, /Details/)
+  })
 })

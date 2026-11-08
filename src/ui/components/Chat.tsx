@@ -297,6 +297,18 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     return () => window.removeEventListener('ai-live:ask-ai', onAsk)
   }, [])
 
+  // The failure-details dialog's "Insert into chat" drops the report into
+  // the composer without sending, so the user can edit before asking.
+  useEffect(() => {
+    const onInsert = (e: Event) => {
+      const d = (e as CustomEvent).detail as { text?: string } | undefined
+      if (!d?.text) return
+      setInput(d.text)
+    }
+    window.addEventListener('ai-live:insert-chat', onInsert)
+    return () => window.removeEventListener('ai-live:insert-chat', onInsert)
+  }, [])
+
   async function sendText(userText: string) {
     if (!userText.trim() || sending) return
     // Synchronous double-submit guard: `sending` state arrives a render

@@ -87,7 +87,7 @@ export const SETTING_FIELDS: SettingField[] = [
   {
     id: 'chatView', section: 'appearance', label: 'Default chat view', control: 'select', store: 'prefs',
     hint: 'Which presentation the chat pane opens in. Switching views in the chat header updates this.',
-    options: [{ value: 'chat', label: 'Chat (scrolling)' }, { value: 'panel', label: 'Panel (stationary indicators)' }],
+    options: [{ value: 'stationary', label: 'Stationary (pinned latest message)' }, { value: 'chat', label: 'Stream (scrolling)' }, { value: 'panel', label: 'Panel (dashboard indicators)' }],
     keywords: 'deck panel stationary scrolling',
   },
   // User Interface — device prefs (uiPrefs instance).

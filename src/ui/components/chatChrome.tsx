@@ -1,5 +1,6 @@
 import React from 'react'
-import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
+import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Pin, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet, Waves } from 'lucide-react'
+import type { ChatViewPref } from '../lib/uiPrefs'
 import type { ChatWorkflow, DeviceTarget, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { ButtonGrid } from './ButtonGrid'
@@ -7,7 +8,7 @@ import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChip
 import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onSearchBackend, onClear, onOpenDeck, panelActive, onTogglePanel }: {
+export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onSearchBackend, onClear, onOpenDeck, chatView, onChatView }: {
   workflow: ChatWorkflow
   deviceTarget: DeviceTarget
   /** Self mode (§L): the workspace is this editor itself. */
@@ -28,9 +29,10 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
   onSearchBackend?: (backend: SearchBackendId) => void
   onClear: () => void
   onOpenDeck: () => void
-  /** Panel view: stationary indicator presentation of the same chat. */
-  panelActive?: boolean
-  onTogglePanel?: () => void
+  /** Chat presentation: Stream (scrolling), Panel (indicators) or
+   * Stationary (pinned latest message + activity columns). */
+  chatView?: ChatViewPref
+  onChatView?: (view: ChatViewPref) => void
 }) {
   const availableSearch = (searchOptions || []).filter(o => o.available)
   return (
@@ -84,8 +86,12 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
       {showDeckButton && (
         <button type="button" className="deck-btn btn-icon" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}><Layers size={12} />Deck</button>
       )}
-      {onTogglePanel && (
-        <button type="button" className={`deck-btn btn-icon${panelActive ? ' on' : ''}`} onClick={onTogglePanel} title={panelActive ? 'Back to the scrolling chat view' : 'Panel view — stationary indicators instead of scrolling text'} style={{ padding: '4px 8px' }} aria-pressed={Boolean(panelActive)}><Gauge size={12} />Panel</button>
+      {onChatView && (
+        <>
+          <button type="button" className={`deck-btn btn-icon${chatView === 'stationary' ? ' on' : ''}`} onClick={() => onChatView('stationary')} title="Stationary view — the latest message stays pinned at the top, activity in fixed columns below, fades instead of scrolling" style={{ padding: '4px 8px' }} aria-pressed={chatView === 'stationary'}><Pin size={12} />Stationary</button>
+          <button type="button" className={`deck-btn btn-icon${chatView === 'chat' ? ' on' : ''}`} onClick={() => onChatView('chat')} title="Stream view — the chat as a scrolling stream of messages" style={{ padding: '4px 8px' }} aria-pressed={chatView === 'chat'}><Waves size={12} />Stream</button>
+          <button type="button" className={`deck-btn btn-icon${chatView === 'panel' ? ' on' : ''}`} onClick={() => onChatView('panel')} title="Panel view — stationary indicators instead of text" style={{ padding: '4px 8px' }} aria-pressed={chatView === 'panel'}><Gauge size={12} />Panel</button>
+        </>
       )}
       </ButtonGrid>
       {sending && (

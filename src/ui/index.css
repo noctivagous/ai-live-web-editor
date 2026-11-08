@@ -46,6 +46,9 @@
   --seg-shadow:none;
   --head-bg:linear-gradient(180deg,#17171c,#141418);
   --on-primary:#dbeafe;
+  --button-function-bg:#122639;
+  --button-function-border:#2c4a6f;
+  --button-function-text:#d6e7ff;
 }
 /* Dark Pro Classic: late-2000s pro-app shading — gradient panels,
    recessed wells, glossy buttons, near-black borders with a light
@@ -88,6 +91,9 @@
   --seg-shadow:inset 0 1px 3px rgba(0,0,0,.9);
   --head-bg:linear-gradient(180deg,#3a3b3e,#2a2b2e);
   --on-primary:#ffffff;
+  --button-function-bg:#1d2f45;
+  --button-function-border:#33507a;
+  --button-function-text:#e8f1ff;
 }
 /* Gray Pro Classic: the same shading model in a lighter gray. */
 [data-ui-theme="gray-pro-classic"]{
@@ -131,6 +137,9 @@
   --seg-shadow:inset 0 1px 3px rgba(0,0,0,.35);
   --head-bg:linear-gradient(180deg,#c4c4c6,#a8a8aa);
   --on-primary:#ffffff;
+  --button-function-bg:#bccadd;
+  --button-function-border:#7d94b5;
+  --button-function-text:#1e3a5f;
 }
 /* Light Gray 2020s: the Agent Actions prototype's palette, token for
    token — warm gray chrome, near-white panels, white fields/cards,
@@ -176,6 +185,9 @@
   --seg-shadow:none;
   --head-bg:#cfcbc0;
   --on-primary:#ffffff;
+  --button-function-bg:#dde7f3;
+  --button-function-border:#a9bed6;
+  --button-function-text:#1e3a5f;
 }
 /* Light Gray 2020s Regular: the same spirit independently derived —
    dark-2020s' flat model flipped to light neutral (zinc) grays. */
@@ -220,6 +232,9 @@
   --seg-shadow:none;
   --head-bg:#f4f4f5;
   --on-primary:#1e40af;
+  --button-function-bg:#e0eaf5;
+  --button-function-border:#a9bed6;
+  --button-function-text:#1e40af;
 }
 *{box-sizing:border-box}
 html, body, #root{
@@ -649,6 +664,20 @@ select.pill:disabled{cursor:default; opacity:.7}
 .pexpanded{display:flex; flex-direction:column; gap:6px; border-top:1px dashed var(--border); padding-top:8px}
 .deck-btn.danger{color:var(--red-text); border-color:rgba(239,68,68,.4)}
 .deck-btn.ghost{background:none; border-color:transparent; color:var(--muted)}
+/* Function buttons: actions that DO things (New file, Refresh,
+   Marked/Follow), as opposed to buttons that switch the loaded view
+   in a pane. Accent-tinted wash from the function tokens; the .on
+   toggle state still wins on border/color via higher specificity. */
+.btn-func{
+  background:var(--button-function-bg);
+  border-color:var(--button-function-border);
+  color:var(--button-function-text);
+}
+.btn-func:hover{
+  background:var(--button-function-bg);
+  border-color:var(--blue);
+  color:var(--button-function-text);
+}
 .pcustom{margin-top:14px; border:1px dashed var(--border); border-radius:12px; padding:12px}
 .pcustom-head{display:flex; gap:10px; align-items:center}
 .pcustom-row{

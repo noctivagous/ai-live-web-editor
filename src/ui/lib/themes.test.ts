@@ -123,6 +123,16 @@ describe('themes', () => {
     assert.match(regular.fontUi, /system-ui/)
   })
 
+  it('function buttons carry their own wash in every theme', () => {
+    for (const t of UI_THEMES) {
+      const k = t.tokens
+      // The whole point of the tokens: actions look different from
+      // neutral view-switch buttons in all five themes.
+      assert.notEqual(k.buttonFunctionBg, k.buttonBg, `${t.id} wash differs from buttonBg`)
+      assert.ok(contrast(k.buttonFunctionText, k.buttonFunctionBg) > 3.5, `${t.id} function label reads`)
+    }
+  })
+
   it('monaco mapping and font-size scale', () => {
     assert.equal(monacoThemeFor('dark-2020s'), 'vs-dark')
     assert.equal(monacoThemeFor('dark-pro-classic'), 'vs-dark')

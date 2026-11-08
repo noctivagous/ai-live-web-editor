@@ -77,6 +77,15 @@ export interface UiThemeTokens {
   segShadow: string
   headBg: string
   onPrimary: string
+  /**
+   * Function-button wash: the style for buttons that DO things (New
+   * file, Refresh, Marked/Follow…) as opposed to buttons that switch
+   * the loaded view in a pane. An accent-tinted surface in every
+   * theme so actions read as actions wherever they appear.
+   */
+  buttonFunctionBg: string
+  buttonFunctionBorder: string
+  buttonFunctionText: string
 }
 
 export interface UiTheme {
@@ -140,6 +149,9 @@ export const UI_THEMES: UiTheme[] = [
       segShadow: 'none',
       headBg: 'linear-gradient(180deg, #17171c, #141418)',
       onPrimary: '#dbeafe',
+      buttonFunctionBg: '#122639',
+      buttonFunctionBorder: '#2c4a6f',
+      buttonFunctionText: '#d6e7ff',
     },
   },
   {
@@ -188,6 +200,9 @@ export const UI_THEMES: UiTheme[] = [
       segShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.9)',
       headBg: 'linear-gradient(180deg, #3a3b3e, #2a2b2e)',
       onPrimary: '#ffffff',
+      buttonFunctionBg: '#1d2f45',
+      buttonFunctionBorder: '#33507a',
+      buttonFunctionText: '#e8f1ff',
     },
   },
   {
@@ -236,6 +251,9 @@ export const UI_THEMES: UiTheme[] = [
       segShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.35)',
       headBg: 'linear-gradient(180deg, #c4c4c6, #a8a8aa)',
       onPrimary: '#ffffff',
+      buttonFunctionBg: '#bccadd',
+      buttonFunctionBorder: '#7d94b5',
+      buttonFunctionText: '#1e3a5f',
     },
   },
   {
@@ -292,6 +310,9 @@ export const UI_THEMES: UiTheme[] = [
       segShadow: 'none',
       headBg: '#cfcbc0',
       onPrimary: '#ffffff',
+      buttonFunctionBg: '#dde7f3',
+      buttonFunctionBorder: '#a9bed6',
+      buttonFunctionText: '#1e3a5f',
     },
   },
   {
@@ -345,6 +366,9 @@ export const UI_THEMES: UiTheme[] = [
       segShadow: 'none',
       headBg: '#f4f4f5',
       onPrimary: '#1e40af',
+      buttonFunctionBg: '#e0eaf5',
+      buttonFunctionBorder: '#a9bed6',
+      buttonFunctionText: '#1e40af',
     },
   },
 ]

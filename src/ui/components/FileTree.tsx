@@ -299,19 +299,19 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <ButtonGrid className="ft-toolbar">
-        <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => startCreate('create-file', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New file (in the selected folder)"><FilePlus size={13} /></button>
-        <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => startCreate('create-folder', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New folder"><FolderPlus size={13} /></button>
-        <button type="button" className="deck-btn btn-icon ft-tool" onClick={onRefresh} title="Refresh the file list"><RefreshCw size={13} /></button>
-        <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => setCollapsed(new Set(allDirPaths(fullTree)))} title="Collapse all folders"><ChevronsDownUp size={13} /></button>
-        <button type="button" className={`deck-btn btn-icon ft-tool${showHidden ? ' on' : ''}`} onClick={() => setShowHidden(v => !v)} title={showHidden ? 'Hide dotfiles' : 'Show dotfiles'}>{showHidden ? <Eye size={13} /> : <EyeOff size={13} />}</button>
+        <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={() => startCreate('create-file', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New file (in the selected folder)"><FilePlus size={13} />New file</button>
+        <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={() => startCreate('create-folder', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New folder"><FolderPlus size={13} />New folder</button>
+        <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={onRefresh} title="Refresh the file list"><RefreshCw size={13} /></button>
+        <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={() => setCollapsed(new Set(allDirPaths(fullTree)))} title="Collapse all folders"><ChevronsDownUp size={13} /></button>
+        <button type="button" className={`deck-btn btn-icon ft-tool btn-func${showHidden ? ' on' : ''}`} onClick={() => setShowHidden(v => !v)} title={showHidden ? 'Hide dotfiles' : 'Show dotfiles'}>{showHidden ? <Eye size={13} /> : <EyeOff size={13} />}</button>
         <select className="deck-select ft-sort" value={sort} onChange={e => setSort(e.target.value as SortMode)} title="Sort order" aria-label="Sort order">
           <option value="name">Name</option>
           <option value="type">Type</option>
           <option value="modified">Modified</option>
         </select>
         <span className="ft-preview-mode" role="group" aria-label="Preview selection">
-          <button type="button" className={`deck-btn btn-icon ft-tool${previewMode === 'marked' ? ' on' : ''}`} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
-          <button type="button" className={`deck-btn btn-icon ft-tool${previewMode === 'follow' ? ' on' : ''}`} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
+          <button type="button" className={`deck-btn btn-icon ft-tool btn-func${previewMode === 'marked' ? ' on' : ''}`} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
+          <button type="button" className={`deck-btn btn-icon ft-tool btn-func${previewMode === 'follow' ? ' on' : ''}`} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
         </span>
       </ButtonGrid>
       <div className="ft-filter">

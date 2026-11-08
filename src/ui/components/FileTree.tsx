@@ -408,7 +408,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
         {editError && <div className="ft-edit-error">{editError}</div>}
       </div>
 
-      <ButtonGrid className="ft-actions">
+      <ButtonGrid className="ft-actionbar">
         <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={() => startCreate('create-file', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New file (in the selected folder)"><FilePlus size={13} />New file</button>
         <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={() => startCreate('create-folder', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New folder"><FolderPlus size={13} />New folder</button>
         <button type="button" className="deck-btn btn-icon ft-tool btn-func" onClick={onRefresh} title="Refresh the file list"><RefreshCw size={13} />Refresh</button>

@@ -24,6 +24,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { getFsRoot } from '../launcher.js'
 
 export type FeatureStatus =
@@ -87,11 +88,24 @@ export interface PendingLink {
   direction: 'out' | 'in'
 }
 
+/**
+ * Update stamp: the repo commit the graph was last saved against plus
+ * the save date. `commit` is null when the project is not in a git
+ * repo (or git is unavailable) — then the date alone is the record.
+ * Stamped on every save, so an old graph.json simply has no `sync`.
+ */
+export interface GraphSyncInfo {
+  commit: string | null
+  at: number
+}
+
 export interface FeatureGraph {
   version: 1
   title: string
   createdAt: number
   updatedAt: number
+  /** Commit + date of the last save; absent on graphs saved before stamping. */
+  sync?: GraphSyncInfo
   nodes: FeatureNode[]
   edges: FeatureEdge[]
   pendingLinks?: PendingLink[]
@@ -134,15 +148,63 @@ function nextId(prefix: string): string {
 
 /* ── Store ──────────────────────────────────────────────────── */
 
+/** HEAD of the git repo containing `root`, or null when it is not in
+ * a repo (or git is unavailable). Never throws. */
+export function gitHeadSync(root: string): string | null {
+  try {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf-8' }).trim()
+    return /^[0-9a-f]{40}$/.test(head) ? head : null
+  } catch {
+    return null
+  }
+}
+
+/** Commits `HEAD` is ahead of `from` (null when incomparable: no
+ * repo, unknown commit, or git unavailable). Never throws. */
+export function gitCommitsBehind(root: string, from: string | null): number | null {
+  if (!from) return null
+  try {
+    const head = gitHeadSync(root)
+    if (!head) return null
+    if (head === from) return 0
+    const n = execFileSync('git', ['rev-list', '--count', `${from}..HEAD`], { cwd: root, encoding: 'utf-8' }).trim()
+    const parsed = Number.parseInt(n, 10)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** Currency of a stamp against today's HEAD: 'current' (same commit),
+ * 'behind' (repo moved on), 'no-repo' (stamped outside git — date
+ * only), 'unstamped' (graph predates stamping), 'unknown' (cannot
+ * read HEAD right now). Pure — the API resolves HEAD and count. */
+export function graphCurrencyStatus(sync: GraphSyncInfo | undefined, head: string | null): 'current' | 'behind' | 'no-repo' | 'unstamped' | 'unknown' {
+  if (!sync) return 'unstamped'
+  if (sync.commit === null) return 'no-repo'
+  if (head === null) return 'unknown'
+  return head === sync.commit ? 'current' : 'behind'
+}
+
+function parseSyncInfo(raw: unknown): GraphSyncInfo | undefined {
+  const s = raw as Partial<GraphSyncInfo> | null | undefined
+  if (!s || typeof s !== 'object') return undefined
+  if (typeof s.at !== 'number' || !Number.isFinite(s.at)) return undefined
+  if (s.commit !== null && (typeof s.commit !== 'string' || !/^[0-9a-f]{40}$/.test(s.commit))) return undefined
+  return { commit: s.commit, at: s.at }
+}
+
 export function getFeatureGraph(root?: string): FeatureGraph | null {
   try {
     const raw = JSON.parse(fs.readFileSync(graphPaths(root).json, 'utf-8')) as Partial<FeatureGraph>
     if (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) return null
+    const sync = parseSyncInfo(raw.sync)
     return {
       version: 1,
       title: typeof raw.title === 'string' ? raw.title : 'Feature graph',
       createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
       updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0,
+      ...(sync ? { sync } : {}),
       nodes: raw.nodes,
       edges: raw.edges,
       ...(Array.isArray(raw.pendingLinks) ? { pendingLinks: raw.pendingLinks } : {}),
@@ -170,6 +232,7 @@ export function createFeatureGraph(title: string, root?: string): FeatureGraph {
 
 export function saveFeatureGraph(graph: FeatureGraph, root?: string): FeatureGraph {
   graph.updatedAt = Date.now()
+  graph.sync = { commit: gitHeadSync(root ?? getFsRoot()), at: graph.updatedAt }
   const p = graphPaths(root)
   fs.mkdirSync(p.dir, { recursive: true })
   fs.writeFileSync(p.json, JSON.stringify(graph, null, 2), 'utf-8')

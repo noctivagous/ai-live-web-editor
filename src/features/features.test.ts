@@ -3,9 +3,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import {
   addEdge, addNode, configuresFor, createFeatureGraph, effectiveValues,
-  featureGraphSummary, getFeatureGraph, getNode, graphRollup, lintGraph,
+  featureGraphSummary, getFeatureGraph, getNode, gitCommitsBehind, gitHeadSync,
+  graphCurrencyStatus, graphRollup, lintGraph,
   nodeSummary, prerequisites, removeEdge, removeNode, renameNode,
   renderFeatureMarkdown, reparentNode, saveFeatureGraph, seedValues,
   setNodeParam, setNodeStatus, subtree, validateParamValue,
@@ -13,6 +15,19 @@ import {
 
 function tmpRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'features-test-'))
+}
+
+/** A real git repo with one commit, for stamp/currency tests. */
+function tmpRepo(): { root: string, head: string } {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'features-git-'))
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf-8' })
+  git('init', '-q')
+  git('config', 'user.email', 'test@example.com')
+  git('config', 'user.name', 'Test')
+  fs.writeFileSync(path.join(root, 'app.txt'), 'v1\n')
+  git('add', '-A')
+  git('commit', '-qm', 'init')
+  return { root, head: git('rev-parse', 'HEAD').trim() }
 }
 
 /** A small store graph: Storefront region + Engine region, a Currency
@@ -218,4 +233,55 @@ test('lint: clean graph passes; each planted defect is reported; walks survive a
   assert.ok(cycleKinds.includes('parent-cycle'), `lint reports parent-cycle (got: ${cycleKinds.join(', ')})`)
   assert.ok(subtree(graph, storefront.id).length >= 2, 'subtree terminates on a cycled graph')
   assert.match(renderFeatureMarkdown(graph), /Feature graph/, 'markdown render terminates on a cycled graph')
+})
+
+test('save stamps commit + date; non-repo stamps date with null commit', () => {
+  const before = Date.now()
+  const plain = createFeatureGraph('Plain', tmpRoot())
+  assert.ok(plain.sync, 'stamp present')
+  assert.equal(plain.sync.commit, null, 'no repo, null commit')
+  assert.ok(plain.sync.at >= before && plain.sync.at <= Date.now(), 'stamp date is now')
+
+  const { root, head } = tmpRepo()
+  const graph = createFeatureGraph('Stamped', root)
+  assert.equal(graph.sync?.commit, head, 'stamp records HEAD')
+  const disk = JSON.parse(fs.readFileSync(path.join(root, 'ai-features/graph.json'), 'utf-8'))
+  assert.equal(disk.sync.commit, head, 'stamp persists on disk')
+  assert.equal(getFeatureGraph(root)?.sync?.commit, head, 'stamp round-trips')
+})
+
+test('malformed sync is dropped, not trusted', () => {
+  const root = tmpRoot()
+  createFeatureGraph('G', root)
+  const p = path.join(root, 'ai-features/graph.json')
+  const disk = JSON.parse(fs.readFileSync(p, 'utf-8'))
+  disk.sync = { commit: 'not-a-hash', at: 'yesterday' }
+  fs.writeFileSync(p, JSON.stringify(disk))
+  assert.equal(getFeatureGraph(root)?.sync, undefined, 'bad stamp ignored')
+})
+
+test('gitHeadSync and gitCommitsBehind never throw and count correctly', () => {
+  assert.equal(gitHeadSync(tmpRoot()), null, 'non-repo has no HEAD')
+  assert.equal(gitCommitsBehind(tmpRoot(), '0'.repeat(40)), null, 'incomparable without a repo')
+
+  const { root, head } = tmpRepo()
+  assert.equal(gitHeadSync(root), head, 'HEAD resolves')
+  assert.equal(gitCommitsBehind(root, head), 0, 'same commit is zero behind')
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf-8' })
+  fs.writeFileSync(path.join(root, 'app.txt'), 'v2\n')
+  git('add', '-A')
+  git('commit', '-qm', 'second')
+  assert.equal(gitCommitsBehind(root, head), 1, 'one commit behind after a move')
+  assert.equal(gitCommitsBehind(root, 'f'.repeat(40)), null, 'unknown commit is incomparable')
+})
+
+test('graphCurrencyStatus covers every stamp/HEAD combination', () => {
+  const at = Date.now()
+  const commit = 'a'.repeat(40)
+  const other = 'b'.repeat(40)
+  assert.equal(graphCurrencyStatus(undefined, other), 'unstamped')
+  assert.equal(graphCurrencyStatus({ commit: null, at }, other), 'no-repo')
+  assert.equal(graphCurrencyStatus({ commit, at }, null), 'unknown')
+  assert.equal(graphCurrencyStatus({ commit, at }, commit), 'current')
+  assert.equal(graphCurrencyStatus({ commit, at }, other), 'behind')
 })

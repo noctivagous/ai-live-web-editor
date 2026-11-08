@@ -480,6 +480,19 @@ export interface FeatureGraphItem {
   nodes: FeatureNodeItem[]
   edges: FeatureEdgeItem[]
   pendingLinks?: PendingLinkItem[]
+  sync?: { commit: string | null, at: number }
+}
+
+export interface GraphCurrency {
+  ok: boolean
+  sync: { commit: string | null, at: number } | null
+  head: string | null
+  behind: number | null
+}
+
+export async function getFeatureCurrency(): Promise<GraphCurrency> {
+  const r = await fetch(`${API}/api/features/currency`)
+  return r.json() as Promise<GraphCurrency>
 }
 
 export interface FeatureRollup { total: number, built: number, blocked: number, pct: number }

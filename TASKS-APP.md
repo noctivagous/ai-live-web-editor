@@ -72,10 +72,42 @@ points.
 
 ----
 
-the software project can have facets, are often 
+the software project can have facets.
+We should make a Facets section of Settings where
+the user can turn on and off different ones in the Facets
+section.
+
   - architecture
+     - the architecture plan, software engineering philosophy used,
+      architecture guide to follow
   - features
-  - styles
+  - graphic design - design system manager.  places 
+     design resources to configure, in different areas,
+     in a location (this facet of the project).
+     the style guide of the project, design tokens.
+     layout, icons used (configuration area).
+      wizard to import graphic design from folder or zip file
+      selected.  requires a design guide form schema
+      so that all graphic designs and style guides fit into it.
+      typography scale.  this is also where, in a section,
+      the GUI guide and components are previewable.
+      updating the graph will update the GUI guide to
+      show previews of the different gui controls being used.
+      - the graphic design graph and report will pertain to different
+      aspects of the design system and design.
+    - tech stack - can be referenced elsewhere
+    but manages and refers to what technologies are
+     being used, what npm packages, programming languages,
+     files, shows their versions if relevant.
+    - configuration  the place where all aspects of
+    the project directory are references related to
+    configuration.  for our app we will recognize
+    different kinds of repo and combinations and set
+    up a configuration registry much like we have
+    a file format render/edit registry for the preview pane. 
+    if a repo has a mix, it will show here.
+    
+    
 
 
 ----

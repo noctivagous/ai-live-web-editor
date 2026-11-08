@@ -60,6 +60,63 @@ export function graphUpdatePrompt(target: string): string {
  * ask-ai dispatch is inlined rather than imported from lib/api so
  * this module stays loadable outside the Vite runtime — api.ts
  * reads import.meta.env at module top.) */
+export interface GraphSyncStamp { commit: string | null, at: number }
+
+export type GraphCurrencyTone = 'ok' | 'warn' | 'muted'
+
+/**
+ * The one-line currency readout for the graph report header: whether
+ * the saved stamp matches today's HEAD, how far behind it is, or why
+ * there is nothing to compare (pre-stamp graph, no git repo, HEAD
+ * unreadable). Pure — the API resolves `head` and `behind`.
+ */
+export function formatGraphCurrency(
+  sync: GraphSyncStamp | null, head: string | null, behind: number | null,
+): { text: string, title: string, tone: GraphCurrencyTone } {
+  if (!sync) {
+    return {
+      text: 'Not stamped — run Update graph',
+      title: 'This graph was saved before commit stamping. Run Update graph to record the commit and date.',
+      tone: 'warn',
+    }
+  }
+  const date = new Date(sync.at).toLocaleString()
+  if (sync.commit === null) {
+    return {
+      text: `Updated ${date} · no git repo`,
+      title: 'The project is not in a git repo, so only the update date is recorded.',
+      tone: 'muted',
+    }
+  }
+  const short = sync.commit.slice(0, 7)
+  if (head === null) {
+    return {
+      text: `${short} · ${date} · HEAD unreadable`,
+      title: 'The stamped commit and date are recorded, but HEAD cannot be read right now.',
+      tone: 'muted',
+    }
+  }
+  if (head === sync.commit) {
+    return {
+      text: `Current · ${short} · ${date}`,
+      title: `The graph was saved against the current HEAD (${sync.commit}).`,
+      tone: 'ok',
+    }
+  }
+  if (behind !== null) {
+    return {
+      text: `${behind} commit${behind === 1 ? '' : 's'} behind · ${short} · ${date}`,
+      title: `HEAD moved ${behind} commit${behind === 1 ? '' : 's'} since the graph was saved. Run Update graph to reconcile.`,
+      tone: 'warn',
+    }
+  }
+  return {
+    text: `Repo moved · ${short} · ${date}`,
+    title: 'HEAD differs from the stamped commit but the distance is not comparable. Run Update graph to reconcile.',
+    tone: 'warn',
+  }
+}
+
 export function launchGraphUpdate(target: string): void {
   window.dispatchEvent(new CustomEvent('ai-live:graph-open', {}))
   window.dispatchEvent(new CustomEvent('ai-live:ask-ai', { detail: { text: graphUpdatePrompt(target) } }))

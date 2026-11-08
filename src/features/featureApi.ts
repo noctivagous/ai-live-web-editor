@@ -1,6 +1,7 @@
 import type { Express } from 'express'
 import {
-  addEdge, addNode, createFeatureGraph, getFeatureGraph, getNode, graphRollup,
+  addEdge, addNode, createFeatureGraph, getFeatureGraph, getNode, gitCommitsBehind,
+  gitHeadSync, graphRollup,
   lintGraph, nodeSummary,
   parseFeatureEdgeType, parseFeatureNodeKind, parseFeatureStatus, removeEdge, removeNode,
   renameNode, reparentNode, saveFeatureGraph,
@@ -96,6 +97,19 @@ export function mountFeatureApi(app: Express) {
   app.get('/api/features/lint', (_req, res) => {
     const graph = getFeatureGraph()
     res.json({ ok: true, problems: graph ? lintGraph(graph) : [] })
+  })
+
+  /** Update currency: the stamp on the last save (commit + date, or
+   * date only outside git) against today's HEAD, plus how many
+   * commits HEAD moved since. `behind` is null when incomparable;
+   * `sync` is null on graphs saved before stamping. */
+  app.get('/api/features/currency', (_req, res) => {
+    const root = getFsRoot()
+    const graph = getFeatureGraph()
+    const head = gitHeadSync(root)
+    const sync = graph?.sync ?? null
+    const behind = sync ? gitCommitsBehind(root, sync.commit) : null
+    res.json({ ok: true, sync, head, behind })
   })
 
   app.post('/api/features/uninstall', (req, res) => {

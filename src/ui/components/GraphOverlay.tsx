@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Circle, CircleDot, Clock, Loader2, Minus, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import {
-  addFeatureNode, editFeatureNode, getFeatureLint, getFeatureReconcile, getFeatures, linkFeatures,
+  addFeatureNode, editFeatureNode, getFeatureCurrency, getFeatureLint, getFeatureReconcile, getFeatures, linkFeatures,
   planFromGraph, removeFeatureNode, setFeatureNodeStatus, setFeatureParam, unlinkFeatures,
-  type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphProblemItem,
+  type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphCurrency, type GraphProblemItem,
 } from '../lib/api'
-import { launchGraphUpdate } from '../lib/graphUpdate'
+import { formatGraphCurrency, launchGraphUpdate } from '../lib/graphUpdate'
 import type { GraphView } from '../lib/layoutRoute'
 
 /**
@@ -92,6 +92,7 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'gra
   const [graph, setGraph] = useState<FeatureGraphItem | null>(null)
   const [problems, setProblems] = useState<GraphProblemItem[]>([])
   const [drift, setDrift] = useState<DriftItem[]>([])
+  const [currency, setCurrency] = useState<GraphCurrency | null>(null)
   const [rollup, setRollup] = useState<{ overall: FeatureRollup, regions: { node: FeatureNodeItem, rollup: FeatureRollup }[] } | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -149,6 +150,8 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'gra
         if (lint?.ok) setProblems(lint.problems)
         const rec = await getFeatureReconcile().catch(() => null)
         if (rec?.ok) setDrift(rec.drift)
+        const cur = await getFeatureCurrency().catch(() => null)
+        if (cur?.ok) setCurrency(cur)
       }
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Feature graph failed to load')
@@ -395,6 +398,10 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'gra
             ⚠ {problems.length} graph problem{problems.length === 1 ? '' : 's'}
           </span>
         )}
+        {graph && currency && (() => {
+          const c = formatGraphCurrency(currency.sync, currency.head, currency.behind)
+          return <span className={`graph-currency ${c.tone}`} title={c.title}>{c.text}</span>
+        })()}
         <span className="graph-head-spacer" />
         {graph && graph.nodes.length > 0 && (
           <button
@@ -713,6 +720,9 @@ const GRAPH_CSS = `
 .graph-param-color { display:flex; align-items:center; gap:7px; }
 .graph-param-color input[type="color"] { width:34px; height:22px; padding:0; border:1px solid var(--border-strong); border-radius:5px; background:none; cursor:pointer; }
 .graph-lint-badge { color:var(--amber-text); border:1px solid var(--amber); border-radius:9px; padding:1px 8px; font-size:calc(11.5px * var(--ui-scale, 1)); font-weight:600; }
+.graph-currency { border:1px solid var(--border); border-radius:9px; padding:1px 8px; font-size:calc(11.5px * var(--ui-scale, 1)); color:var(--text-soft); white-space:nowrap; }
+.graph-currency.ok { color:var(--green-text); border-color:var(--green); }
+.graph-currency.warn { color:var(--amber-text); border-color:var(--amber); }
 .graph-feed { border-bottom:1px solid var(--border-soft); padding:6px 12px; display:flex; flex-direction:column; gap:2px; max-height:104px; overflow-y:auto; background:var(--accent-soft-bg); }
 .graph-feed-row { display:flex; gap:9px; font-size:calc(12px * var(--ui-scale, 1)); align-items:baseline; }
 .graph-feed-time { opacity:.55; font-size:calc(11px * var(--ui-scale, 1)); flex:none; }

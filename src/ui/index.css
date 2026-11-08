@@ -775,6 +775,9 @@ select.pill:disabled{cursor:default; opacity:.7}
 
 /* File browser pane (tree over the launcher file list). */
 .ft-toolbar { display: flex; gap: 4px; align-items: center; padding: 6px 8px 2px; }
+/* Bottom function bar: the pane's actions live above the footer,
+   separated from the tree like the footer below it. */
+.ft-actions { padding: 6px 8px; border-top: 1px solid var(--border-soft); }
 .ft-tool { padding: 3px 5px; }
 .ft-sort { margin-left: auto; font-size: calc(11px * var(--ui-scale, 1)); padding: 2px 4px; max-width: 86px; }
 .ft-preview-mode { display: flex; gap: 2px; margin-left: 6px; }

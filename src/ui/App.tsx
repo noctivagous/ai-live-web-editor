@@ -1184,7 +1184,6 @@ export default function App() {
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates"><LibraryBig size={13} />Library</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)"><Zap size={13} />Actions</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status"><Network size={13} />Graph</button>
-            {leftView === 'files' && <span className="sub">{files.length}</span>}
           </ButtonGrid>
           {leftView === 'files' ? (
             <FileTree

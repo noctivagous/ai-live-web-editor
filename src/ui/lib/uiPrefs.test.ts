@@ -55,7 +55,10 @@ describe('uiPrefs editor fields + replace', () => {
     const store = fakeStore()
     saveUiPrefs({ chatView: 'panel' }, store)
     const next = replaceUiPrefs({ fileSort: 'modified', editorFontSize: 16 }, store)
-    assert.equal(next.chatView, 'chat')
+    // A whole-record replace falls back to the DEFAULT chat view:
+    // Stationary (the default changed from the scrolling chat by
+    // the user's direction when the Stationary view landed).
+    assert.equal(next.chatView, 'stationary')
     assert.equal(next.fileSort, 'modified')
     assert.equal(next.editorFontSize, 16)
     assert.deepEqual(loadUiPrefs(store), next)

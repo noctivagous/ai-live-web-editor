@@ -3,6 +3,7 @@ import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type Ch
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import { PanelView } from './Panel'
+import { StationaryView } from './Stationary'
 import {
   DEFAULT_CHAT_LOG,
   createSendGuard,
@@ -33,7 +34,7 @@ import {
   type AnnotationDigest,
 } from '../lib/annotationSync'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
-import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
+import { loadUiPrefs, saveUiPrefs, type ChatViewPref } from '../lib/uiPrefs'
 import { WRITE_TOOLS } from '../../agentTools'
 import { slideTurnsOrDefault } from '../lib/deck'
 
@@ -107,7 +108,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   const [workingLabel, setWorkingLabel] = useState(() => loadChat(projectId).workingLabel)
   const [workflow, setWorkflow] = useState<ChatWorkflow>('files')
   const [deckOpen, setDeckOpen] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(() => loadUiPrefs().chatView === 'panel')
+  const [view, setView] = useState<ChatViewPref>(() => loadUiPrefs().chatView)
   const [sketch, setSketch] = useState<WorkflowSnapshot | null>(null)
   // Page annotations from the live page. Only the embed iframe hears the page
   // directly (postMessage); it re-publishes so the sidebar shows the same chips.
@@ -559,12 +560,11 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         onSearchBackend={(backend) => void setSearchBackend(backend)}
         onClear={clearChat}
         onOpenDeck={openDeck}
-        panelActive={panelOpen}
-        onTogglePanel={() => setPanelOpen(o => {
-          const next = !o
-          saveUiPrefs({ chatView: next ? 'panel' : 'chat' })
-          return next
-        })}
+        chatView={view}
+        onChatView={(v) => {
+          setView(v)
+          saveUiPrefs({ chatView: v })
+        }}
       />
       <SketchPanel
         workflow={workflow}
@@ -572,7 +572,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         sending={sending}
         onSketchAction={(action) => void sketchAction(action)}
       />
-      {panelOpen ? (
+      {view === 'panel' ? (
         <PanelView
           turns={turns}
           sending={sending}
@@ -580,6 +580,12 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           onOpenPath={onOpenPath}
           onNeedSetup={onNeedSetup}
           embed={embed}
+        />
+      ) : view === 'stationary' ? (
+        <StationaryView
+          turns={turns}
+          sending={sending}
+          workingLabel={workingLabel}
         />
       ) : (
         <>

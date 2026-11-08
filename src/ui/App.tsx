@@ -16,7 +16,7 @@ import { ButtonGrid } from './components/ButtonGrid'
 import { AddFeatureWizard } from './components/AddFeatureWizard'
 import { FileActionsMenu } from './components/FileActionsMenu'
 import { FacetView } from './components/FacetView'
-import { formatRoute, parseRoute, type AppLayout, type FacetId, type RouteModal } from './lib/layoutRoute'
+import { FACET_IDS, FACET_TITLES, formatRoute, parseRoute, type AppLayout, type FacetId, type RouteModal } from './lib/layoutRoute'
 import { themeById } from './lib/themes'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
@@ -1150,61 +1150,27 @@ export default function App() {
         />
       )}
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">◧</span>
-          <span>AI Live Editor</span>
+        <div className="bar-seg" role="group" aria-label="Layout and facet">
+          <div className="layout-switch" role="group" aria-label="Layout">
+            <button type="button" className={route.kind === 'workbench' ? 'on' : ''} onClick={() => navigate({ kind: 'workbench' })} title="The workbench layout: files, editor, preview"><LayoutDashboard size={13} />Workbench</button>
+            <button type="button" className={route.kind === 'facets' ? 'on' : ''} onClick={() => navigate({ kind: 'facets', facet: lastFacet })} title="The facets layout: one screen per facet — state, actions, wizards"><Layers size={13} />Facets</button>
+          </div>
+          <select
+            className="deck-btn"
+            value={route.kind === 'facets' ? route.facet : lastFacet}
+            onChange={e => navigate({ kind: 'facets', facet: e.target.value as FacetId })}
+            title="Which facet is shown"
+            style={{ maxWidth: 150 }}
+          >
+            {FACET_IDS.map(f => (
+              <option key={f} value={f}>{FACET_TITLES[f]}</option>
+            ))}
+          </select>
         </div>
-        <div className="toolbar" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div className="toolbar bar-seg" aria-label="Project and files" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span className={`pill mono ${connTone(status)}`} title={status}>
             <span className="dot" />{status.startsWith('real FS:') ? status.replace(/^real FS: (\d+ files) @ .*$/, '$1') : status.slice(0, 42)}
           </span>
-          {activeConn ? (
-            <>
-              <select
-                className={`pill mono ${keyTone}`}
-                value={activeConn.id}
-                onChange={e => { void handleConnection(e.target.value) }}
-                title="Provider connection"
-                style={{ maxWidth: 190 }}
-              >
-                {(connPayload?.connections || []).map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <select
-                className={`pill mono ${keyTone}`}
-                value={activeConn.model}
-                onChange={e => { void handleModel(e.target.value) }}
-                title="Chat model"
-                style={{ maxWidth: 220 }}
-              >
-                {!activeConn.verifiedModels.some(m => m.id === activeConn.model) && (
-                  <option value={activeConn.model}>{activeConn.model}</option>
-                )}
-                {activeConn.verifiedModels
-                  .filter(m => m.modalities.includes('text'))
-                  .map(m => (
-                    <option key={m.id} value={m.id}>{m.id}</option>
-                  ))}
-              </select>
-            </>
-          ) : (
-            <select
-              className={`pill mono ${keyTone}`}
-              value={hasKey ? (config?.modelName || '') : ''}
-              disabled={!hasKey}
-              onChange={e => { void handleModel(e.target.value) }}
-              title="Chat model"
-            >
-              {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
-              {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
-                <option value={config.modelName}>{config.modelName}</option>
-              )}
-              {models.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          )}
           <select
             className="deck-btn"
             value={activeProject}
@@ -1247,12 +1213,9 @@ export default function App() {
             <FolderOpen size={13} />Open…
           </button>
           <ReimportButton projectId={activeProject} suppress={syncSession?.projectId === activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
+          <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-          <div className="layout-switch" role="group" aria-label="Layout">
-            <button type="button" className={route.kind === 'workbench' ? 'on' : ''} onClick={() => navigate({ kind: 'workbench' })} title="The workbench layout: files, editor, preview"><LayoutDashboard size={13} />Workbench</button>
-            <button type="button" className={route.kind === 'facets' ? 'on' : ''} onClick={() => navigate({ kind: 'facets', facet: lastFacet })} title="The facets layout: one screen per facet — state, actions, wizards"><Layers size={13} />Facets</button>
-          </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
             <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setWizardsMenuOpen(false); setActionsMenuOpen(o => !o) }} title="Agent Actions — start work from a menu instead of typing a command" aria-haspopup="menu" aria-expanded={actionsMenuOpen}><Zap size={13} />Agent Actions</button>
             {actionsMenuOpen && (
@@ -1273,19 +1236,67 @@ export default function App() {
               />
             )}
           </div>
-          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
-            <button className="deck-btn" onClick={() => { setActionsMenuOpen(false); setWizardsMenuOpen(false); setSettingsMenuOpen(o => !o) }} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings</button>
-            {settingsMenuOpen && (
-              <div className="set-menu" role="menu">
-                {SETTING_SECTIONS.map(s => (
-                  <button key={s.id} type="button" role="menuitem" onClick={() => { setSettingsMenuOpen(false); openSettings(s.id) }}>
-                    {s.title}
-                  </button>
+          <div className="bar-seg" role="group" aria-label="AI settings" style={{ marginLeft: 'auto' }}>
+            {activeConn ? (
+              <>
+                <select
+                  className={`pill mono ${keyTone}`}
+                  value={activeConn.id}
+                  onChange={e => { void handleConnection(e.target.value) }}
+                  title="Provider connection"
+                  style={{ maxWidth: 190 }}
+                >
+                  {(connPayload?.connections || []).map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <select
+                  className={`pill mono ${keyTone}`}
+                  value={activeConn.model}
+                  onChange={e => { void handleModel(e.target.value) }}
+                  title="Chat model"
+                  style={{ maxWidth: 220 }}
+                >
+                  {!activeConn.verifiedModels.some(m => m.id === activeConn.model) && (
+                    <option value={activeConn.model}>{activeConn.model}</option>
+                  )}
+                  {activeConn.verifiedModels
+                    .filter(m => m.modalities.includes('text'))
+                    .map(m => (
+                      <option key={m.id} value={m.id}>{m.id}</option>
+                    ))}
+                </select>
+              </>
+            ) : (
+              <select
+                className={`pill mono ${keyTone}`}
+                value={hasKey ? (config?.modelName || '') : ''}
+                disabled={!hasKey}
+                onChange={e => { void handleModel(e.target.value) }}
+                title="Chat model"
+              >
+                {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
+                {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
+                  <option value={config.modelName}>{config.modelName}</option>
+                )}
+                {models.map(m => (
+                  <option key={m} value={m}>{m}</option>
                 ))}
-              </div>
+              </select>
             )}
+            <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+              <button className="deck-btn" onClick={() => { setActionsMenuOpen(false); setWizardsMenuOpen(false); setSettingsMenuOpen(o => !o) }} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings</button>
+              {settingsMenuOpen && (
+                <div className="set-menu" role="menu">
+                  {SETTING_SECTIONS.map(s => (
+                    <button key={s.id} type="button" role="menuitem" onClick={() => { setSettingsMenuOpen(false); openSettings(s.id) }}>
+                      {s.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
       </header>
       {syncSession && syncSession.projectId === activeProject && (

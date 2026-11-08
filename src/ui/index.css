@@ -966,6 +966,7 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
 .wiz-btn.primary { background: var(--accent-soft-bg); border-color: var(--accent-soft-border); color: var(--accent-soft-text); font-weight: 600; }
 /* Layout switcher + Facets layout (slice 5). */
 .layout-switch { display: flex; border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; }
+.bar-seg { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border-soft); border-radius: 10px; padding: 3px 8px; flex-shrink: 0; background: var(--panel); }
 .layout-switch button { background: none; border: none; color: var(--text-soft); padding: 5px 11px; cursor: pointer; font-family: inherit; font-size: calc(12px * var(--ui-scale, 1)); }
 .layout-switch button.on { background: var(--card-hover); color: var(--text-strong); font-weight: 600; }
 .facet-bar { display: flex; align-items: center; gap: 5px; padding: 9px 12px; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }

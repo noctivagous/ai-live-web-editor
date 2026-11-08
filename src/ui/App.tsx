@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FileCog, FolderOpen, Import, Layers, LayoutDashboard, LibraryBig, Network, Plus, Save, Settings, Wand2, Zap } from 'lucide-react'
+import { AppWindow, ChevronDown, ChevronRight, Expand, FileCog, FolderOpen, Import, Layers, LayoutDashboard, LibraryBig, Maximize2, Network, Plus, Save, Settings, SquareArrowOutUpRight, Wand2, X, Zap } from 'lucide-react'
 import { FileTree } from './components/FileTree'
 import { Library } from './components/Library'
 import { MonacoEditor } from './components/MonacoEditor'
@@ -267,6 +267,34 @@ export default function App() {
       return next
     })
   }
+
+  /** Expand one section and collapse the other (maximize). */
+  function expandOnly(which: 'editor' | 'preview') {
+    setCollapse(prev => {
+      const next = { ...prev, editor: which !== 'editor', preview: which !== 'preview' }
+      saveCollapse(next)
+      return next
+    })
+  }
+
+  /** Fullscreen overlay for one pane (10px margin over the app). Session-only. */
+  const [overlay, setOverlay] = useState<null | 'editor' | 'preview'>(null)
+  /** Open the overlayed pane on the launcher server: the editor boots
+   * the SPA into a project+path deep link, the preview opens the
+   * served project route directly. */
+  function openOverlayUrl(mode: 'tab' | 'window') {
+    if (!overlay) return
+    const url = overlay === 'editor'
+      ? `/?project=${encodeURIComponent(activeProject)}&path=${encodeURIComponent(activePath)}`
+      : `/projects/${(startPage || 'index.html').replace(/^\//, '')}`
+    window.open(url, '_blank', mode === 'tab' ? 'noopener' : 'noopener,width=1280,height=860')
+  }
+  useEffect(() => {
+    if (!overlay) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOverlay(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [overlay])
 
   async function loadFiles(nextActive?: string) {
     try {
@@ -876,7 +904,26 @@ export default function App() {
     setStatus('sync disconnected — project kept as a copy')
   }
 
-  useEffect(() => { loadFiles(); refreshConfig(); loadProjects() }, [])
+  // Deep-link boot: a new tab opened from an overlay lands here with
+  // ?project=&path= and opens straight onto that file. Consumed once
+  // so later reloads boot normally.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const deepProject = params.get('project')
+    const deepPath = params.get('path')
+    if (!deepProject && !deepPath) {
+      loadFiles(); refreshConfig(); loadProjects()
+      return
+    }
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+    void (async () => {
+      refreshConfig()
+      if (deepProject) await handleSelectProject(deepProject)
+      else await loadProjects()
+      if (deepPath) await loadFiles(deepPath)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Restore a sync session when landing on a project that has one.
   useEffect(() => {
@@ -1224,6 +1271,12 @@ export default function App() {
             <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => toggleCollapse('editor')} title={collapse.editor ? 'Expand editor' : 'Collapse editor'}>
               {collapse.editor ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
             </button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => expandOnly('editor')} title="Expand editor and collapse preview">
+              <Maximize2 size={12} />
+            </button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => setOverlay('editor')} title="Open editor as overlay">
+              <Expand size={12} />
+            </button>
             <span className="mono" style={{ fontWeight: 500 }}>{activePath}</span>
             {activePath && (
               <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
@@ -1239,7 +1292,7 @@ export default function App() {
               </div>
             )}
           </div>
-          {!collapse.editor && (
+          {!collapse.editor && overlay !== 'editor' && (
             <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>
               <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} editorPrefs={uiPrefsState} />
             </div>
@@ -1247,6 +1300,7 @@ export default function App() {
           {!collapse.editor && !collapse.preview && (
             <HDivider onMouseDown={rowDrag()} title="Drag to resize preview" />
           )}
+          {overlay !== 'preview' && (
           <div style={{ flex: collapse.preview ? '0 0 auto' : collapse.editor ? '1 1 0' : `${previewH} 1 0`, minHeight: 0, borderTop: '1px solid var(--border-soft)', display: 'flex', flexDirection: 'column' }}>
             <Preview
               key={activeProject}
@@ -1256,12 +1310,40 @@ export default function App() {
               hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
               collapsed={collapse.preview}
               onToggleCollapse={() => toggleCollapse('preview')}
+              onMaximize={() => expandOnly('preview')}
+              onOverlay={() => setOverlay('preview')}
               onChanged={() => { void loadProjects(); loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
               onResult={setNotice}
             />
           </div>
+          )}
         </div>
         </div>
+        {route.kind === 'workbench' && overlay && (
+          <div className="pane-overlay" role="dialog" aria-label={overlay === 'editor' ? `Editor overlay${activePath ? `: ${activePath}` : ''}` : 'Preview overlay'}>
+            <div className="panel-head">
+              <span className="mono" style={{ fontWeight: 600 }}>{overlay === 'editor' ? (activePath || 'Editor') : 'Preview'}</span>
+              <button type="button" className="deck-btn" style={{ padding: '2px 8px', marginLeft: 'auto' }} onClick={() => openOverlayUrl('window')} title="Open this pane in a new window"><AppWindow size={13} />New window</button>
+              <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => openOverlayUrl('tab')} title="Open this pane in a new tab"><SquareArrowOutUpRight size={13} />New tab</button>
+              <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => setOverlay(null)} title="Close overlay (Esc)"><X size={13} />Close</button>
+            </div>
+            <div className="pane-overlay-body">
+              {overlay === 'editor' ? (
+                <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} editorPrefs={uiPrefsState} />
+              ) : (
+                <Preview
+                  key={activeProject}
+                  setup={projects.find(p => p.id === activeProject)?.setup}
+                  startPage={startPage}
+                  files={files}
+                  hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
+                  onChanged={() => { void loadProjects(); loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
+                  onResult={setNotice}
+                />
+              )}
+            </div>
+          </div>
+        )}
         {route.kind === 'facets' && (
           <div className="panel" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
             <FacetView

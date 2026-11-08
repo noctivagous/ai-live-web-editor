@@ -366,7 +366,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
               <div
                 role="treeitem"
                 aria-expanded={node.isDir ? !(collapsed.has(node.path) && !query) : undefined}
-                className={`ft-row${isActive ? ' active' : ''}${isFocused ? ' focused' : ''}${dragOver === node.path ? ' drop' : ''}`}
+                className={`ft-row ft-depth-${Math.min(depth, 3)}${isActive ? ' active' : ''}${isFocused ? ' focused' : ''}${dragOver === node.path ? ' drop' : ''}`}
                 style={{ paddingLeft: 8 + depth * 14 }}
                 draggable
                 onDragStart={e => { setDragPath(node.path); e.dataTransfer.effectAllowed = 'move' }}

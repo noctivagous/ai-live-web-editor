@@ -780,6 +780,15 @@ select.pill:disabled{cursor:default; opacity:.7}
    ft-actionbar — ft-actions is taken by the per-row hover buttons,
    whose display:none rule would otherwise hide this bar.) */
 .ft-actionbar { padding: 6px 8px; border-top: 1px solid var(--border-soft); }
+/* Fullscreen pane overlay: floats over the app with a 10px margin. */
+.pane-overlay{
+  position:fixed; inset:10px; z-index:120; display:flex; flex-direction:column;
+  background:var(--panel-bg); border:1px solid var(--border-strong);
+  border-radius:12px; box-shadow:0 24px 80px rgba(0,0,0,.55); overflow:hidden;
+}
+.pane-overlay .panel-head{ border-radius:11px 11px 0 0; }
+.pane-overlay-body{ flex:1; min-height:0; display:flex; flex-direction:column; }
+.pane-overlay-body > *{ flex:1; min-height:0; display:flex; flex-direction:column; }
 .ft-tool { padding: 3px 5px; }
 .ft-sort { margin-left: auto; font-size: calc(11px * var(--ui-scale, 1)); padding: 2px 4px; max-width: 86px; }
 .ft-preview-mode { display: flex; gap: 2px; margin-left: 6px; }
@@ -793,7 +802,19 @@ select.pill:disabled{cursor:default; opacity:.7}
 .ft-filter-clear { display: inline-flex; background: none; border: none; color: var(--faint); cursor: pointer; padding: 1px; }
 .ft-filter-clear:hover { color: var(--text); }
 .ft-tree { flex: 1; min-height: 0; overflow: auto; padding: 2px 6px 8px; outline: none; }
-.ft-row { display: flex; align-items: center; gap: 5px; padding: 3px 6px 3px 0; border-radius: 7px; cursor: pointer; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-soft); border: 1px solid transparent; white-space: nowrap; }
+.ft-row { display: flex; align-items: center; gap: 5px; padding: 3px 6px 3px 0; border-radius: 0; cursor: pointer; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-soft); border: 1px solid transparent; border-left: none; border-right: none; white-space: nowrap; }
+/* Nested shading: rows stripe by tree depth (ft-depth-N comes from the
+   row's depth, clamped at 3; depth 0 carries a whisper so the top
+   level stripes too). Tints mix live from the theme's own text and
+   panel colors: text runs near-white on dark themes and near-black on
+   lights, so deeper rows lighten on dark themes and darken on light
+   ones, with no per-theme values to maintain. These sit before the
+   state rules below so hover, active, drop, and editing backgrounds
+   keep winning. */
+.ft-row.ft-depth-0 { background: color-mix(in srgb, var(--text) 2%, var(--panel)); }
+.ft-row.ft-depth-1 { background: color-mix(in srgb, var(--text) 6%, var(--panel)); }
+.ft-row.ft-depth-2 { background: color-mix(in srgb, var(--text) 12%, var(--panel)); }
+.ft-row.ft-depth-3 { background: color-mix(in srgb, var(--text) 18%, var(--panel)); }
 .ft-row:hover { background: var(--panel); }
 .ft-row.active { background: var(--card); border-color: var(--border); color: var(--text-strong); }
 .ft-row.focused { border-color: var(--border-strong); }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Expand, Maximize2 } from 'lucide-react'
 import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
 import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
@@ -57,12 +57,14 @@ async function ensureOverlay(iframe: HTMLIFrameElement | null): Promise<boolean>
   } catch { return false }
 }
 
-export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, setup, startPage, files = [] }: {
+export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, onToggleCollapse, onMaximize, onOverlay, setup, startPage, files = [] }: {
   hmrUrl?: string
   onChanged: () => void
   onResult: (text: string) => void
   collapsed?: boolean
   onToggleCollapse?: () => void
+  onMaximize?: () => void
+  onOverlay?: () => void
   /** The project's file list, for the setup wizard's conversions. */
   files?: string[]
   /** Folder classification from the launcher; 'loose'/'empty' folders
@@ -346,6 +348,16 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
         {onToggleCollapse && (
           <button type="button" className="deck-btn" style={smallBtn} onClick={onToggleCollapse} title={collapsed ? 'Expand preview' : 'Collapse preview'}>
             {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          </button>
+        )}
+        {onMaximize && (
+          <button type="button" className="deck-btn" style={smallBtn} onClick={onMaximize} title="Expand preview and collapse editor">
+            <Maximize2 size={12} />
+          </button>
+        )}
+        {onOverlay && (
+          <button type="button" className="deck-btn" style={smallBtn} onClick={onOverlay} title="Open preview as overlay">
+            <Expand size={12} />
           </button>
         )}
         <span style={{ fontWeight: 600 }}>PREVIEW</span>

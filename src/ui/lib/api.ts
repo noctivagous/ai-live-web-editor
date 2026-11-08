@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env?.VITE_API_URL ?? ''
 
 export function staticPreviewUrl(): string {
   return API.replace(/\/*$/, '') + '/projects/'
@@ -765,4 +765,30 @@ export async function postAgentSettings(patch: Partial<AgentSettings>): Promise<
   })
   const j = await r.json() as { ok: boolean, settings: AgentSettings }
   return j.settings
+}
+
+export interface AppSettingsSnapshot {
+  ok: boolean
+  uiPrefs?: import('./uiPrefs.js').UiPrefs | null
+  editorTheme?: string | null
+  setupDone?: boolean | null
+  error?: string
+}
+
+export async function getAppSettings(): Promise<AppSettingsSnapshot> {
+  const r = await fetch(`${API}/api/app-settings`)
+  return r.json()
+}
+
+export async function putAppSettings(patch: {
+  uiPrefs?: Partial<import('./uiPrefs.js').UiPrefs>
+  editorTheme?: string
+  setupDone?: boolean
+}): Promise<AppSettingsSnapshot> {
+  const r = await fetch(`${API}/api/app-settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  return r.json()
 }

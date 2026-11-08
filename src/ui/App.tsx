@@ -49,8 +49,10 @@ import {
   listFiles, readFile, writeFile, renameFsPath, deleteFsPath, mkdirFsPath, getConfig, getFeatures, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, probeModels, saveAiConfig,
   getConnections, activateConnection, saveConnection,
   listProjects, selectProject, createProject, fetchSyncChanges,
+  getAppSettings,
   type LauncherConfig, type ProjectInfo, type ProjectSetupInfo, type ConnectionsPayload,
 } from './lib/api'
+import { pushAppSettings } from './lib/appSettingsSync'
 
 function connTone(status: string): string {
   if (status.startsWith('real FS:')) return 'good'
@@ -200,6 +202,27 @@ export default function App() {
     applyUiTheme(uiPrefsState.uiTheme, uiPrefsState.uiFontSize)
   }, [uiPrefsState.uiTheme, uiPrefsState.uiFontSize])
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
+  // App settings converge on boot: the server's SQLite store is the
+  // source of truth and overwrites this browser's cache. No migration:
+  // an empty server leaves local settings alone, and the first save
+  // after that pushes them up (last writer wins across browsers).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const s = await getAppSettings()
+        if (!s.ok) return
+        const hasServer = Boolean(s.uiPrefs || s.editorTheme || s.setupDone)
+        if (!hasServer) return
+        if (s.uiPrefs) {
+          saveUiPrefs(s.uiPrefs, undefined, { sync: false })
+          setUiPrefsState(loadUiPrefs())
+        }
+        if (typeof s.editorTheme === 'string' && s.editorTheme) setEditorTheme(s.editorTheme)
+        if (typeof s.setupDone === 'boolean') setSetupDone(s.setupDone)
+      } catch { /* launcher down: the local cache stands alone */ }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // skip autosave for placeholder content and right after a file loads
   const skipSave = useRef(true)
 
@@ -1076,6 +1099,7 @@ export default function App() {
   function finishSetup() {
     localStorage.setItem(SETUP_DONE_KEY, SETUP_DONE_VALUE)
     setSetupDone(true)
+    try { pushAppSettings({ setupDone: true }) } catch { /* offline: local flag still applies */ }
     loadFiles()
     refreshConfig()
     loadProjects()
@@ -1085,11 +1109,13 @@ export default function App() {
     localStorage.removeItem(SETUP_DONE_KEY)
     closeModal()
     setSetupDone(false)
+    try { pushAppSettings({ setupDone: false }) } catch { /* offline: local flag still applies */ }
   }
 
   function changeTheme(t: string) {
     setEditorTheme(t)
     localStorage.setItem(EDITOR_THEME_KEY, t)
+    try { pushAppSettings({ editorTheme: t }) } catch { /* offline: local theme still applies */ }
   }
 
   const hasKey = Boolean(config?.hasApiKey ?? config?.hasOpenAiKey)

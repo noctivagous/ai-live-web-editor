@@ -1,15 +1,26 @@
 /**
- * Device-scope UI preferences: the settings that belong to this
- * browser, not the project or the launcher — the chat's default view,
- * and the file pane's default sort and hidden-files choice. Stored as
- * one JSON record in localStorage; every read validates, so a stale
- * or hand-edited value falls back to the default instead of breaking
- * a pane. Server/project settings live elsewhere (connections,
- * project.ai.json); this module is only for per-device choices.
+ * Device-scope UI preferences: the chat's default view, the UI theme,
+ * and the file pane's default sort and hidden-files choice. The source
+ * of truth is the launcher's SQLite settings store; localStorage holds
+ * one JSON record as a synchronous read cache, and every save also
+ * pushes through to the server (debounced). Every read validates, so
+ * a stale or hand-edited value falls back to the default instead of
+ * breaking a pane. Server/project settings live elsewhere
+ * (connections, project.ai.json).
  */
 
 import { sanitizeOverrides } from './shortcuts'
 import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, type UiThemeId } from './themes'
+
+/** Best-effort server push (dynamic import keeps this module — and the
+ * server store built on it — free of the fetch layer at load time). */
+function pushToServer(patch: Partial<UiPrefs>): void {
+  try {
+    void import('./appSettingsSync').then(m => {
+      try { m.pushAppSettings({ uiPrefs: patch }) } catch { /* offline: the local cache still applies */ }
+    }).catch(() => { /* offline: the local cache still applies */ })
+  } catch { /* offline: the local cache still applies */ }
+}
 
 export type ChatViewPref = 'chat' | 'panel' | 'stationary'
 export type FileSortPref = 'name' | 'name-desc' | 'type' | 'type-desc' | 'modified' | 'modified-asc'
@@ -112,23 +123,25 @@ function announceChange(usedDefaultStore: boolean) {
   try { globalThis.dispatchEvent(new CustomEvent(UI_PREFS_CHANGED_EVENT)) } catch { /* non-window env */ }
 }
 
-export function saveUiPrefs(patch: Partial<UiPrefs>, store: Store | null = defaultStore()): UiPrefs {
+export function saveUiPrefs(patch: Partial<UiPrefs>, store: Store | null = defaultStore(), opts: { sync?: boolean } = {}): UiPrefs {
   const usedDefault = store !== null && store === defaultStore()
   const next = validateUiPrefs({ ...loadUiPrefs(store), ...patch })
   if (store) {
     try { store.setItem(KEY, JSON.stringify(next)) } catch { /* private mode etc. — prefs just don't persist */ }
   }
   announceChange(usedDefault)
+  if (usedDefault && opts.sync !== false) pushToServer(next)
   return next
 }
 
 /** Replace the whole record (settings import), validated. */
-export function replaceUiPrefs(value: unknown, store: Store | null = defaultStore()): UiPrefs {
+export function replaceUiPrefs(value: unknown, store: Store | null = defaultStore(), opts: { sync?: boolean } = {}): UiPrefs {
   const usedDefault = store !== null && store === defaultStore()
   const next = validateUiPrefs(value)
   if (store) {
     try { store.setItem(KEY, JSON.stringify(next)) } catch { /* as above */ }
   }
   announceChange(usedDefault)
+  if (usedDefault && opts.sync !== false) pushToServer(next)
   return next
 }

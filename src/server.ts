@@ -27,6 +27,7 @@ import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
 import { mountFsApi } from './fsApi.js'
+import { mountAppSettingsApi } from './appSettings.js'
 import { buildAndPersistMap, createMapRebuilder } from './codebaseMap/mapStore.js'
 import { activePublic, syncFromLegacy } from './connections.js'
 import { resetSketchForProjectSwitch, sketchWriteGuard } from './sketchSession.js'
@@ -295,6 +296,8 @@ app.get('/api/projects/events', (req, res) => {
 app.get('/api/config', (req, res) => {
   res.json(publicConfig())
 })
+
+mountAppSettingsApi(app)
 
 app.post('/api/config/key', (req, res) => {
   try {

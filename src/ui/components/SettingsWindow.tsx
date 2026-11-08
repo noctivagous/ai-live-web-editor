@@ -9,6 +9,7 @@ import {
   loadUiPrefs, replaceUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, UI_PREFS_DEFAULTS, UI_PREFS_KEY, type UiPrefs,
 } from '../lib/uiPrefs'
 import { buildSettingsExport, chatSessionKeys, parseSettingsImport } from '../lib/settingsData'
+import { pushAppSettings } from '../lib/appSettingsSync'
 import {
   SHORTCUTS, comboFromEvent, effectiveCombo, findConflict, formatCombo, shortcutDef,
 } from '../lib/shortcuts'
@@ -409,6 +410,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     }
     const doReset = () => {
       try { globalThis.localStorage.removeItem(UI_PREFS_KEY) } catch { /* ignore */ }
+      try { pushAppSettings({ uiPrefs: { ...UI_PREFS_DEFAULTS } }) } catch { /* offline: local reset still applies */ }
       setPrefs({ ...UI_PREFS_DEFAULTS })
       try { globalThis.dispatchEvent(new CustomEvent(UI_PREFS_CHANGED_EVENT)) } catch { /* ignore */ }
       setDataConfirm(null)

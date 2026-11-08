@@ -1,7 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  Camera, Crosshair, FilePlus2, FileSearch, FlaskConical, FolderOpen, Globe, Inspect,
-  LayoutGrid, PenLine, Search, Terminal, TerminalSquare, WandSparkles, WifiOff,
+  Camera, Check, ChevronDown, ChevronRight, Circle, Crosshair, FilePlus2, FileSearch, FlaskConical,
+  FolderOpen, Globe, Inspect, LayoutGrid, Loader2, PenLine, Search, Terminal, TerminalSquare,
+  WandSparkles, WifiOff, X,
 } from 'lucide-react'
 import type { ToolStep } from '../lib/chatSession'
 import {
@@ -51,10 +52,10 @@ function ToolIcon({ name }: { name: string }) {
 }
 
 function StatusGlyph({ status }: { status: ToolStep['status'] | DeckTurn['status'] }) {
-  if (status === 'done') return <span className="step-glyph done">✓</span>
-  if (status === 'error') return <span className="step-glyph error">✕</span>
-  if (status === 'running') return <span className="step-glyph running">…</span>
-  return <span className="step-glyph pending">○</span>
+  if (status === 'done') return <Check size={12} className="step-glyph done" aria-hidden />
+  if (status === 'error') return <X size={12} className="step-glyph error" aria-hidden />
+  if (status === 'running') return <Loader2 size={12} className="step-glyph running" aria-hidden />
+  return <Circle size={12} className="step-glyph pending" aria-hidden />
 }
 
 function StepRow({ step }: { step: ToolStep }) {
@@ -73,7 +74,9 @@ function StepRow({ step }: { step: ToolStep }) {
         <span className="tool-pill"><ToolIcon name={step.name} />{step.name}</span>
         <span className="step-detail">{step.detail}</span>
         {elapsed && <span className="step-time">{elapsed}</span>}
-        {hasResult && <span className="step-chev">{open ? '▾' : '▸'}</span>}
+        {hasResult && (open
+          ? <ChevronDown size={12} className="step-chev" aria-hidden />
+          : <ChevronRight size={12} className="step-chev" aria-hidden />)}
       </button>
       {open && hasResult && <div className="step-result">{step.result}</div>}
     </div>
@@ -99,7 +102,9 @@ export function DeckCardView({ card, onNeedSetup, embed }: {
         <div className="dcard dcard-reason">
           <button type="button" className="dcard-toggle" onClick={() => setOpen(o => !o)}>
             <span className="dcard-label" style={{ margin: 0 }}>Reasoning</span>
-            <span className="step-chev">{open ? '▾' : '▸'}</span>
+            {open
+              ? <ChevronDown size={12} className="step-chev" aria-hidden />
+              : <ChevronRight size={12} className="step-chev" aria-hidden />}
           </button>
           {open && <div className="dcard-pre"><Markdown text={card.text.slice(0, 4000)} /></div>}
         </div>

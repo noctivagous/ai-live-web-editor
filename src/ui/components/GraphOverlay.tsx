@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw, X } from 'lucide-react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Check, Circle, CircleDot, Clock, Loader2, Minus, RefreshCw, X } from 'lucide-react'
 import {
   getFeatureLint, getFeatureReconcile, getFeatures, planFromGraph, setFeatureNodeStatus, setFeatureParam,
   type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphProblemItem,
@@ -28,8 +28,14 @@ const STATUS_COLOR: Record<FeatureNodeStatus, string> = {
   dropped: 'var(--text-muted, #8a8a8c)',
 }
 
-const STATUS_MARK: Record<FeatureNodeStatus, string> = {
-  proposed: '○', planned: '◔', building: '◑', done: '●', verified: '✓', blocked: '✕', dropped: '—',
+const STATUS_MARK: Record<FeatureNodeStatus, ReactNode> = {
+  proposed: <Circle size={12} aria-hidden />,
+  planned: <Clock size={12} aria-hidden />,
+  building: <Loader2 size={12} aria-hidden />,
+  done: <CircleDot size={12} aria-hidden />,
+  verified: <Check size={12} aria-hidden />,
+  blocked: <X size={12} aria-hidden />,
+  dropped: <Minus size={12} aria-hidden />,
 }
 
 interface Connection { label: string, node: FeatureNodeItem }
@@ -357,7 +363,7 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
                     <div className="graph-insp-label">Blocked</div>
                     {graph.nodes.filter(n => n.status === 'blocked').map(n => (
                       <button key={n.id} type="button" className="graph-conn" onClick={() => setSelectedId(n.id)}>
-                        <span className="graph-mark" style={{ color: STATUS_COLOR.blocked }}>✕</span>
+                        <span className="graph-mark" style={{ color: STATUS_COLOR.blocked, display: 'inline-flex' }}><X size={12} aria-hidden /></span>
                         <span>{n.name}</span>
                       </button>
                     ))}

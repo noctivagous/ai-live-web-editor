@@ -1,4 +1,5 @@
 import React from 'react'
+import { Check, Circle, Loader2, Minus, X } from 'lucide-react'
 import { fmtTokens, type DeckTurn } from '../lib/deck'
 import { derivePanel, panelTurn, type PhaseState } from '../lib/panel'
 
@@ -8,12 +9,12 @@ import { derivePanel, panelTurn, type PhaseState } from '../lib/panel'
    header are the chat's own (chatChrome.tsx); only the middle changes.
    Data comes from lib/panel.ts over the real grouped turn — no mock data. */
 
-const PHASE_GLYPH: Record<PhaseState, string> = {
-  done: '✓',
-  active: '…',
-  pending: '○',
-  skipped: '—',
-  error: '✕',
+const PHASE_GLYPH: Record<PhaseState, React.ReactNode> = {
+  done: <Check size={12} aria-hidden />,
+  active: <Loader2 size={12} aria-hidden />,
+  pending: <Circle size={12} aria-hidden />,
+  skipped: <Minus size={12} aria-hidden />,
+  error: <X size={12} aria-hidden />,
 }
 
 export function PanelView({ turns, sending, workingLabel, onOpenPath, onNeedSetup, embed }: {

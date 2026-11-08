@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
 import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
@@ -328,7 +329,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
       <div style={{ padding: '5px 10px', fontSize: 'calc(11px * var(--ui-scale, 1))', color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center', background: 'var(--panel)', borderBottom: '1px solid var(--border-soft)', flexShrink: 0 }}>
         {onToggleCollapse && (
           <button type="button" className="deck-btn" style={smallBtn} onClick={onToggleCollapse} title={collapsed ? 'Expand preview' : 'Collapse preview'}>
-            {collapsed ? '▸' : '▾'}
+            {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
           </button>
         )}
         <span style={{ fontWeight: 600 }}>PREVIEW</span>

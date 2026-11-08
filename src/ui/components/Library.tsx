@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Plus, WandSparkles } from 'lucide-react'
 import {
   askAi, getCatalog, installCatalogComponent, placeTemplate,
   type CatalogSummaryItem, type PackSummaryItem, type TemplateItem,
@@ -96,7 +97,7 @@ export function Library({ onOpenPath, onNotice }: {
               type="button" className="deck-btn"
               onClick={() => askAi(`Install the ${item.name} feature pack (pack id ${item.id}) into this app. Plan it as an install: look the pack up in full with find-component (pack: "${item.id}"), graft it into the project's feature graph with feature-install-pack, and report which of its configures links were wired and which were left unwired. Then build what is missing in the graft's build order, updating node statuses with feature-set-status as work lands.`)}
             >
-              Ask AI to install it
+              <WandSparkles size={13} />Ask AI to install it
             </button>
           </div>
         </div>
@@ -115,13 +116,13 @@ export function Library({ onOpenPath, onNotice }: {
           {item.props.length > 0 && <div style={propsStyle}>{item.props.join(' · ')}</div>}
           <div style={btnRow}>
             <button type="button" className="deck-btn" disabled={busy === item.tag} onClick={() => void insertComponent(item)}>
-              {busy === item.tag ? 'Inserting…' : 'Insert'}
+              <Plus size={13} />{busy === item.tag ? 'Inserting…' : 'Insert'}
             </button>
             <button
               type="button" className="deck-btn"
               onClick={() => askAi(`Use the catalog component ${item.tag} (${item.description}) in this project. If it is not installed yet, install it with install-catalog-component first, then import it by name where it fits instead of hand-rolling an equivalent.`)}
             >
-              Ask AI to use it
+              <WandSparkles size={13} />Ask AI to use it
             </button>
           </div>
         </div>
@@ -140,13 +141,13 @@ export function Library({ onOpenPath, onNotice }: {
           <div style={propsStyle}>lands at {item.target}</div>
           <div style={btnRow}>
             <button type="button" className="deck-btn" disabled={busy === item.id} onClick={() => void insertTemplate(item)}>
-              {busy === item.id ? 'Placing…' : 'Insert'}
+              <Plus size={13} />{busy === item.id ? 'Placing…' : 'Insert'}
             </button>
             <button
               type="button" className="deck-btn"
               onClick={() => askAi(`Use the layout template ${item.id} (${item.name}, ${item.kind}) in this project. Place it with place-template, customise the constants at the top of the placed file with str-replace for this project's content, and import it where it belongs.`)}
             >
-              Ask AI to use it
+              <WandSparkles size={13} />Ask AI to use it
             </button>
           </div>
         </div>

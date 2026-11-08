@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { FolderOpen, Import, Plus, Save, Settings, Wand2, Zap } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileCog, FolderOpen, Import, Layers, LayoutDashboard, LibraryBig, Network, Plus, Save, Settings, Wand2, Zap } from 'lucide-react'
 import { FileTree } from './components/FileTree'
 import { Library } from './components/Library'
 import { MonacoEditor } from './components/MonacoEditor'
@@ -1065,8 +1065,8 @@ export default function App() {
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           <div className="layout-switch" role="group" aria-label="Layout">
-            <button type="button" className={route.kind === 'workbench' ? 'on' : ''} onClick={() => navigate({ kind: 'workbench' })} title="The workbench layout: files, editor, preview">Workbench</button>
-            <button type="button" className={route.kind === 'facets' ? 'on' : ''} onClick={() => navigate({ kind: 'facets', facet: lastFacet })} title="The facets layout: one screen per facet — state, actions, wizards">Facets</button>
+            <button type="button" className={route.kind === 'workbench' ? 'on' : ''} onClick={() => navigate({ kind: 'workbench' })} title="The workbench layout: files, editor, preview"><LayoutDashboard size={13} />Workbench</button>
+            <button type="button" className={route.kind === 'facets' ? 'on' : ''} onClick={() => navigate({ kind: 'facets', facet: lastFacet })} title="The facets layout: one screen per facet — state, actions, wizards"><Layers size={13} />Facets</button>
           </div>
           <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
             <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setWizardsMenuOpen(false); setActionsMenuOpen(o => !o) }} title="Agent Actions — start work from a menu instead of typing a command" aria-haspopup="menu" aria-expanded={actionsMenuOpen}><Zap size={13} />Agent Actions</button>
@@ -1154,10 +1154,10 @@ export default function App() {
         <div style={{ display: route.kind === 'workbench' ? 'contents' : 'none' }}>
         <div className="panel" style={{ width: leftW, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="panel-head" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}>Files</button>
-            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates">Library</button>
-            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)">Actions</button>
-            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status">Graph</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}><FolderOpen size={13} />Files</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates"><LibraryBig size={13} />Library</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)"><Zap size={13} />Actions</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status"><Network size={13} />Graph</button>
             {leftView === 'files' && <span className="sub">{files.length}</span>}
           </div>
           {leftView === 'files' ? (
@@ -1197,12 +1197,12 @@ export default function App() {
         <div className="panel" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <div className="panel-head">
             <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => toggleCollapse('editor')} title={collapse.editor ? 'Expand editor' : 'Collapse editor'}>
-              {collapse.editor ? '▸' : '▾'}
+              {collapse.editor ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
             </button>
             <span className="mono" style={{ fontWeight: 500 }}>{activePath}</span>
             {activePath && (
               <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
-                <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => setFileMenuOpen(o => !o)} title="Actions for the open file" aria-haspopup="menu" aria-expanded={fileMenuOpen}>File actions</button>
+                <button type="button" className="deck-btn" style={{ padding: '2px 8px' }} onClick={() => setFileMenuOpen(o => !o)} title="Actions for the open file" aria-haspopup="menu" aria-expanded={fileMenuOpen}><FileCog size={13} />File actions</button>
                 {fileMenuOpen && (
                   <FileActionsMenu
                     ctx={actionCtx}

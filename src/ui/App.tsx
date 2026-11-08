@@ -388,15 +388,20 @@ export default function App() {
 
   // File ↔ URL sync: the open file rides ?file=. A deep link or
   // Back/Forward step loads that file; any local open updates the URL.
+  // The write-back skips transitions the route itself introduced (the
+  // loader above owns those), so a stale URL can never freeze out
+  // later clicks the way a plain inequality guard would.
   const routeFile = route.file
+  const prevRouteFileRef = useRef<string | undefined>(undefined)
   useEffect(() => {
     if (routeFile && routeFile !== activePath) void loadFile(routeFile)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeFile])
   useEffect(() => {
     const cur = parseRoute(window.location.hash)
-    // An inbound file still loading wins — never clobber it.
-    if (cur.file && cur.file !== activePath) return
+    const routeChanged = cur.file !== prevRouteFileRef.current
+    prevRouteFileRef.current = cur.file
+    if (routeChanged) return
     if ((cur.file ?? null) !== activePath) navigate({ ...cur, file: activePath })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath])
@@ -988,7 +993,12 @@ export default function App() {
     const deepProject = params.get('project')
     const deepPath = params.get('path')
     if (!deepProject && !deepPath) {
-      loadFiles(); refreshConfig(); loadProjects()
+      // A ?file= deep link opens straight onto that file (falling back
+      // to the first file when it names nothing on disk); otherwise the
+      // boot keeps its long-standing default. Passing it here avoids a
+      // race where the default load would clobber the deep-linked file.
+      loadFiles(parseRoute(window.location.hash).file)
+      refreshConfig(); loadProjects()
       return
     }
     window.history.replaceState(null, '', window.location.pathname + window.location.hash)

@@ -77,6 +77,15 @@ We should make a Facets section of Settings where
 the user can turn on and off different ones in the Facets
 section.
 
+Within this, and it may only be in a few sections, we
+might incorporate the notion of a Scenario.  So,
+a scenario is the context for the usage of a different
+facet.  For graphic design, a design pack may be
+intended for a certain scenario, like a pro audio app.
+This applies to the graphic design section but we're
+not sure how it would apply to other sections exactly
+right now.
+
   - architecture
      - the architecture plan, software engineering philosophy used,
       architecture guide to follow

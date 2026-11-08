@@ -297,7 +297,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <div className="ft-toolbar">
+      <div className="ft-toolbar pane-bar">
         <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => startCreate('create-file', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New file (in the selected folder)"><FilePlus size={13} /></button>
         <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => startCreate('create-folder', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New folder"><FolderPlus size={13} /></button>
         <button type="button" className="deck-btn btn-icon ft-tool" onClick={onRefresh} title="Refresh the file list"><RefreshCw size={13} /></button>

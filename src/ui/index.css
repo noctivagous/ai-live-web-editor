@@ -312,8 +312,25 @@ select.pill:disabled{cursor:default; opacity:.7}
   display:flex; align-items:center; gap:8px; padding:9px 12px;
   border-bottom:1px solid var(--border-soft); font-size:calc(12px * var(--ui-scale, 1)); font-weight:600;
   color:var(--text); flex-shrink:0;
+  background:var(--head-bg);
+  /* .panel has rounded corners but no overflow clipping (header dropdown
+     menus must overflow visibly), so the bar rounds its own top corners. */
+  border-radius:var(--radius-panel) var(--radius-panel) 0 0;
 }
 .panel-head .sub{font-weight:400; color:var(--faint); font-size:calc(11.5px * var(--ui-scale, 1))}
+
+/* Section/title bars share one raised treatment: deck slide heads,
+   the settings window head, and the chat header. (.dslide-head keeps
+   its own layout rule below; this only unifies the background.) */
+.dslide-head, .set-head, .chat-bar{ background:var(--head-bg); }
+
+/* Control-dense inner bars: a recessed strip, distinct from the raised
+   section bars above them. Applied alongside the layout class
+   (e.g. className="facet-bar pane-bar"). */
+.pane-bar{
+  background:var(--well);
+  border-bottom:1px solid var(--border-strong);
+}
 
 /* Wizard */
 .wizard-overlay{
@@ -530,7 +547,7 @@ select.pill:disabled{cursor:default; opacity:.7}
 .dslide.sealed{filter:saturate(.65)}
 .dslide-head{
   display:flex; align-items:center; gap:10px; padding:13px 16px; flex-shrink:0;
-  border-bottom:1px solid var(--border-soft); background:var(--head-bg);
+  border-bottom:1px solid var(--border-soft);
 }
 .dslide-num{
   font-family:var(--mono); font-size:calc(11px * var(--ui-scale, 1)); color:var(--faint);

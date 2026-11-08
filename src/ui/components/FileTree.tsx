@@ -304,8 +304,10 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
           <option value="type">Type</option>
           <option value="modified">Modified</option>
         </select>
-        <button type="button" className={`deck-btn btn-icon ft-tool btn-func${previewMode === 'marked' ? ' on' : ''}`} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
-        <button type="button" className={`deck-btn btn-icon ft-tool btn-func${previewMode === 'follow' ? ' on' : ''}`} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
+        <div className="seg" role="group" aria-label="Preview selection">
+          <button type="button" className={previewMode === 'marked' ? 'on' : ''} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
+          <button type="button" className={previewMode === 'follow' ? 'on' : ''} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
+        </div>
       </ButtonGrid>
       <div className="ft-filter">
         <Search size={12} className="ft-filter-icon" />

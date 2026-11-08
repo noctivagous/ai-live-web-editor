@@ -318,17 +318,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
             </span>
           </div>
         </div>
-        <div className="set-row">
-          <div className="set-row-text">
-            <label className="set-row-label" htmlFor="set-editor-theme">Editor theme</label>
-            <div className="field-hint">The code editor color theme. It follows the UI theme when you switch themes; you can still set it separately here.</div>
-          </div>
-          <div className="set-row-control">
-            <select id="set-editor-theme" className="deck-select" value={editorTheme} onChange={e => onTheme(e.target.value)}>
-              {MONACO_THEMES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-        </div>
+        {editorThemeRow('set-editor-theme')}
         <details style={{ marginTop: 12 }}>
           <summary style={{ cursor: 'pointer', fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)' }}>
             Design tokens — {active.label}
@@ -577,6 +567,23 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     )
   }
 
+  /** Editor theme dropdown — shared by the Themes tab and the top of
+   * the Editor tab (same value, same handler; the id differs so the
+   * two copies never share a DOM id). */
+  const editorThemeRow = (id: string) => (
+    <div className="set-row">
+      <div className="set-row-text">
+        <label className="set-row-label" htmlFor={id}>Editor theme</label>
+        <div className="field-hint">The code editor color theme. It follows the UI theme when you switch themes; you can still set it separately here.</div>
+      </div>
+      <div className="set-row-control">
+        <select id={id} className="deck-select" value={editorTheme} onChange={e => onTheme(e.target.value)}>
+          {MONACO_THEMES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+
   const sectionBody = (s: SettingSection) => {
     if (s.custom === 'providers') return providersSection()
     if (s.custom === 'search') return searchSection()
@@ -592,6 +599,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
             Stored in this project's project.ai.json. {designated ? 'This project is designated.' : 'This project is not designated.'} The Preview bar reflects changes within a few seconds.
           </div>
         )}
+        {s.id === 'editor' && editorThemeRow('set-editor-theme-in-editor')}
         {(() => {
           const rows: React.ReactNode[] = []
           let lastGroup: string | undefined

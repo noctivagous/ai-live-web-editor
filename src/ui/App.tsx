@@ -1180,7 +1180,7 @@ export default function App() {
         <div style={{ display: route.kind === 'workbench' ? 'contents' : 'none' }}>
         <div className="panel" style={{ width: leftW, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <ButtonGrid className="panel-head" style={{ gap: 6 }}>
-            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}><FolderOpen size={13} />Files</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}><FolderOpen size={13} />Files <span className="sub">{files.length}</span></button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates"><LibraryBig size={13} />Library</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)"><Zap size={13} />Actions</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status"><Network size={13} />Graph</button>

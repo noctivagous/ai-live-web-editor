@@ -80,9 +80,20 @@ section.
   - architecture
      - the architecture plan, software engineering philosophy used,
       architecture guide to follow
-
+     - like how there are design packs discussed in the Graphic Design 
+     facet, there will be architecture plan packs the user can choose
+     from that the AI agent will follow, that the AI will be able to apply as
+     well to an existing codebase, to refactor towards an architecture.
   - features
-
+     - like how there are design packs discussed in the Graphic Design 
+     facet, there will be feature packs the user can choose
+     from and apply to the feature graph, with reconciliation, so
+     that the user can choose from a suite package for different
+     scenarios.  These can be actually linked into our component
+     system where the agent can install components and systems.
+     So the feature packs will probably end up being lightweight
+     whereas the code editor comes with component install tools.
+     
   - graphic design - design system manager.  places 
      design resources to configure, in different areas,
      in a location (this facet of the project).

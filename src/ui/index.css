@@ -853,6 +853,17 @@ select.pill:disabled{cursor:default; opacity:.7}
 .ft-confirm-title { font-size: calc(13.5px * var(--ui-scale, 1)); font-weight: 600; color: var(--text-strong); word-break: break-all; }
 .ft-confirm-body { font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--muted); line-height: 1.55; margin-top: 6px; }
 .ft-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+/* Open-files tab strip over the editor: pinned tabs plus the transient
+   active file. Tokens only — no new visual language. */
+.tabs { display: flex; gap: 4px; padding: 6px 10px 0; overflow-x: auto; flex-shrink: 0; }
+.tab { display: inline-flex; align-items: center; gap: 2px; background: var(--well); border: 1px solid var(--border-soft); border-bottom: none; border-radius: 8px 8px 0 0; padding: 3px 4px 3px 9px; font-size: calc(12px * var(--ui-scale, 1)); flex-shrink: 0; }
+.tab.on { background: var(--card); border-color: var(--border); color: var(--text-strong); }
+.tab.transient .tab-name { font-style: italic; color: var(--muted); }
+.tab-name { background: none; border: none; color: inherit; cursor: pointer; padding: 1px 2px; font: inherit; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-x { display: inline-flex; background: none; border: none; color: var(--faint); cursor: pointer; padding: 2px; border-radius: 4px; }
+.tab-x:hover { color: var(--text-strong); background: var(--card-hover); }
+button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 0; }
+.ft-bar-note { font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--faint); }
 .deck-btn.danger { color: var(--red-text); border-color: #4a2626; }
 .deck-btn.danger:hover { background: rgba(239,68,68,.12); }
 

@@ -10,10 +10,10 @@ import {
   type SortBase, type SortMode, type TreeNode,
 } from '../lib/fileTree'
 import { ButtonGrid } from './ButtonGrid'
-import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type FilePreviewModePref } from '../lib/uiPrefs'
+import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs'
 import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
-import { getWorkflow, postWorkflow, readFile } from '../lib/api'
-import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
+import { postWorkflow, readFile } from '../lib/api'
+import { publishWorkflowChanged } from '../lib/workflowSync'
 import { isRenderable, isScriptFile, looksLikeComponent } from '../lib/previewRender'
 
 /* File browser pane: a real tree over the launcher's flat file list.
@@ -21,8 +21,9 @@ import { isRenderable, isScriptFile, looksLikeComponent } from '../lib/previewRe
    everything it changes goes through the fs API (write for create /
    duplicate, /api/fs/rename, /api/fs/delete, /api/fs/mkdir) — the pane
    keeps no shadow state of the disk. Deliberately not here yet: git
-   decorations and problem badges (no data source in the launcher) and
-   an Open Editors section (the app has a single active file, no tabs). */
+   decorations and problem badges (no data source in the launcher).
+   Tabs live here as eye icons: clicking a file opens and previews it,
+   the eye pins it as a kept-open tab in the editor tab strip. */
 
 export interface FsOpResult { ok: boolean, error?: string }
 
@@ -42,7 +43,7 @@ type EditState =
   | { kind: 'create-file', dir: string }
   | { kind: 'create-folder', dir: string }
 
-export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRefresh, onCreateFile, onCreateFolder, onRename, onDelete, onDuplicate, startPage, onSetStartPage }: {
+export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRefresh, onCreateFile, onCreateFolder, onRename, onDelete, onDuplicate, startPage, onSetStartPage, pins = [], onTogglePin }: {
   files: string[]
   dirs?: string[]
   mtimes?: Record<string, number>
@@ -58,6 +59,10 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
   startPage?: string | null
   /** Promote a file to the start page (writes the manifest via App). */
   onSetStartPage?: (path: string) => void
+  /** Pinned tabs (eye icons): kept-open files listed in the editor tab strip. */
+  pins?: string[]
+  /** Toggle a file's pinned tab. */
+  onTogglePin?: (path: string) => void
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [query, setQuery] = useState('')
@@ -70,35 +75,19 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
     saveUiPrefs({ fileShowHidden: next })
     return next
   })
+  const isPinned = (p: string) => pins.includes(p)
   const [overrides, setOverrides] = useState(() => loadUiPrefs().shortcutOverrides)
-  const [previewMode, setPreviewModeState] = useState<FilePreviewModePref>(() => loadUiPrefs().filePreviewMode)
   useEffect(() => {
     const onPrefs = () => {
       setOverrides(loadUiPrefs().shortcutOverrides)
-      setPreviewModeState(loadUiPrefs().filePreviewMode)
     }
     window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
     return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
   }, [])
-  const setPreviewMode = (m: FilePreviewModePref) => { setPreviewModeState(m); saveUiPrefs({ filePreviewMode: m }) }
 
-  // The preview mark (slice B): session state on the launcher, mirrored
-  // through the workflow snapshot. The pane renders the eye; marking
-  // posts back. A fresh file list means a (possibly) new project, whose
-  // seed was set server-side at select time — re-read it then.
-  const [mark, setMark] = useState<string | null>(null)
-  useEffect(() => {
-    let live = true
-    const refresh = async () => {
-      try {
-        const wf = await getWorkflow()
-        if (live && wf) setMark(wf.previewMark ?? null)
-      } catch { /* launcher down */ }
-    }
-    void refresh()
-    const off = subscribeWorkflow(() => { void refresh() })
-    return () => { live = false; off() }
-  }, [files])
+  // Clicking a file opens it in the editor and previews it (the preview
+  // mark posts back through the workflow snapshot). The eye pins the
+  // file as a kept-open tab instead — see pins / onTogglePin.
   async function markFile(path: string) {
     if (!isRenderable(path)) {
       // A plain script file may still be a component (a Lit element
@@ -115,17 +104,15 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
         return
       }
     }
-    setMark(path)
     try {
-      const data = await postWorkflow({ previewMark: path })
-      if (data && 'previewMark' in data) setMark(data.previewMark ?? null)
+      await postWorkflow({ previewMark: path })
       publishWorkflowChanged()
     } catch { /* the next snapshot refresh reconciles */ }
   }
   function handleSelectNode(node: TreeNode) {
     if (node.isDir) return
     onSelect(node.path)
-    if (previewMode === 'follow') void markFile(node.path)
+    void markFile(node.path)
   }
   const [focused, setFocused] = useState(active)
   const [edit, setEdit] = useState<EditState | null>(null)
@@ -339,11 +326,8 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
           </div>
         </div>
         <div className="ft-bar">
-          <span className="ft-bar-label">Preview:</span>
-          <div className="seg" role="group" aria-label="Preview selection">
-            <button type="button" className={previewMode === 'follow' ? 'on' : ''} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
-            <button type="button" className={previewMode === 'marked' ? 'on' : ''} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
-          </div>
+          <span className="ft-bar-label">Tabs:</span>
+          <span className="ft-bar-note" title="Clicking a file opens and previews it. The eye pins it as a kept-open tab in the editor tab strip.">Click opens · eye pins</span>
         </div>
       </div>
       <div className="ft-filter">
@@ -423,12 +407,12 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
                 {!node.isDir && startPage && node.path === `/${startPage}` && (
                   <span className="ft-start-badge" title="Start page — the preview opens here (project.ai.json)">start</span>
                 )}
-                {!node.isDir && mark === node.path && (
-                  <Eye size={11} className="ft-mark-icon" aria-label="Previewed file" />
+                {!node.isDir && isPinned(node.path) && (
+                  <button type="button" className="ft-mark-icon" title="Pinned tab — click to unpin" aria-label="Pinned tab" tabIndex={-1} onClick={e => { e.stopPropagation(); onTogglePin?.(node.path) }}><Eye size={11} /></button>
                 )}
                 <span className="ft-actions">
-                  {!node.isDir && mark !== node.path && (
-                    <button type="button" className="ft-act" title="Preview this file" tabIndex={-1} onClick={e => { e.stopPropagation(); void markFile(node.path) }}><Eye size={11} /></button>
+                  {!node.isDir && !isPinned(node.path) && (
+                    <button type="button" className="ft-act" title="Pin tab" tabIndex={-1} onClick={e => { e.stopPropagation(); onTogglePin?.(node.path) }}><Eye size={11} /></button>
                   )}
                   <button type="button" className="ft-act" title="Rename (F2)" tabIndex={-1} onClick={e => { e.stopPropagation(); startRename(node) }}><Pencil size={11} /></button>
                   <button type="button" className="ft-act" title="Delete (Del)" tabIndex={-1} onClick={e => { e.stopPropagation(); requestDelete(node) }}><Trash size={11} /></button>
@@ -462,7 +446,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
       {menu && (
         <div className="ft-menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}>
           {!menu.node.isDir && <button type="button" onClick={() => { onSelect(menu.node.path); setMenu(null) }}>Open</button>}
-          {!menu.node.isDir && <button type="button" onClick={() => { void markFile(menu.node.path); setMenu(null) }}>Preview this file</button>}
+          {!menu.node.isDir && <button type="button" onClick={() => { onTogglePin?.(menu.node.path); setMenu(null) }}>{isPinned(menu.node.path) ? 'Unpin tab' : 'Pin tab'}</button>}
           {!menu.node.isDir && onSetStartPage && /\.html?$/i.test(menu.node.path) && startPage !== menu.node.path.slice(1) && (
             <button type="button" onClick={() => { onSetStartPage(menu.node.path); setMenu(null) }}>Set as start page</button>
           )}

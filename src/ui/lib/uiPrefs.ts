@@ -13,10 +13,6 @@ import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, 
 
 export type ChatViewPref = 'chat' | 'panel' | 'stationary'
 export type FileSortPref = 'name' | 'name-desc' | 'type' | 'type-desc' | 'modified' | 'modified-asc'
-/** How the preview's file gets chosen in the file pane (slice B):
- * 'follow' = clicking a file marks it too (default);
- * 'marked' = only an explicit mark moves the preview. */
-export type FilePreviewModePref = 'marked' | 'follow'
 
 export interface UiPrefs {
   /** UI theme (Settings → Themes): a design-token set in lib/themes. */
@@ -32,7 +28,6 @@ export interface UiPrefs {
   chatView: ChatViewPref
   fileSort: FileSortPref
   fileShowHidden: boolean
-  filePreviewMode: FilePreviewModePref
   /** Whether the preview shows its per-format AI toolbar row. The
    * preview bar's "AI toolbar" checkbox is the switch (Settings →
    * Files mirrors it); default on — the toolbar is how the preview's
@@ -56,7 +51,6 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   chatView: 'stationary',
   fileSort: 'name',
   fileShowHidden: false,
-  filePreviewMode: 'follow',
   formatToolbar: true,
   editorFontSize: 13,
   editorTabSize: 4,
@@ -92,7 +86,6 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     chatView: v.chatView === 'panel' ? 'panel' : v.chatView === 'chat' ? 'chat' : 'stationary',
     fileSort: v.fileSort === 'name-desc' || v.fileSort === 'type' || v.fileSort === 'type-desc' || v.fileSort === 'modified' || v.fileSort === 'modified-asc' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,
-    filePreviewMode: v.filePreviewMode === 'marked' ? 'marked' : 'follow',
     formatToolbar: v.formatToolbar !== false,
     editorFontSize: clampInt(v.editorFontSize, 10, 20, UI_PREFS_DEFAULTS.editorFontSize),
     editorTabSize: v.editorTabSize === 2 ? 2 : 4,

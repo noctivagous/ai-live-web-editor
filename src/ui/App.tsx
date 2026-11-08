@@ -38,6 +38,8 @@ import {
 import { SetupWizard } from './components/SetupWizard'
 import { PlanOverlay } from './components/PlanOverlay'
 import { GraphOverlay } from './components/GraphOverlay'
+import { OpenTabs } from './components/OpenTabs'
+import { loadPinnedTabs, savePinnedTabs } from './lib/openTabs'
 import { VDivider, HDivider } from './components/PaneDivider'
 import { useSplitPanes } from './hooks/useSplitPanes'
 import { SETUP_DONE_KEY, SETUP_DONE_VALUE, EDITOR_THEME_KEY } from './lib/styles'
@@ -384,9 +386,9 @@ export default function App() {
     setContent(data.content || data.error || '')
   }
 
-  // File ↔ URL sync: the open file rides ?mainPreview=. A deep link or
+  // File ↔ URL sync: the open file rides ?file=. A deep link or
   // Back/Forward step loads that file; any local open updates the URL.
-  const routeFile = route.mainPreview
+  const routeFile = route.file
   useEffect(() => {
     if (routeFile && routeFile !== activePath) void loadFile(routeFile)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -394,10 +396,46 @@ export default function App() {
   useEffect(() => {
     const cur = parseRoute(window.location.hash)
     // An inbound file still loading wins — never clobber it.
-    if (cur.mainPreview && cur.mainPreview !== activePath) return
-    if ((cur.mainPreview ?? null) !== activePath) navigate({ ...cur, mainPreview: activePath })
+    if (cur.file && cur.file !== activePath) return
+    if ((cur.file ?? null) !== activePath) navigate({ ...cur, file: activePath })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath])
+
+  // Pinned tabs (the tree's eye icons): kept-open files in the editor
+  // tab strip. The active file is separate transient state — a tab
+  // need not be pinned to be open in the editor or the URL.
+  const [pins, setPins] = useState<string[]>([])
+  useEffect(() => {
+    if (!activeProject) { setPins([]); return }
+    setPins(loadPinnedTabs(activeProject))
+  }, [activeProject])
+  function persistPins(next: string[]) {
+    setPins(next)
+    savePinnedTabs(activeProject, next)
+  }
+  async function activateFile(p: string) {
+    await loadFile(p)
+    try {
+      await postWorkflow({ previewMark: p })
+      publishWorkflowChanged()
+    } catch { /* the next snapshot refresh reconciles */ }
+  }
+  function togglePin(path: string) {
+    if (pins.includes(path)) {
+      persistPins(pins.filter(p => p !== path))
+    } else {
+      persistPins([...pins, path])
+      void activateFile(path)
+    }
+  }
+  function unpinTab(path: string) {
+    const next = pins.filter(p => p !== path)
+    persistPins(next)
+    // The unpinned file stays open transiently while active, so there
+    // is always at least one open file; otherwise fall back to the
+    // most recently pinned tab.
+    if (activePath === path && next.length > 0) void activateFile(next[next.length - 1])
+  }
 
   async function refreshConfig() {
     try {
@@ -1288,6 +1326,8 @@ export default function App() {
               onDuplicate={duplicateFromPane}
               startPage={startPage}
               onSetStartPage={(p) => { void handleSetStartPage(p) }}
+              pins={pins}
+              onTogglePin={togglePin}
             />
           ) : leftView === 'library' ? (
             <Library
@@ -1332,7 +1372,22 @@ export default function App() {
               </div>
             )}
           </div>
-          {!collapse.editor && overlay !== 'editor' && (
+          {files.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center', minHeight: 0 }}>
+              <div style={{ maxWidth: 420 }}>
+                <div style={{ fontSize: 'calc(14px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>No files in this project yet</div>
+                <div style={{ fontSize: 'calc(12.5px * var(--ui-scale, 1))', color: 'var(--muted)', lineHeight: 1.6 }}>Create your first file from the file pane — it opens here and in the preview.</div>
+              </div>
+            </div>
+          ) : (
+            <OpenTabs
+              tabs={pins.filter(p => files.includes(p))}
+              active={activePath}
+              onActivate={(p) => { void activateFile(p) }}
+              onUnpin={unpinTab}
+            />
+          )}
+          {files.length > 0 && !collapse.editor && overlay !== 'editor' && (
             <div style={{ flex: `${Math.max(15, 100 - previewH)} 1 0`, minHeight: 0 }}>
               <MonacoEditor path={activePath} value={content} onChange={setContent} theme={editorTheme} editorPrefs={uiPrefsState} />
             </div>

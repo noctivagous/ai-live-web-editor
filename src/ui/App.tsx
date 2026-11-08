@@ -965,6 +965,30 @@ export default function App() {
     <div className="deck-app">
       {!setupDone && <SetupWizard onDone={finishSetup} />}
 
+      {uiPrefsState.menuStrip && (
+        <MenuStrip
+          ctx={actionCtx}
+          route={route}
+          leftView={leftView}
+          uiTheme={uiPrefsState.uiTheme}
+          menuStripOn={uiPrefsState.menuStrip}
+          onNewProject={() => { void handleNewProject() }}
+          onImport={() => { void handleOpenFolder() }}
+          onOpenSync={() => { void handleOpenSync() }}
+          onSave={() => save()}
+          hasManifest={files.includes('project.ai.json')}
+          onOpenManifest={() => { void loadFile('project.ai.json') }}
+          onOpenLibrary={() => setLeftView('library')}
+          onOpenSettings={(section) => setSettingsAt(section)}
+          onOpenWizard={(id) => setWizard(id)}
+          onNavigate={navigate}
+          onLeftView={setLeftView}
+          onOpenCmdk={() => setCmdkOpen(true)}
+          onSetTheme={(id) => { saveUiPrefs({ uiTheme: id }) }}
+          onToggleMenuStrip={() => { saveUiPrefs({ menuStrip: !uiPrefsState.menuStrip }) }}
+          onAbout={() => setNotice('AI Live Editor — a local-first editor where the agent builds from menus, wizards and plans, not just chat.')}
+        />
+      )}
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">◧</span>
@@ -1104,30 +1128,6 @@ export default function App() {
           <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
       </header>
-      {uiPrefsState.menuStrip && (
-        <MenuStrip
-          ctx={actionCtx}
-          route={route}
-          leftView={leftView}
-          uiTheme={uiPrefsState.uiTheme}
-          menuStripOn={uiPrefsState.menuStrip}
-          onNewProject={() => { void handleNewProject() }}
-          onImport={() => { void handleOpenFolder() }}
-          onOpenSync={() => { void handleOpenSync() }}
-          onSave={() => save()}
-          hasManifest={files.includes('project.ai.json')}
-          onOpenManifest={() => { void loadFile('project.ai.json') }}
-          onOpenLibrary={() => setLeftView('library')}
-          onOpenSettings={(section) => setSettingsAt(section)}
-          onOpenWizard={(id) => setWizard(id)}
-          onNavigate={navigate}
-          onLeftView={setLeftView}
-          onOpenCmdk={() => setCmdkOpen(true)}
-          onSetTheme={(id) => { saveUiPrefs({ uiTheme: id }) }}
-          onToggleMenuStrip={() => { saveUiPrefs({ menuStrip: !uiPrefsState.menuStrip }) }}
-          onAbout={() => setNotice('AI Live Editor — a local-first editor where the agent builds from menus, wizards and plans, not just chat.')}
-        />
-      )}
       {syncSession && syncSession.projectId === activeProject && (
         <SyncStatusBar
           dirName={syncSession.dirName}

@@ -209,7 +209,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, themeLabe
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
-      <div className="facet-bar pane-bar" role="tablist" aria-label="Facets">
+      <div className="facet-bar" role="tablist" aria-label="Facets">
         {FACET_IDS.map(f => (
           <button
             key={f}

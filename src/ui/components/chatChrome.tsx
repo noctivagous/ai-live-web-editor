@@ -33,7 +33,7 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
 }) {
   const availableSearch = (searchOptions || []).filter(o => o.available)
   return (
-    <div className="chat-bar" style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-soft)', fontSize: 'calc(12px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+    <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-soft)', fontSize: 'calc(12px * var(--ui-scale, 1))', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
       AI Chat
       <div className="seg" role="group" aria-label="Chat workflow">
         <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('files')}><Folder size={12} />Files</button>

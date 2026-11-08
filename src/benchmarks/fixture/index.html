@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northbeam Mug — Brew Better Mornings</title>
+<link rel="stylesheet" href="/src/card.css">
+</head>
+<body>
+<header class="site-header">
+  <h1>Northbeam</h1>
+  <p class="tagline">Small-batch goods for slow mornings.</p>
+</header>
+<main>
+  <section class="card" id="product-card">
+    <h2>Northbeam Mug</h2>
+    <p class="price">$24</p>
+    <p>A 12 oz stoneware mug with a matte glaze and a handle that fits two fingers comfortably.</p>
+  </section>
+  <form id="signup-form" class="signup" method="post" action="#">
+    <label for="email">Get 10% off your first order</label>
+    <input id="email" name="email" type="email" placeholder="you@example.com">
+    <button type="submit">Sign up</button>
+    <p id="signup-note" class="note"></p>
+  </form>
+</main>
+<footer class="site-footer">
+  <p>© <span id="year"></span> Northbeam Goods</p>
+</footer>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

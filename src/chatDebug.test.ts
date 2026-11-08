@@ -37,6 +37,7 @@ describe('ChatDebugTurn disabled', () => {
     dbg.noteTools(['write-real-file'], {})
     dbg.noteGateArmed(true, { captured: true, error: null })
     dbg.noteGateDecision(true, ['write-real-file'])
+    dbg.noteGateFollowUpSkipped('unverified-only')
     dbg.recordEvent({ type: 'status', text: 'starting…' })
     dbg.recordEvent({ type: 'text-delta', text: 'hello' })
     dbg.recordEvent({ type: 'done', usage: { input: 1, output: 2, total: 3 } })
@@ -108,6 +109,7 @@ describe('ChatDebugTurn enabled', () => {
     assert.equal(record.gate?.decision, false)
     assert.deepEqual(record.gate?.toolTrace, ['read-real-file', 'write-real-file', 'str-replace'])
     assert.deepEqual(record.gate?.verification, { ran: false })
+    assert.equal(record.gate?.followUpSkipped, null)
     assert.deepEqual(record.events.map((e) => e.type), [
       'status', 'tool-call', 'tool-result', 'tool-call', 'tool-result',
       'tool-call', 'tool-result', 'tool-result', 'reasoning-delta',
@@ -146,6 +148,25 @@ describe('ChatDebugTurn enabled', () => {
     assert.deepEqual(JSON.parse(lines[0]), JSON.parse(JSON.stringify(record)))
     assert.equal(dbg.finish({}), null)
     assert.equal(fs.readFileSync(file, 'utf-8').trim().split('\n').length, 1)
+  })
+
+  it('records a gate follow-up skipped as unverified-only', () => {
+    const dir = tmpDir()
+    const file = path.join(dir, 'report.jsonl')
+    const dbg = createChatDebugTurn({ env: { AI_LIVE_CHAT_DEBUG: '1' }, file, projectRoot: dir, projectId: 'p' })
+    dbg.noteGateArmed(true, { captured: true, error: null })
+    dbg.noteGateDecision(true, ['write-real-file'])
+    dbg.noteGateFollowUpSkipped('unverified-only')
+    dbg.recordEvent({
+      type: 'done',
+      usage: { input: 3, output: 1, total: 4 },
+      verification: { ran: true, clean: false, newLayout: 0, newConsole: 0, unverified: ['no live page'], followUp: false },
+    })
+    const record = dbg.finish({})
+    assert.ok(record)
+    assert.equal(record.gate?.decision, true)
+    assert.equal(record.gate?.followUpSkipped, 'unverified-only')
+    assert.equal(record.gate?.verification?.followUp, false)
   })
 
   it('keeps only the first 200 chars of the final text — the tail never reaches the report', () => {

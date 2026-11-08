@@ -82,7 +82,7 @@ export interface ChatDebugTurnRecord {
   gateArmed: boolean
   gateBaselineCaptured: boolean | null
   gateBaselineError: string | null
-  gate: { decision: boolean; toolTrace: string[]; verification: VerifySummary | null } | null
+  gate: { decision: boolean; toolTrace: string[]; verification: VerifySummary | null; followUpSkipped: string | null } | null
   events: DebugEvent[]
   textChars: number
   reasoningChars: number
@@ -133,6 +133,7 @@ export class ChatDebugTurn {
   private gateBaselineCaptured: boolean | null = null
   private gateBaselineError: string | null = null
   private gateDecision: { decision: boolean; toolTrace: string[] } | null = null
+  private gateFollowUpSkipped: string | null = null
   private readonly chunkPaths = new Map<string, ToolChunkPaths>()
   private textChars = 0
   private reasoningChars = 0
@@ -173,6 +174,13 @@ export class ChatDebugTurn {
   noteGateDecision(decision: boolean, toolTrace: string[]): void {
     if (!this.enabled) return
     this.gateDecision = { decision, toolTrace: [...toolTrace] }
+  }
+
+  /** The gate ran but its model follow-up was deliberately not started
+   * (reason 'unverified-only': findings were notes, not failures). */
+  noteGateFollowUpSkipped(reason: string): void {
+    if (!this.enabled) return
+    this.gateFollowUpSkipped = reason
   }
 
   /**
@@ -313,7 +321,7 @@ export class ChatDebugTurn {
         gateBaselineCaptured: this.gateBaselineCaptured,
         gateBaselineError: this.gateBaselineError,
         gate: this.gateDecision
-          ? { decision: this.gateDecision.decision, toolTrace: this.gateDecision.toolTrace, verification: this.doneVerification }
+          ? { decision: this.gateDecision.decision, toolTrace: this.gateDecision.toolTrace, verification: this.doneVerification, followUpSkipped: this.gateFollowUpSkipped }
           : null,
         events: this.events,
         textChars: this.textChars,

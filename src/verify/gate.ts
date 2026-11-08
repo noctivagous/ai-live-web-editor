@@ -31,6 +31,19 @@ export function shouldTriggerGate(mode: string, toolNames: string[]): boolean {
 }
 
 /**
+ * Follow-up decision: the gate's model stream exists to fix findings,
+ * so it runs only when the gate produced something fixable — a new
+ * layout or console finding. An unverified-only result means nothing
+ * failed; some checks could not run (no live page, a frame gone). A
+ * blind model pass cannot check what the host itself could not, and
+ * it used to re-read — sometimes re-write — the turn's files. The
+ * unverified notes still reach the client in the verify summary.
+ */
+export function gateNeedsFollowUp(result: { layout: unknown[]; console: unknown[] }): boolean {
+  return result.layout.length > 0 || result.console.length > 0
+}
+
+/**
  * Key a layout overlap/clipping finding from the snapshot analysis shape.
  * Overlap pairs carry a/b stableIds; clipping carries target/clippedBy;
  * overflow offenders carry stableId + axis.

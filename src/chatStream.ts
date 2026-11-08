@@ -514,7 +514,7 @@ export async function pipeAgentChatStream(
     const { activeToolsForMode, fileToolsForTurn } = await import('./agentTools.js')
     const { verifyGateEnabled } = await import('./env.js')
     const { captureBaseline, runVerifyGate, gatePrompt } = await import('./verify/runGate.js')
-    const { shouldTriggerGate } = await import('./verify/gate.js')
+    const { shouldTriggerGate, gateNeedsFollowUp } = await import('./verify/gate.js')
     // P0-b pre-edit baseline on Files turns (post-edit diff needs it).
     // Never breaks the turn: failure means the gate reports "unverified".
     let baseline: import('./verify/runGate.js').GateBaseline | null = null
@@ -600,7 +600,13 @@ export async function pipeAgentChatStream(
       } catch (e: unknown) {
         gate = { ran: true, layout: [], expected: [], console: [], unverified: [e instanceof Error ? e.message : String(e)] }
       }
-      const prompt = gatePrompt(gate)
+      // The follow-up stream runs only for fixable findings (new
+      // layout/console). An unverified-only result skips it: the else
+      // branch below still forwards the notes in the verify summary
+      // with followUp: false, the shape the client already renders.
+      const needsFollowUp = gateNeedsFollowUp(gate)
+      const prompt = needsFollowUp ? gatePrompt(gate) : null
+      if (!needsFollowUp && gate.unverified.length) dbg.noteGateFollowUpSkipped('unverified-only')
       if (prompt && !req?.aborted && !abortSignal.aborted) {
         const followPayload = Array.isArray(messages)
           ? [

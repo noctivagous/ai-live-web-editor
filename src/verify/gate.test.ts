@@ -6,10 +6,13 @@ import {
   diffFindings,
   findingKey,
   formatGatePrompt,
+  gateNeedsFollowUp,
   shouldTriggerGate,
   toLayoutFindings,
+  type ConsoleEntry,
   type LayoutFinding,
 } from './gate.js'
+import { gatePrompt, type GateResult } from './runGate.js'
 
 describe('shouldTriggerGate', () => {
   it('fires on Files turns that wrote files', () => {
@@ -32,6 +35,50 @@ describe('shouldTriggerGate', () => {
   it('does not fire for research or adopt-registry (not project-file writes)', () => {
     assert.equal(shouldTriggerGate('files', ['research']), false)
     assert.equal(shouldTriggerGate('files', ['adopt-registry']), false)
+  })
+})
+
+describe('gateNeedsFollowUp', () => {
+  const finding: LayoutFinding = { key: 'k', kind: 'overlap', detail: '{}', width: 375 }
+  const entry: ConsoleEntry = { seq: 2, level: 'error', text: 'boom' }
+  const result = (over: Partial<GateResult>): GateResult => ({
+    ran: true,
+    layout: [],
+    expected: [],
+    console: [],
+    unverified: [],
+    ...over,
+  })
+
+  it('does not fire for unverified-only results', () => {
+    assert.equal(gateNeedsFollowUp(result({ unverified: ['1280px via pool: no live page'] })), false)
+    assert.equal(gateNeedsFollowUp(result({ unverified: ['bridge console: gone', '375px check frame: frame gone'] })), false)
+  })
+
+  it('fires for real findings, with or without unverified notes', () => {
+    assert.equal(gateNeedsFollowUp(result({ layout: [finding] })), true)
+    assert.equal(gateNeedsFollowUp(result({ console: [entry] })), true)
+    assert.equal(gateNeedsFollowUp(result({ layout: [finding], console: [entry], unverified: ['x'] })), true)
+  })
+
+  it('does not fire when the gate found nothing at all', () => {
+    assert.equal(gateNeedsFollowUp(result({})), false)
+  })
+
+  it('wiring: unverified-only is exactly where gatePrompt used to send a follow-up', () => {
+    // Before this decision existed, chatStream ran the follow-up
+    // whenever gatePrompt returned text — which includes unverified-only.
+    const unverifiedOnly = result({ unverified: ['no live page'] })
+    assert.notEqual(gatePrompt(unverifiedOnly), null)
+    assert.equal(gateNeedsFollowUp(unverifiedOnly), false)
+    // Clean results stay follow-up-free under both decisions.
+    const clean = result({})
+    assert.equal(gatePrompt(clean), null)
+    assert.equal(gateNeedsFollowUp(clean), false)
+    // Real findings still produce the same prompt.
+    const real = result({ layout: [finding], unverified: ['no live page'] })
+    assert.notEqual(gatePrompt(real), null)
+    assert.equal(gateNeedsFollowUp(real), true)
   })
 })
 

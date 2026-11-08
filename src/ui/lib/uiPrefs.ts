@@ -49,6 +49,11 @@ export interface UiPrefs {
    * Header Bar, on by default. */
   menuDescriptions: boolean
   chatView: ChatViewPref
+  /** The feature graph diagram's layout: false = Flow (regions
+   * wrap in the pane), true = Canvas (the infinite pannable
+   * canvas). The graph pane's Flow | Canvas switch is the control;
+   * default Flow. */
+  diagramCanvas: boolean
   fileSort: FileSortPref
   fileShowHidden: boolean
   /** Whether the preview shows its per-format AI toolbar row. The
@@ -74,6 +79,7 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   menuLayout: 'grid',
   menuDescriptions: true,
   chatView: 'stationary',
+  diagramCanvas: false,
   fileSort: 'name',
   fileShowHidden: false,
   formatToolbar: true,
@@ -114,6 +120,7 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     menuLayout: v.menuLayout === 'list' ? 'list' : 'grid',
     menuDescriptions: v.menuDescriptions !== false,
     chatView: v.chatView === 'panel' ? 'panel' : v.chatView === 'chat' ? 'chat' : 'stationary',
+    diagramCanvas: v.diagramCanvas === true,
     fileSort: v.fileSort === 'name-desc' || v.fileSort === 'type' || v.fileSort === 'type-desc' || v.fileSort === 'modified' || v.fileSort === 'modified-asc' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,
     formatToolbar: v.formatToolbar !== false,

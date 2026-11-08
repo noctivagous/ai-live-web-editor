@@ -161,9 +161,16 @@ export default function App() {
   // event stays as a thin shim so existing dispatchers (chat /graph,
   // FacetView, agent actions, /graph-update) keep working.
   const graphView = route.kind === 'facets' ? route.view : undefined
+  // The graph pane's expand control: stretched over the chat
+  // column when the user wants the whole window for the graph.
+  const [graphExpanded, setGraphExpanded] = useState(false)
   function openGraph(modal?: RouteModal) {
     setPlanOpen(null)
     navigate({ kind: 'facets', facet: 'features', view: 'graph-report', ...(modal ? { modal } : {}) })
+  }
+  function openGraphDiagram(modal?: RouteModal) {
+    setPlanOpen(null)
+    navigate({ kind: 'facets', facet: 'features', view: 'graph-diagram', ...(modal ? { modal } : {}) })
   }
   function closeGraphView() {
     if (route.kind !== 'facets' || !route.view) return
@@ -1585,8 +1592,11 @@ export default function App() {
             view={graphView}
             onClose={closeGraphView}
             onOpenReport={() => openGraph(route.modal)}
+            onOpenDiagram={() => openGraphDiagram(route.modal)}
+            expanded={graphExpanded}
+            onToggleExpand={() => setGraphExpanded(v => !v)}
             onShowLibrary={() => { setLeftView('library'); navigate({ kind: 'workbench', ...(route.modal ? { modal: route.modal } : {}) }) }}
-            style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
+            style={{ left: 5, top: 5, bottom: 5, right: graphExpanded ? 5 : rightW + 22 }}
           />
         )}
         {cmdkOpen && (

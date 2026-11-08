@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, Circle, CircleDot, Clock, Loader2, Minus, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Check, Circle, CircleDot, Clock, Loader2, Maximize2, Minimize2, Minus, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import {
   addFeatureNode, editFeatureNode, getFeatureCurrency, getFeatureLint, getFeatureReconcile, getFeatures, linkFeatures,
   planFromGraph, removeFeatureNode, setFeatureNodeStatus, setFeatureParam, unlinkFeatures,
   type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphCurrency, type GraphProblemItem,
 } from '../lib/api'
 import { formatGraphCurrency, launchGraphUpdate } from '../lib/graphUpdate'
+import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
 import type { GraphView } from '../lib/layoutRoute'
+import { GraphDiagram } from './GraphDiagram'
 
 /**
  * The feature graph overlay: floats over the file manager + middle
@@ -26,6 +28,13 @@ import type { GraphView } from '../lib/layoutRoute'
  * edits below) is narrated in the feed under the header. Editing
  * here — rename, reparent, add/remove nodes and connections —
  * goes through the same store functions as the agent's tools.
+ *
+ * Two views of the same graph, routed (layoutRoute): the report
+ * (tree-list navigation with connection links) and the diagram —
+ * the general GraphDiagram resource rendering regions and nodes
+ * spatially with drawn edges, sharing this pane's selection,
+ * inspector rail, feed and flash state, so a /graph-update run
+ * streams into whichever view is open.
  */
 
 const STATUSES: FeatureNodeStatus[] = ['proposed', 'planned', 'building', 'done', 'verified', 'blocked', 'dropped']
@@ -82,10 +91,13 @@ function diffGraphs(prev: FeatureGraphItem, next: FeatureGraphItem): { feed: str
   return { feed, flash }
 }
 
-export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'graph-report', style }: {
+export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagram, expanded, onToggleExpand, view = 'graph-report', style }: {
   onClose: () => void
   onShowLibrary?: () => void
   onOpenReport?: () => void
+  onOpenDiagram?: () => void
+  expanded?: boolean
+  onToggleExpand?: () => void
   view?: GraphView
   style?: React.CSSProperties
 }) {
@@ -103,6 +115,13 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'gra
   const [flash, setFlash] = useState<Record<string, 'added' | 'changed'>>({})
   const [addForm, setAddForm] = useState<{ parentId: string, name: string, kind: string } | null>(null)
   const [linkDraft, setLinkDraft] = useState<{ type: string, toId: string }>({ type: 'depends-on', toId: '' })
+  // Diagram layout (Flow | Canvas): a device preference, set from
+  // the header switch in the diagram view.
+  const [canvasMode, setCanvasMode] = useState(() => loadUiPrefs().diagramCanvas)
+  function changeCanvasMode(on: boolean) {
+    setCanvasMode(on)
+    saveUiPrefs({ diagramCanvas: on })
+  }
   const prevGraphRef = useRef<FeatureGraphItem | null>(null)
   const firstLoadRef = useRef(false)
   const feedIdRef = useRef(0)
@@ -381,116 +400,7 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'gra
     </div>
   )
 
-  return (
-    <div className="graph-overlay" role="dialog" aria-label="Feature graph" style={style}>
-      <style>{GRAPH_CSS}</style>
-      <div className="graph-head">
-        <span className="graph-title">Feature graph</span>
-        {graph && <span className="graph-subtitle">{graph.title}</span>}
-        {rollup && (
-          <span className="graph-overall">
-            {bar(rollup.overall)}
-            <span>{rollup.overall.pct}% built · {rollup.overall.built}/{rollup.overall.total}{rollup.overall.blocked ? ` · ${rollup.overall.blocked} blocked` : ''}</span>
-          </span>
-        )}
-        {problems.length > 0 && (
-          <span className="graph-lint-badge" title="Structural problems in graph.json — see the overview panel">
-            ⚠ {problems.length} graph problem{problems.length === 1 ? '' : 's'}
-          </span>
-        )}
-        {graph && currency && (() => {
-          const c = formatGraphCurrency(currency.sync, currency.head, currency.behind)
-          return <span className={`graph-currency ${c.tone}`} title={c.title}>{c.text}</span>
-        })()}
-        <span className="graph-head-spacer" />
-        {graph && graph.nodes.length > 0 && (
-          <button
-            type="button"
-            className="deck-btn"
-            onClick={() => launchGraphUpdate('feature')}
-            title="Launches /graph-update feature — the agent reconciles the graph with the codebase, and each change lands here as it happens"
-          >
-            <Sparkles size={13} />Update graph
-          </button>
-        )}
-        <button type="button" className="deck-btn" onClick={() => void load()} title="Reload the graph"><RefreshCw size={13} /></button>
-        <button type="button" className="deck-btn" onClick={onClose} aria-label="Close feature graph"><X size={14} /></button>
-      </div>
-
-      {error && <div className="graph-error">{error}</div>}
-      {notice && <div className="graph-notice">{notice}</div>}
-      {feed.length > 0 && (
-        <div className="graph-feed" aria-label="Recent graph changes">
-          {feed.map(f => (
-            <div key={f.id} className="graph-feed-row"><span className="graph-feed-time mono">{f.time}</span><span>{f.text}</span></div>
-          ))}
-        </div>
-      )}
-
-      {!loaded ? (
-        <div className="graph-empty">Loading the feature graph…</div>
-      ) : !graph || graph.nodes.length === 0 ? (
-        <div className="graph-empty">
-          <p>No feature graph in this project yet.</p>
-          <p>The graph is the durable map of the whole app — regions, features, settings, and how they configure each other. Have the agent build it from the codebase and watch it land here, node by node — or install a feature pack (Admin, Settings, Printing, Auth) and plan from it.</p>
-          <div className="graph-empty-actions">
-            <button type="button" className="deck-btn graph-build-btn" onClick={() => launchGraphUpdate('feature')}>
-              <Sparkles size={13} />Build the graph
-            </button>
-            {onShowLibrary && <button type="button" className="deck-btn" onClick={onShowLibrary}>Open the Library</button>}
-          </div>
-          <p className="graph-cmd-hint mono">launches /graph-update feature</p>
-          <p className="graph-cmd-note">/graph-update takes a target — feature is the first graph; others will use the same command.</p>
-        </div>
-      ) : view === 'graph-diagram' ? (
-        <div className="graph-body">
-          <div className="graph-empty">
-            <p>Diagram viewer isn't built yet.</p>
-            <p>A navigable node-link diagram will live here — regions and features laid out as a graph, with the same selection and inspector as the report. Until then, the report is the viewer.</p>
-            <div className="graph-empty-actions">
-              {onOpenReport && (
-                <button type="button" className="deck-btn graph-build-btn" onClick={onOpenReport}>
-                  Open the report
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="graph-body">
-          <div className="graph-main">
-            {regions.map(region => {
-              const r = regionRollup.get(region.id)
-              return (
-                <section key={region.id} className="graph-region">
-                  <div className="graph-region-head">
-                    <button type="button" className="graph-region-name" onClick={() => setSelectedId(region.id)}>{region.name}</button>
-                    {r && <span className="graph-region-roll">{bar(r)}<span>{r.pct}%</span></span>}
-                    <button type="button" className="deck-btn" disabled={busy === 'plan'} onClick={() => void planFrom({ nodeId: region.id })}>Plan from here</button>
-                    <button type="button" className="deck-btn" onClick={() => setAddForm({ parentId: region.id, name: '', kind: 'feature' })} title={`Add a node under ${region.name}`}><Plus size={12} />Add</button>
-                  </div>
-                  {addForm && addForm.parentId === region.id && addFormEl}
-                  {childrenOf(region.id).map(n => renderNode(n, 0))}
-                  {childrenOf(region.id).length === 0 && <div className="graph-region-empty">No features yet.</div>}
-                </section>
-              )
-            })}
-            {topLevel.length > 0 && (
-              <section className="graph-region">
-                <div className="graph-region-head"><span className="graph-region-name">Top level</span></div>
-                {topLevel.map(n => renderNode(n, 0))}
-              </section>
-            )}
-            <div className="graph-main-foot">
-              {addForm && !addForm.parentId && addFormEl}
-              {!addForm && (
-                <button type="button" className="deck-btn" onClick={() => setAddForm({ parentId: '', name: '', kind: 'region' })}>
-                  <Plus size={12} />Add a region or top-level node
-                </button>
-              )}
-            </div>
-          </div>
-
+  const renderInspector = () => (
           <aside className="graph-rail">
             {selected ? (
               <>
@@ -670,6 +580,169 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'gra
               </>
             )}
           </aside>
+  )
+
+  return (
+    <div className="graph-overlay" role="dialog" aria-label="Feature graph" style={style}>
+      <style>{GRAPH_CSS}</style>
+      <div className="graph-head">
+        <span className="graph-title">Feature graph</span>
+        {graph && <span className="graph-subtitle">{graph.title}</span>}
+        {onOpenReport && onOpenDiagram && (
+          <span className="graph-view-switch" role="group" aria-label="Graph view">
+            <button
+              type="button"
+              className={view === 'graph-report' ? 'on' : ''}
+              onClick={onOpenReport}
+              title="The report — tree-list navigation with connection links"
+            >Report</button>
+            <button
+              type="button"
+              className={view === 'graph-diagram' ? 'on' : ''}
+              onClick={onOpenDiagram}
+              title="The diagram — regions and features as a node-link diagram"
+            >Diagram</button>
+          </span>
+        )}
+        {view === 'graph-diagram' && (
+          <span className="graph-view-switch" role="group" aria-label="Diagram layout">
+            <button
+              type="button"
+              className={!canvasMode ? 'on' : ''}
+              onClick={() => changeCanvasMode(false)}
+              title="Flow — region boxes wrap inside the pane"
+            >Flow</button>
+            <button
+              type="button"
+              className={canvasMode ? 'on' : ''}
+              onClick={() => changeCanvasMode(true)}
+              title="Canvas — the infinite pannable canvas: drag the background to pan, drag regions and cards to arrange them"
+            >Canvas</button>
+          </span>
+        )}
+        {rollup && (
+          <span className="graph-overall">
+            {bar(rollup.overall)}
+            <span>{rollup.overall.pct}% built · {rollup.overall.built}/{rollup.overall.total}{rollup.overall.blocked ? ` · ${rollup.overall.blocked} blocked` : ''}</span>
+          </span>
+        )}
+        {problems.length > 0 && (
+          <span className="graph-lint-badge" title="Structural problems in graph.json — see the overview panel">
+            ⚠ {problems.length} graph problem{problems.length === 1 ? '' : 's'}
+          </span>
+        )}
+        {graph && currency && (() => {
+          const c = formatGraphCurrency(currency.sync, currency.head, currency.behind)
+          return <span className={`graph-currency ${c.tone}`} title={c.title}>{c.text}</span>
+        })()}
+        <span className="graph-head-spacer" />
+        {graph && graph.nodes.length > 0 && (
+          <button
+            type="button"
+            className="deck-btn"
+            onClick={() => launchGraphUpdate('feature')}
+            title="Launches /graph-update feature — the agent reconciles the graph with the codebase, and each change lands here as it happens"
+          >
+            <Sparkles size={13} />Update graph
+          </button>
+        )}
+        {onToggleExpand && (
+          <button
+            type="button"
+            className="deck-btn"
+            onClick={onToggleExpand}
+            title={expanded ? 'Restore — show the chat again' : 'Expand over the chat — more room for the graph'}
+            aria-label={expanded ? 'Restore the graph pane' : 'Expand the graph pane over the chat'}
+          >
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        )}
+        <button type="button" className="deck-btn" onClick={() => void load()} title="Reload the graph"><RefreshCw size={13} /></button>
+        <button type="button" className="deck-btn" onClick={onClose} aria-label="Close feature graph"><X size={14} /></button>
+      </div>
+
+      {error && <div className="graph-error">{error}</div>}
+      {notice && <div className="graph-notice">{notice}</div>}
+      {feed.length > 0 && (
+        <div className="graph-feed" aria-label="Recent graph changes">
+          {feed.map(f => (
+            <div key={f.id} className="graph-feed-row"><span className="graph-feed-time mono">{f.time}</span><span>{f.text}</span></div>
+          ))}
+        </div>
+      )}
+
+      {!loaded ? (
+        <div className="graph-empty">Loading the feature graph…</div>
+      ) : !graph || graph.nodes.length === 0 ? (
+        <div className="graph-empty">
+          <p>No feature graph in this project yet.</p>
+          <p>The graph is the durable map of the whole app — regions, features, settings, and how they configure each other. Have the agent build it from the codebase and watch it land here, node by node — or install a feature pack (Admin, Settings, Printing, Auth) and plan from it.</p>
+          <div className="graph-empty-actions">
+            <button type="button" className="deck-btn graph-build-btn" onClick={() => launchGraphUpdate('feature')}>
+              <Sparkles size={13} />Build the graph
+            </button>
+            {onShowLibrary && <button type="button" className="deck-btn" onClick={onShowLibrary}>Open the Library</button>}
+          </div>
+          <p className="graph-cmd-hint mono">launches /graph-update feature</p>
+          <p className="graph-cmd-note">/graph-update takes a target — feature is the first graph; others will use the same command.</p>
+        </div>
+      ) : view === 'graph-diagram' ? (
+        <div className="graph-body">
+          <div className="graph-diagram-wrap">
+            {addForm && <div className="graph-diagram-add">{addFormEl}</div>}
+            <GraphDiagram
+              nodes={graph.nodes}
+              edges={graph.edges}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              flash={flash}
+              regionRollup={regionRollup}
+              mode={canvasMode ? 'canvas' : 'flow'}
+              onReparent={(id, parentId) => {
+                const n = byId.get(id)
+                if (n) void reparent(n, parentId ?? '')
+              }}
+              onAddNode={parentId => setAddForm({ parentId: parentId ?? '', name: '', kind: parentId ? 'feature' : 'region' })}
+            />
+          </div>
+          {renderInspector()}
+        </div>
+      ) : (
+        <div className="graph-body">
+          <div className="graph-main">
+            {regions.map(region => {
+              const r = regionRollup.get(region.id)
+              return (
+                <section key={region.id} className="graph-region">
+                  <div className="graph-region-head">
+                    <button type="button" className="graph-region-name" onClick={() => setSelectedId(region.id)}>{region.name}</button>
+                    {r && <span className="graph-region-roll">{bar(r)}<span>{r.pct}%</span></span>}
+                    <button type="button" className="deck-btn" disabled={busy === 'plan'} onClick={() => void planFrom({ nodeId: region.id })}>Plan from here</button>
+                    <button type="button" className="deck-btn" onClick={() => setAddForm({ parentId: region.id, name: '', kind: 'feature' })} title={`Add a node under ${region.name}`}><Plus size={12} />Add</button>
+                  </div>
+                  {addForm && addForm.parentId === region.id && addFormEl}
+                  {childrenOf(region.id).map(n => renderNode(n, 0))}
+                  {childrenOf(region.id).length === 0 && <div className="graph-region-empty">No features yet.</div>}
+                </section>
+              )
+            })}
+            {topLevel.length > 0 && (
+              <section className="graph-region">
+                <div className="graph-region-head"><span className="graph-region-name">Top level</span></div>
+                {topLevel.map(n => renderNode(n, 0))}
+              </section>
+            )}
+            <div className="graph-main-foot">
+              {addForm && !addForm.parentId && addFormEl}
+              {!addForm && (
+                <button type="button" className="deck-btn" onClick={() => setAddForm({ parentId: '', name: '', kind: 'region' })}>
+                  <Plus size={12} />Add a region or top-level node
+                </button>
+              )}
+            </div>
+          </div>
+
+          {renderInspector()}
         </div>
       )}
     </div>
@@ -720,6 +793,11 @@ const GRAPH_CSS = `
 .graph-param-color { display:flex; align-items:center; gap:7px; }
 .graph-param-color input[type="color"] { width:34px; height:22px; padding:0; border:1px solid var(--border-strong); border-radius:5px; background:none; cursor:pointer; }
 .graph-lint-badge { color:var(--amber-text); border:1px solid var(--amber); border-radius:9px; padding:1px 8px; font-size:calc(11.5px * var(--ui-scale, 1)); font-weight:600; }
+.graph-view-switch { display:inline-flex; border:1px solid var(--border-strong); border-radius:8px; overflow:hidden; }
+.graph-view-switch button { background:none; border:none; color:inherit; cursor:pointer; padding:3px 10px; font-size:calc(12px * var(--ui-scale, 1)); opacity:.65; font-family:inherit; }
+.graph-view-switch button.on { background:var(--accent-soft-bg); opacity:1; font-weight:600; }
+.graph-diagram-wrap { flex:1; min-width:0; display:flex; flex-direction:column; }
+.graph-diagram-add { padding:10px 12px 0; }
 .graph-currency { border:1px solid var(--border); border-radius:9px; padding:1px 8px; font-size:calc(11.5px * var(--ui-scale, 1)); color:var(--text-soft); white-space:nowrap; }
 .graph-currency.ok { color:var(--green-text); border-color:var(--green); }
 .graph-currency.warn { color:var(--amber-text); border-color:var(--amber); }

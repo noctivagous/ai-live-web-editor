@@ -33,6 +33,11 @@ export interface UiPrefs {
   fileSort: FileSortPref
   fileShowHidden: boolean
   filePreviewMode: FilePreviewModePref
+  /** Whether the preview shows its per-format AI toolbar row. The
+   * preview bar's "AI toolbar" checkbox is the switch (Settings →
+   * Files mirrors it); default on — the toolbar is how the preview's
+   * commands are found. */
+  formatToolbar: boolean
   /** Code editor (Monaco) options. Defaults match the editor's
    * long-standing hardcoded behavior. */
   editorFontSize: number
@@ -52,6 +57,7 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   fileSort: 'name',
   fileShowHidden: false,
   filePreviewMode: 'marked',
+  formatToolbar: true,
   editorFontSize: 13,
   editorTabSize: 4,
   editorWordWrap: true,
@@ -87,6 +93,7 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     fileSort: v.fileSort === 'type' || v.fileSort === 'modified' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,
     filePreviewMode: v.filePreviewMode === 'follow' ? 'follow' : 'marked',
+    formatToolbar: v.formatToolbar !== false,
     editorFontSize: clampInt(v.editorFontSize, 10, 20, UI_PREFS_DEFAULTS.editorFontSize),
     editorTabSize: v.editorTabSize === 2 ? 2 : 4,
     editorWordWrap: v.editorWordWrap !== false,

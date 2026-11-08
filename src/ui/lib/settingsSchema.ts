@@ -108,6 +108,11 @@ export const SETTING_FIELDS: SettingField[] = [
     keywords: 'dotfiles hidden files explorer',
   },
   {
+    id: 'formatToolbar', section: 'files', label: 'Preview AI toolbar', control: 'toggle', store: 'prefs',
+    hint: 'The toolbar under the preview bar with AI actions for the previewed file’s format. The preview bar’s “AI toolbar” checkbox switches it too.',
+    keywords: 'preview toolbar ai actions format menus commands',
+  },
+  {
     id: 'filePreviewMode', section: 'files', label: 'Preview selection', control: 'select', store: 'prefs',
     hint: 'Marked: the preview shows the file you mark in the file pane (eye button), and stays put while you open other files. Follow: clicking a file previews it too.',
     options: [{ value: 'marked', label: 'Marked file' }, { value: 'follow', label: 'Follow clicks' }],

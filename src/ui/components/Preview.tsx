@@ -6,9 +6,16 @@ import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
 import { describeRenderer, isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
 import { Markdown } from './Markdown'
 import { FolderSetupWizard } from './FolderSetupWizard'
+import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs'
 import { CssBoxes } from './CssBoxes'
+import { FormatToolbar } from './FormatToolbar'
+import { JsonView } from './JsonView'
+import { ConfigView } from './ConfigView'
+import { MarkdownEditor } from './MarkdownEditor'
+import { RichTextEditor } from './RichTextEditor'
 import { SpreadsheetView } from './SpreadsheetView'
 import { FormatStub } from './FormatStub'
+import { BaseImageEditor } from './BaseImageEditor'
 
 const PROJECT_TYPES = ['web-app', 'canvas-tool', 'game', 'dashboard', 'content-site']
 const TARGET_WIDTHS: Record<DeviceTarget, number | null> = { phone: 375, tablet: 768, desktop: null }
@@ -72,6 +79,15 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   // panels keep a Set up preview button to reopen it. Whether the
   // wizard is needed is computed with the mark, further down.
   const [wizardDismissed, setWizardDismissed] = useState(false)
+  // Format toolbar visibility (device pref): the bar's own checkbox is
+  // the switch, Settings → Files mirrors it. Default on.
+  const [showFormatToolbar, setShowFormatToolbarState] = useState(() => loadUiPrefs().formatToolbar)
+  useEffect(() => {
+    const onPrefs = () => setShowFormatToolbarState(loadUiPrefs().formatToolbar)
+    window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+    return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
+  }, [])
+  const setShowFormatToolbar = (next: boolean) => { setShowFormatToolbarState(next); saveUiPrefs({ formatToolbar: next }) }
   const liveUrl = hmrUrl || DEFAULT_HMR
   const [url, setUrl] = useState(liveUrl)
   const [key, setKey] = useState(0)
@@ -203,8 +219,8 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   const frameSrc = url === STATIC_URL
     ? `${STATIC_URL.replace(/\/$/, '')}${pagePath}`
     : pagePath === '/index.html' ? `${liveUrl}/` : `${liveUrl}${pagePath}`
-  const isReading = renderer === 'reading' || renderer === 'markdown'
-  const displayUrl = isReading || renderer === 'image' || renderer === 'spreadsheet' || renderer === 'document' || renderer === 'workbook' ? (mark ?? '') : frameSrc
+  const isReading = renderer === 'reading' || renderer === 'xml'
+  const displayUrl = isReading || renderer === 'markdown' || renderer === 'richtext' || renderer === 'image' || renderer === 'json' || renderer === 'yaml' || renderer === 'toml' || renderer === 'env' || renderer === 'spreadsheet' || renderer === 'document' || renderer === 'workbook' ? (mark ?? '') : frameSrc
   const frameMode = renderer === 'page' || renderer === 'host'
 
   // A new mark restarts the frame on the live server for that file.
@@ -356,6 +372,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             <span className="dot" />{noteCount} note{noteCount === 1 ? '' : 's'}
           </span>
         )}
+        <label style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }} title="Show the toolbar with AI actions for the previewed file's format">
+          <input type="checkbox" checked={showFormatToolbar} onChange={(e) => setShowFormatToolbar(e.target.checked)} />
+          AI toolbar
+        </label>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
           <select
             value={projectType}
@@ -402,6 +422,13 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           )}
         </span>
       </div>
+      {!collapsed && showFormatToolbar && !noSetup && (mark || frameMode) && renderer !== 'markdown' && renderer !== 'richtext' && renderer !== 'image' && (
+        <FormatToolbar
+          renderer={renderer ?? 'page'}
+          path={mark ?? startPage ?? 'index.html'}
+          onDispatched={(title) => onResult(`Sent to the AI: ${title} — watch the chat pane for the result.`)}
+        />
+      )}
       {!collapsed && (showWizard && setup ? (
         <FolderSetupWizard
           setup={setup}
@@ -426,8 +453,16 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
       ) : !frameMode ? (
         renderer === 'css' && mark ? (
           <CssBoxes key={mark} path={mark} onSaved={onChanged} />
+        ) : renderer === 'json' && mark ? (
+          <JsonView key={mark} path={mark} onSaved={onChanged} />
+        ) : (renderer === 'yaml' || renderer === 'toml' || renderer === 'env') && mark ? (
+          <ConfigView key={mark} path={mark} format={renderer} onSaved={onChanged} />
+        ) : renderer === 'markdown' && mark ? (
+          <MarkdownEditor key={mark} path={mark} onSaved={onChanged} showAi={showFormatToolbar} onDispatched={(title) => onResult(`Sent to the AI: ${title} — watch the chat pane for the result.`)} />
+        ) : renderer === 'richtext' && mark ? (
+          <RichTextEditor key={mark} path={mark} onSaved={onChanged} showAi={showFormatToolbar} onDispatched={(title) => onResult(`Sent to the AI: ${title} — watch the chat pane for the result.`)} />
         ) : renderer === 'spreadsheet' && mark ? (
-          <SpreadsheetView key={mark} path={mark} />
+          <SpreadsheetView key={mark} path={mark} onSaved={onChanged} />
         ) : (renderer === 'document' || renderer === 'workbook') && mark ? (
           <FormatStub key={mark} path={mark} descriptor={describeRenderer(renderer)} />
         ) : isReading ? (
@@ -442,10 +477,8 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
                     : <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{readContent}</div>}
             </div>
           </div>
-        ) : renderer === 'image' ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 16, minHeight: 0, overflow: 'auto' }}>
-            <img src={`${staticPreviewUrl().replace(/\/?$/, '')}${mark}`} alt={mark || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-          </div>
+        ) : renderer === 'image' && mark ? (
+          <BaseImageEditor key={mark} path={mark} showAi={showFormatToolbar} onSaved={onChanged} onDispatched={(title) => onResult(`Sent to the AI: ${title} — watch the chat pane for the result.`)} />
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', padding: 20, textAlign: 'center' }}>
             <div style={{ maxWidth: 420 }}>

@@ -70,6 +70,39 @@ export const FILE_PLAN_TOOLS = [
   'plan-from-graph',
 ] as const
 
+/** Structured-data core tools — one verb set over the neutral
+ * tree model (json/yaml/toml/env renderers, descriptor.tools). */
+export const FILE_DATA_TOOLS = [
+  'data-inspect',
+  'data-get',
+  'data-set',
+  'data-find',
+  'data-add',
+  'data-remove',
+] as const
+
+/** Document core tools — the blocks model's verb set over the
+ * base text editor's adapters (markdown/richtext descriptors). */
+export const FILE_DOC_TOOLS = [
+  'doc-inspect',
+  'doc-get',
+  'doc-find',
+  'doc-set-text',
+  'doc-set-item',
+  'doc-set-style',
+  'doc-add-block',
+  'doc-remove-block',
+] as const
+
+/** Spreadsheet renderer tools — the tool set the spreadsheet
+ * renderer ships with (preview registry, descriptor.tools). */
+export const FILE_SPREADSHEET_TOOLS = [
+  'spreadsheet-inspect',
+  'spreadsheet-find',
+  'spreadsheet-set-cell',
+  'spreadsheet-add-row',
+] as const
+
 /** Feature graph — only meaningful while a graph exists or is being discussed. */
 export const FILE_FEATURE_TOOLS = [
   'feature-add-node',
@@ -135,6 +168,24 @@ export const FILE_ACTIVE_TOOLS = [
   'feature-lint',
   'feature-uninstall-pack',
   'feature-reconcile',
+  'spreadsheet-inspect',
+  'spreadsheet-find',
+  'spreadsheet-set-cell',
+  'spreadsheet-add-row',
+  'data-inspect',
+  'data-get',
+  'data-set',
+  'data-find',
+  'data-add',
+  'data-remove',
+  'doc-inspect',
+  'doc-get',
+  'doc-find',
+  'doc-set-text',
+  'doc-set-item',
+  'doc-set-style',
+  'doc-add-block',
+  'doc-remove-block',
   'get-console',
   'get-network-failures',
 ] as const
@@ -182,6 +233,17 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   // app files, so the verify gate applies like the two installs above.
   'feature-build-node',
   'feature-set-param',
+  // Renderer tool sets write through their format's own splice.
+  'spreadsheet-set-cell',
+  'spreadsheet-add-row',
+  'data-set',
+  'data-add',
+  'data-remove',
+  'doc-set-text',
+  'doc-set-item',
+  'doc-set-style',
+  'doc-add-block',
+  'doc-remove-block',
 ])
 
 export function isWriteTool(name: string): boolean {
@@ -194,6 +256,9 @@ const RESEARCH_RE = /\b(web|internet|online|search|research|lookup|google|docs?|
 const PLAN_RE = /\bplans?\b|\/plan\b/i
 const FEATURE_RE = /feature[-\s]?graph|feature[-\s]pack|\binstall(?:ing|ed)?\b[^.]*\bpack\b/i
 const CODE_RE = /\b(unpack\w*|unminif\w*|de-?minif\w*|minified|beautif\w*|prettif\w*|bundles?|bundled|vendor|obfuscat\w*)\b|\.min\.(?:js|mjs|cjs|ts)\b/i
+const SPREADSHEET_RE = /\bspreadsheets?\b|\bcsv\b|\btsv\b|\bcells?\b/i
+const DATA_RE = /\b(json|ya?ml|toml|xml|config|configuration|settings?)\b|\.env\b/i
+const DOC_RE = /\b(markdown|readme|rtf|documents?|paragraphs?|headings?)\b|\.md\b/i
 const RUN_RE = /\b(verify|verifying|runtime|execute|probe)\b|\bactually (returns?|exports?|renders?|does|do)\b|\bwhat does\b[^?]*\breturn/i
 
 export interface FilesTurnSignals {
@@ -215,6 +280,9 @@ export function fileToolsForTurn(signals: FilesTurnSignals): string[] {
   if (RUN_RE.test(text)) wanted.add('run-in-page')
   if (CATALOG_RE.test(text)) for (const t of FILE_CATALOG_TOOLS) wanted.add(t)
   if (CODE_RE.test(text)) for (const t of FILE_CODE_TOOLS) wanted.add(t)
+  if (SPREADSHEET_RE.test(text)) for (const t of FILE_SPREADSHEET_TOOLS) wanted.add(t)
+  if (DATA_RE.test(text)) for (const t of FILE_DATA_TOOLS) wanted.add(t)
+  if (DOC_RE.test(text)) for (const t of FILE_DOC_TOOLS) wanted.add(t)
   if (signals.searchAvailable && RESEARCH_RE.test(text)) for (const t of FILE_RESEARCH_TOOLS) wanted.add(t)
   if (signals.hasActivePlan || PLAN_RE.test(text)) for (const t of FILE_PLAN_TOOLS) wanted.add(t)
   if (signals.hasFeatureGraph || FEATURE_RE.test(text)) for (const t of FILE_FEATURE_TOOLS) wanted.add(t)

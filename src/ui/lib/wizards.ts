@@ -73,6 +73,10 @@ export const WIZARDS: WizardDef[] = [
   },
 ]
 
+export function wizardById(id: string): WizardDef | undefined {
+  return WIZARDS.find(w => w.id === id)
+}
+
 export function wizardsForFacet(facet: WizardDef['facet']): WizardDef[] {
   return WIZARDS.filter(w => w.facet === facet)
 }

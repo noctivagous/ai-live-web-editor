@@ -801,6 +801,36 @@ select.pill:disabled{cursor:default; opacity:.7}
 .aa-card .aa-tag { display: inline-block; margin-top: 5px; font-size: calc(10px * var(--ui-scale, 1)); text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-soft-text); }
 .aa-card .aa-reason { color: var(--text-strong); }
 .aa-foot { margin-top: 9px; font-size: calc(11px * var(--ui-scale, 1)); color: var(--text-soft); }
+/* Classic menu strip (Settings → User Interface → "Classic menu strip"):
+   Project · Agent Actions · Insert · Verify · Wizards · View · Settings ·
+   Help under the top bar. The wide pops reuse the .aa-menu card menus;
+   the list pops are classic rows with a title, a one-line sub, and a
+   right-hand tag. */
+.menu-strip { position: relative; z-index: 96; display: flex; align-items: center; gap: 2px; padding: 3px 10px; background: var(--panel-bg); border-bottom: 1px solid var(--border-soft); }
+/* No overflow clipping on the strip: the menu pops are absolutely
+   positioned children and must escape the bar's box. Narrow screens
+   wrap to two rows instead of scrolling. */
+@media (max-width: 860px) {
+  .menu-strip { flex-wrap: wrap; }
+  .ms-route { display: none; }
+}
+.menu-strip .ms-anchor { position: relative; flex: none; }
+.menu-strip .aa-menu { left: 0; right: auto; }
+.ms-btn { background: none; border: none; color: var(--text); font-family: inherit; font-size: calc(13px * var(--ui-scale, 1)); padding: 4px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.ms-btn:hover { background: var(--card-hover); color: var(--text-strong); }
+.ms-btn.open { background: var(--accent); color: #fff; }
+.ms-pop { position: absolute; left: 0; top: calc(100% + 4px); z-index: 97; width: 330px; max-width: 92vw; max-height: 74vh; overflow-y: auto; background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 5px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+.ms-pop .aa-group { margin: 7px 8px 4px; }
+.ms-row { display: flex; width: 100%; box-sizing: border-box; align-items: flex-start; gap: 6px; text-align: left; background: none; border: none; color: var(--text); padding: 6px 8px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+.ms-row:hover:not(:disabled) { background: var(--card-hover); color: var(--text-strong); }
+.ms-row:disabled { opacity: 0.45; cursor: default; }
+.ms-check { flex: none; width: 13px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--accent-soft-text); padding-top: 1px; }
+.ms-row-main { flex: 1; min-width: 0; }
+.ms-row-title { display: block; font-size: calc(12.5px * var(--ui-scale, 1)); font-weight: 600; }
+.ms-row-sub { display: block; font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--text-soft); margin-top: 1px; line-height: 1.35; }
+.ms-tag { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); color: var(--text-soft); margin-top: 2px; white-space: nowrap; }
+.ms-sep { height: 1px; background: var(--border-soft); margin: 5px 4px; }
+.ms-route { margin-left: auto; flex: none; font-size: calc(11px * var(--ui-scale, 1)); color: var(--text-soft); padding: 0 4px 0 12px; white-space: nowrap; }
 /* Actions palette (docked in the left pane) + ⌘K command search. */
 .ap-search { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid var(--border-soft); border-radius: 7px; color: var(--text); font-family: inherit; font-size: calc(12.5px * var(--ui-scale, 1)); padding: 7px 9px; }
 .ap-chips { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0 2px; }

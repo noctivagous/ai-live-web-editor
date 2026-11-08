@@ -25,6 +25,10 @@ export interface UiPrefs {
    * default (lib/themes uiScaleFor). The code editor has its own
    * font size below; this one is for the editor's own chrome. */
   uiFontSize: number
+  /** The classic menu strip (Project · Agent Actions · Insert ·
+   * Verify · Wizards · View · Settings · Help) under the top bar.
+   * On by default; Settings → User Interface turns it off. */
+  menuStrip: boolean
   chatView: ChatViewPref
   fileSort: FileSortPref
   fileShowHidden: boolean
@@ -43,6 +47,7 @@ export interface UiPrefs {
 export const UI_PREFS_DEFAULTS: UiPrefs = {
   uiTheme: 'dark-2020s',
   uiFontSize: UI_FONT_SIZE_DEFAULT,
+  menuStrip: true,
   chatView: 'chat',
   fileSort: 'name',
   fileShowHidden: false,
@@ -77,6 +82,7 @@ export function validateUiPrefs(value: unknown): UiPrefs {
   return {
     uiTheme: isUiThemeId(v.uiTheme) ? v.uiTheme : UI_PREFS_DEFAULTS.uiTheme,
     uiFontSize: clampInt(v.uiFontSize, UI_FONT_SIZE_MIN, UI_FONT_SIZE_MAX, UI_PREFS_DEFAULTS.uiFontSize),
+    menuStrip: v.menuStrip !== false,
     chatView: v.chatView === 'panel' ? 'panel' : 'chat',
     fileSort: v.fileSort === 'type' || v.fileSort === 'modified' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,

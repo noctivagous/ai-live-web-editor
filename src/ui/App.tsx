@@ -11,13 +11,14 @@ import { AgentActionsMenu } from './components/AgentActionsMenu'
 import { ActionsPalette } from './components/ActionsPalette'
 import { ActionCommandPalette } from './components/ActionCommandPalette'
 import { WizardsMenu } from './components/WizardsMenu'
+import { MenuStrip } from './components/MenuStrip'
 import { AddFeatureWizard } from './components/AddFeatureWizard'
 import { FileActionsMenu } from './components/FileActionsMenu'
 import { FacetView } from './components/FacetView'
 import { formatRoute, parseRoute, type AppLayout, type FacetId } from './lib/layoutRoute'
 import { themeById } from './lib/themes'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
-import { loadUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
+import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
 import { applyUiTheme } from './lib/themes'
 import { ImportProgressDialog, ImportReportDialog, OverLimitDialog, ReimportButton } from './components/FolderImport'
 import { SyncConflictsDialog, SyncStatusBar, type ConflictChoice, type ConflictItem } from './components/FolderSync'
@@ -1103,6 +1104,30 @@ export default function App() {
           <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
       </header>
+      {uiPrefsState.menuStrip && (
+        <MenuStrip
+          ctx={actionCtx}
+          route={route}
+          leftView={leftView}
+          uiTheme={uiPrefsState.uiTheme}
+          menuStripOn={uiPrefsState.menuStrip}
+          onNewProject={() => { void handleNewProject() }}
+          onImport={() => { void handleOpenFolder() }}
+          onOpenSync={() => { void handleOpenSync() }}
+          onSave={() => save()}
+          hasManifest={files.includes('project.ai.json')}
+          onOpenManifest={() => { void loadFile('project.ai.json') }}
+          onOpenLibrary={() => setLeftView('library')}
+          onOpenSettings={(section) => setSettingsAt(section)}
+          onOpenWizard={(id) => setWizard(id)}
+          onNavigate={navigate}
+          onLeftView={setLeftView}
+          onOpenCmdk={() => setCmdkOpen(true)}
+          onSetTheme={(id) => { saveUiPrefs({ uiTheme: id }) }}
+          onToggleMenuStrip={() => { saveUiPrefs({ menuStrip: !uiPrefsState.menuStrip }) }}
+          onAbout={() => setNotice('AI Live Editor — a local-first editor where the agent builds from menus, wizards and plans, not just chat.')}
+        />
+      )}
       {syncSession && syncSession.projectId === activeProject && (
         <SyncStatusBar
           dirName={syncSession.dirName}

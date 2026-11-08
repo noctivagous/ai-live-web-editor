@@ -50,6 +50,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'providers', title: 'AI Providers & Models', scope: 'global', custom: 'providers', keywords: 'api key connection model provider modality openai meta' },
   { id: 'search', title: 'Search & Research', scope: 'global', custom: 'search', keywords: 'brave web search research backend' },
   { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'chat view panel deck' },
+  { id: 'interface', title: 'User Interface', scope: 'device', keywords: 'menu bar menu strip classic menus top bar interface' },
   { id: 'themes', title: 'Themes', scope: 'device', custom: 'themes', keywords: 'theme color font size dark pro classic gray design tokens editor theme' },
   { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
   { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
@@ -88,6 +89,12 @@ export const SETTING_FIELDS: SettingField[] = [
     hint: 'Which presentation the chat pane opens in. Switching views in the chat header updates this.',
     options: [{ value: 'chat', label: 'Chat (scrolling)' }, { value: 'panel', label: 'Panel (stationary indicators)' }],
     keywords: 'deck panel stationary scrolling',
+  },
+  // User Interface — device prefs (uiPrefs instance).
+  {
+    id: 'menuStrip', section: 'interface', label: 'Classic menu strip', control: 'toggle', store: 'prefs',
+    hint: 'The Project · Agent Actions · Insert · Verify · Wizards · View · Settings · Help menu bar under the top bar. The same actions stay on the top-bar buttons and in the Actions pane either way.',
+    keywords: 'menu bar strip classic menus top bar',
   },
   {
     id: 'fileSort', section: 'files', label: 'File pane sort order', control: 'select', store: 'prefs',

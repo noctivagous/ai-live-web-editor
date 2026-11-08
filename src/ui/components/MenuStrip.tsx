@@ -9,6 +9,10 @@ import { SETTING_SECTIONS } from '../lib/settingsSchema'
 import { UI_THEMES, type UiThemeId } from '../lib/themes'
 import { AgentActionsMenu } from './AgentActionsMenu'
 import { WizardsMenu } from './WizardsMenu'
+import {
+  AgentActionsIcon, HelpIcon, InsertIcon, ProjectIcon,
+  SettingsIcon, VerifyIcon, ViewIcon, WizardsIcon,
+} from './menuIcons'
 
 /**
  * The classic menu strip (Settings → User Interface → "Classic menu
@@ -47,6 +51,17 @@ export interface MenuStripProps {
 
 const LABELS = ['Project', 'Agent Actions', 'Insert', 'Verify', 'Wizards', 'View', 'Settings', 'Help'] as const
 type MenuLabel = (typeof LABELS)[number]
+
+const MENU_ICONS = {
+  Project: ProjectIcon,
+  'Agent Actions': AgentActionsIcon,
+  Insert: InsertIcon,
+  Verify: VerifyIcon,
+  Wizards: WizardsIcon,
+  View: ViewIcon,
+  Settings: SettingsIcon,
+  Help: HelpIcon,
+} as const
 
 export function MenuStrip(props: MenuStripProps) {
   const [open, setOpen] = useState<MenuLabel | null>(null)
@@ -276,21 +291,25 @@ export function MenuStrip(props: MenuStripProps) {
 
   return (
     <div className="menu-strip" ref={rootRef} role="menubar" aria-label="Application menu bar" onPointerDown={e => e.stopPropagation()}>
-      {LABELS.map(label => (
-        <div className="ms-anchor" key={label}>
-          <button
-            type="button"
-            className={`ms-btn${open === label ? ' open' : ''}`}
-            aria-haspopup="menu"
-            aria-expanded={open === label}
-            onClick={() => setOpen(open === label ? null : label)}
-            onMouseEnter={() => { if (open && open !== label) setOpen(label) }}
-          >
-            {label === 'Agent Actions' || label === 'Wizards' ? <strong>{label}</strong> : label}
-          </button>
-          {open === label && pop(label)}
-        </div>
-      ))}
+      {LABELS.map(label => {
+        const Icon = MENU_ICONS[label]
+        return (
+          <div className="ms-anchor" key={label}>
+            <button
+              type="button"
+              className={`ms-btn${open === label ? ' open' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={open === label}
+              onClick={() => setOpen(open === label ? null : label)}
+              onMouseEnter={() => { if (open && open !== label) setOpen(label) }}
+            >
+              <Icon size={13} aria-hidden />
+              {label === 'Agent Actions' || label === 'Wizards' ? <strong>{label}</strong> : label}
+            </button>
+            {open === label && pop(label)}
+          </div>
+        )
+      })}
       <span className="ms-route mono" title="The current layout's route — layouts are deep-linkable">
         {formatRoute(props.route)}
       </span>

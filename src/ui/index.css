@@ -816,7 +816,8 @@ select.pill:disabled{cursor:default; opacity:.7}
 }
 .menu-strip .ms-anchor { position: relative; flex: none; }
 .menu-strip .aa-menu { left: 0; right: auto; }
-.ms-btn { background: none; border: none; color: var(--text); font-family: inherit; font-size: calc(13px * var(--ui-scale, 1)); padding: 4px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.ms-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--text); font-family: inherit; font-size: calc(13px * var(--ui-scale, 1)); padding: 4px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.ms-btn svg { flex-shrink: 0; }
 .ms-btn:hover { background: var(--card-hover); color: var(--text-strong); }
 .ms-btn.open { background: var(--accent); color: #fff; }
 .ms-pop { position: absolute; left: 0; top: calc(100% + 4px); z-index: 97; width: 330px; max-width: 92vw; max-height: 74vh; overflow-y: auto; background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 5px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }

@@ -24,6 +24,13 @@ function pushToServer(patch: Partial<UiPrefs>): void {
 
 export type ChatViewPref = 'chat' | 'panel' | 'stationary'
 export type FileSortPref = 'name' | 'name-desc' | 'type' | 'type-desc' | 'modified' | 'modified-asc'
+/** Menu layout: 'grid' = two-column card panels like Agent Actions and
+ * Wizards; 'list' = the classic single-column rows. */
+export type MenuLayoutPref = 'grid' | 'list'
+/** Header bar: 'buttons' = the top button bar only; 'classic' = the
+ * classic menu strip only (the AI connection/model selects move into
+ * it); 'both' = the strip under the button bar. */
+export type HeaderBarPref = 'buttons' | 'classic' | 'both'
 
 export interface UiPrefs {
   /** UI theme (Settings → Themes): a design-token set in lib/themes. */
@@ -32,10 +39,15 @@ export interface UiPrefs {
    * default (lib/themes uiScaleFor). The code editor has its own
    * font size below; this one is for the editor's own chrome. */
   uiFontSize: number
-  /** The classic menu strip (Project · Agent Actions · Insert ·
-   * Verify · Wizards · View · Settings · Help) under the top bar.
-   * On by default; Settings → User Interface turns it off. */
-  menuStrip: boolean
+  /** Which header bar(s) the app shows. Settings → Header Bar picks
+   * buttons, classic, or both; default buttons. */
+  headerBar: HeaderBarPref
+  menuLayout: MenuLayoutPref
+  /** Whether menu items show their description lines under the title.
+   * Off hides every `.ms-row-sub` and card blurb in menu pops, leaving
+   * titles (plus wizard/action tags and stub reasons) — Settings →
+   * Header Bar, on by default. */
+  menuDescriptions: boolean
   chatView: ChatViewPref
   fileSort: FileSortPref
   fileShowHidden: boolean
@@ -56,9 +68,11 @@ export interface UiPrefs {
 }
 
 export const UI_PREFS_DEFAULTS: UiPrefs = {
-  uiTheme: 'dark-2020s',
-  uiFontSize: UI_FONT_SIZE_DEFAULT,
-  menuStrip: true,
+  uiTheme: 'gray-pro-classic',
+  uiFontSize: 14,
+  headerBar: 'buttons',
+  menuLayout: 'grid',
+  menuDescriptions: true,
   chatView: 'stationary',
   fileSort: 'name',
   fileShowHidden: false,
@@ -93,7 +107,12 @@ export function validateUiPrefs(value: unknown): UiPrefs {
   return {
     uiTheme: isUiThemeId(v.uiTheme) ? v.uiTheme : UI_PREFS_DEFAULTS.uiTheme,
     uiFontSize: clampInt(v.uiFontSize, UI_FONT_SIZE_MIN, UI_FONT_SIZE_MAX, UI_PREFS_DEFAULTS.uiFontSize),
-    menuStrip: v.menuStrip !== false,
+    headerBar: v.headerBar === 'classic' ? 'classic' : v.headerBar === 'both' ? 'both' : v.headerBar === 'buttons' ? 'buttons'
+      // Legacy: the old menuStrip toggle. Strip on meant strip + buttons
+      // (both); off or absent falls through to the buttons default.
+      : v.menuStrip === true ? 'both' : 'buttons',
+    menuLayout: v.menuLayout === 'list' ? 'list' : 'grid',
+    menuDescriptions: v.menuDescriptions !== false,
     chatView: v.chatView === 'panel' ? 'panel' : v.chatView === 'chat' ? 'chat' : 'stationary',
     fileSort: v.fileSort === 'name-desc' || v.fileSort === 'type' || v.fileSort === 'type-desc' || v.fileSort === 'modified' || v.fileSort === 'modified-asc' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,

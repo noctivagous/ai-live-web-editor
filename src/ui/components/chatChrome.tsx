@@ -80,8 +80,8 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
               : ''}
         </span>
       )}
-      <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ marginLeft: 'auto' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
-      <ButtonGrid style={{ flex: '1 1 240px' }}>
+      <div className="chat-viewbox" role="group" aria-label="Chat actions and view" style={{ flex: '1 1 100%' }}>
+      <ButtonGrid>
       <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>
       {showDeckButton && (
         <button type="button" className="deck-btn btn-icon" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}><Layers size={12} />Deck</button>
@@ -94,6 +94,8 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
         </>
       )}
       </ButtonGrid>
+      </div>
+      <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ maxWidth: 'min(320px, 100%)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
       {sending && (
         <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           <span className="dot" />{workingLabel || 'working'}

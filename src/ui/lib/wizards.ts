@@ -84,6 +84,22 @@ export function wizardsForFacet(facet: WizardDef['facet']): WizardDef[] {
 export const STUB_REASON = 'Wizard not built yet'
 
 /**
+ * Shared presentation state for a wizard menu row. Stubs render greyed
+ * with the reason (in `title` for the tooltip and `sub` for the row);
+ * ready wizards render enabled with their blurb. Every menu that lists
+ * a wizard — classic strip, top-bar pops, facet views — reads this so
+ * a stub can never look runnable in one menu and greyed in another.
+ */
+export function wizardRowState(w: WizardDef): { disabled: boolean, title: string, sub: string } {
+  const stub = w.status === 'stub'
+  return {
+    disabled: stub,
+    title: stub ? `${w.title} — ${STUB_REASON}` : w.title,
+    sub: stub ? STUB_REASON : w.blurb,
+  }
+}
+
+/**
  * The quick-add turn for a feature pack: the Library's proven install
  * prompt, plus the quick-add contract — the pack's stated defaults
  * are accepted up front, so the turn runs end to end with no

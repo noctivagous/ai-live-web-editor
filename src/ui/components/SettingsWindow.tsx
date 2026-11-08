@@ -221,6 +221,20 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
           {f.control === 'toggle' && (
             <input id={`set-${f.id}`} type="checkbox" checked={v as boolean} onChange={e => void applyField(f, e.target.checked)} />
           )}
+          {f.control === 'segmented' && (
+            <div className="layout-switch" role="group" aria-label={f.label} id={`set-${f.id}`}>
+              {f.options!.map(o => (
+                <button
+                  key={o.value} type="button"
+                  className={(v as string) === o.value ? 'on' : ''}
+                  aria-pressed={(v as string) === o.value}
+                  onClick={() => void applyField(f, o.value)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
           {f.control === 'slider' && (
             <span className="set-slider">
               <input id={`set-${f.id}`} type="range" min={f.min} max={f.max} step={1} value={v as string} onChange={e => void applyField(f, e.target.value)} />
@@ -578,7 +592,18 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
             Stored in this project's project.ai.json. {designated ? 'This project is designated.' : 'This project is not designated.'} The Preview bar reflects changes within a few seconds.
           </div>
         )}
-        {fieldsForSection(s.id).map(fieldRow)}
+        {(() => {
+          const rows: React.ReactNode[] = []
+          let lastGroup: string | undefined
+          for (const f of fieldsForSection(s.id)) {
+            if (f.group !== lastGroup) {
+              lastGroup = f.group
+              if (f.group) rows.push(<div key={`group-${f.group}`} className="aa-group">{f.group}</div>)
+            }
+            rows.push(fieldRow(f))
+          }
+          return rows
+        })()}
       </div>
     )
   }

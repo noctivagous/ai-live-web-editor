@@ -396,6 +396,9 @@ select.pill:disabled{cursor:default; opacity:.7}
 .seg button svg{flex-shrink:0}
 .seg button.on{background:var(--button-bg-primary); color:var(--on-primary)}
 .seg button:disabled{opacity:.45; cursor:default}
+/* Chat view switcher box: the Clear/Deck/Stationary/Stream/Panel buttons
+   in their own recessed outline container (well tokens, like inputs). */
+.chat-viewbox { background: var(--well); box-shadow: var(--well-shadow); border: 1px solid var(--border); border-radius: 10px; padding: 5px; }
 .sketch-panel{
   padding:8px 12px 10px; border-bottom:1px solid var(--border-soft);
   display:flex; flex-direction:column; gap:6px;
@@ -868,9 +871,6 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
 .deck-btn.danger:hover { background: rgba(239,68,68,.12); }
 
 /* Settings: top-bar menu + window (rail sections over the settings model). */
-.set-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 97; min-width: 230px; background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; }
-.set-menu button { text-align: left; background: none; border: none; color: var(--text); font-size: calc(12.5px * var(--ui-scale, 1)); padding: 7px 10px; border-radius: 6px; cursor: pointer; font-family: inherit; }
-.set-menu button:hover { background: var(--card-hover); color: var(--text-strong); }
 /* Agent Actions menu: a two-column grid of pressable cards — the menu
    is a small palette, not a single-column text list. */
 .aa-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 97; width: 520px; max-width: 92vw; max-height: 72vh; overflow-y: auto; background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 6px 10px 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
@@ -915,7 +915,38 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
 .ms-row-sub { display: block; font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--text-soft); margin-top: 1px; line-height: 1.35; }
 .ms-tag { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); color: var(--text-soft); margin-top: 2px; white-space: nowrap; }
 .ms-sep { height: 1px; background: var(--border-soft); margin: 5px 4px; }
+/* Grid variant: the same pop rows as two-column cards, like the Agent
+   Actions and Wizards menus. A `menuLayout` pref toggles it; list mode
+   is the untouched default above. */
+.ms-pop.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start; width: 560px; }
+.ms-pop.grid > .aa-group, .ms-pop.grid > .ms-sep { grid-column: 1 / -1; }
+.ms-pop.grid > .ms-sep { margin: 2px 4px; }
+.ms-pop.grid > .ms-row { display: block; background: var(--card); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px 10px; }
+.ms-pop.grid > .ms-row:hover:not(:disabled) { background: var(--card-hover); }
+.ms-pop.grid > .ms-row.on { border-color: var(--border-strong); }
+.ms-pop.grid > .ms-row .ms-check { display: none; }
+.ms-pop.right { left: auto; right: 0; }
+/* Settings → Header Bar → Show description lines (off): menu pops show
+   titles only. Tags (wizard, writes files) and stub reasons stay; only
+   the description lines go — `.ms-row-sub` in list pops and the blurb
+   span in card pops (both classic-strip and top-bar surfaces). */
+.hide-menu-desc .ms-pop .ms-row-sub,
+.hide-menu-desc .aa-menu .aa-card > span:not(.aa-reason):not(.aa-tag) { display: none; }
+.ms-caret, .deck-caret { opacity: 0.55; flex-shrink: 0; }
+.ms-btn .ms-caret { margin-left: 2px; }
 .ms-route { margin-left: auto; flex: none; font-size: calc(11px * var(--ui-scale, 1)); color: var(--text-soft); padding: 0 4px 0 12px; white-space: nowrap; }
+/* Fixed-width status capsule (file count / process indicator): sized to
+   "000 files" in the mono face so neighbors never shift, with longer
+   statuses clipped. On change the outgoing text scrolls left and out
+   (ticker), revealing the incoming text underneath. */
+.pill.tick { width: calc(9ch + 33px); flex: none; }
+.pill.tick .tick-view { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+.pill.tick .tick-cur { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill.tick .tick-old { position: absolute; inset: 0; white-space: nowrap; background: var(--card); animation: tick-out .45s ease-in forwards; }
+@keyframes tick-out { to { transform: translateX(-110%); } }
+@media (prefers-reduced-motion: reduce) {
+  .pill.tick .tick-old { animation: none; display: none; }
+}
 /* Actions palette (docked in the left pane) + ⌘K command search. */
 .ap-search { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid var(--border-soft); border-radius: 7px; color: var(--text); font-family: inherit; font-size: calc(12.5px * var(--ui-scale, 1)); padding: 7px 9px; }
 .ap-chips { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0 2px; }

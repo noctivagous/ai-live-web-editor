@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STUB_REASON, WIZARD_FACETS, WIZARDS, quickAddPrompt, wizardsForFacet } from './wizards.js'
+import { STUB_REASON, WIZARD_FACETS, WIZARDS, quickAddPrompt, wizardById, wizardRowState, wizardsForFacet } from './wizards.js'
 import type { PackSummaryItem } from './api.js'
 
 describe('wizards registry', () => {
@@ -26,6 +26,19 @@ describe('wizards registry', () => {
     assert.deepEqual(ready.map(w => w.id), ['add-feature'])
     assert.equal(ready[0].facet, 'features')
     assert.ok(STUB_REASON.length > 0)
+  })
+
+  it('wizardRowState greys stubs with the reason, enables ready wizards', () => {
+    const stub = wizardById('new-project')
+    assert.ok(stub, 'new-project exists')
+    assert.deepEqual(wizardRowState(stub), {
+      disabled: true,
+      title: `${stub.title} — ${STUB_REASON}`,
+      sub: STUB_REASON,
+    })
+    const ready = wizardById('add-feature')
+    assert.ok(ready, 'add-feature exists')
+    assert.deepEqual(wizardRowState(ready), { disabled: false, title: ready.title, sub: ready.blurb })
   })
 
   it('quickAddPrompt carries the pack identity and the no-questions contract', () => {

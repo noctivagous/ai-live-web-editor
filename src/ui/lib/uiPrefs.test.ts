@@ -34,6 +34,26 @@ describe('uiPrefs', () => {
     const partial = validateUiPrefs({ chatView: 'panel', fileSort: 'bogus' })
     assert.equal(partial.chatView, 'panel')
     assert.equal(partial.fileSort, 'name')
+    assert.equal(validateUiPrefs({}).menuLayout, 'grid')
+    assert.equal(validateUiPrefs({ menuLayout: 'list' }).menuLayout, 'list')
+    assert.equal(validateUiPrefs({ menuLayout: 'bogus' }).menuLayout, 'grid')
+  })
+
+  it('headerBar defaults to buttons, validates, and honors the legacy toggle', () => {
+    assert.equal(validateUiPrefs({}).headerBar, 'buttons')
+    assert.equal(validateUiPrefs({ headerBar: 'classic' }).headerBar, 'classic')
+    assert.equal(validateUiPrefs({ headerBar: 'both' }).headerBar, 'both')
+    assert.equal(validateUiPrefs({ headerBar: 'bogus' }).headerBar, 'buttons')
+    // Legacy menuStrip: on meant strip + buttons; off/absent is buttons.
+    assert.equal(validateUiPrefs({ menuStrip: true }).headerBar, 'both')
+    assert.equal(validateUiPrefs({ menuStrip: false }).headerBar, 'buttons')
+    assert.equal(validateUiPrefs({ headerBar: 'classic', menuStrip: true }).headerBar, 'classic')
+  })
+
+  it('menuDescriptions is on unless explicitly false', () => {
+    assert.equal(validateUiPrefs({}).menuDescriptions, true)
+    assert.equal(validateUiPrefs({ menuDescriptions: false }).menuDescriptions, false)
+    assert.equal(validateUiPrefs({ menuDescriptions: 'yes' }).menuDescriptions, true)
   })
 
 })
@@ -67,20 +87,20 @@ describe('uiPrefs editor fields + replace', () => {
 })
 
 describe('uiPrefs theme fields', () => {
-  it('defaults to dark-2020s at the default font size', () => {
+  it('defaults to gray-pro-classic at 14px', () => {
     const d = validateUiPrefs({})
-    assert.equal(d.uiTheme, 'dark-2020s')
-    assert.equal(d.uiFontSize, 13)
+    assert.equal(d.uiTheme, 'gray-pro-classic')
+    assert.equal(d.uiFontSize, 14)
   })
 
   it('keeps a valid theme and clamps the UI font size to 11–16', () => {
     assert.equal(validateUiPrefs({ uiTheme: 'dark-pro-classic' }).uiTheme, 'dark-pro-classic')
     assert.equal(validateUiPrefs({ uiTheme: 'gray-pro-classic' }).uiTheme, 'gray-pro-classic')
-    assert.equal(validateUiPrefs({ uiTheme: 'vs-dark' }).uiTheme, 'dark-2020s')
+    assert.equal(validateUiPrefs({ uiTheme: 'vs-dark' }).uiTheme, 'gray-pro-classic')
     assert.equal(validateUiPrefs({ uiFontSize: 16 }).uiFontSize, 16)
     assert.equal(validateUiPrefs({ uiFontSize: 99 }).uiFontSize, 16)
     assert.equal(validateUiPrefs({ uiFontSize: 4 }).uiFontSize, 11)
-    assert.equal(validateUiPrefs({ uiFontSize: 'big' }).uiFontSize, 13)
+    assert.equal(validateUiPrefs({ uiFontSize: 'big' }).uiFontSize, 14)
   })
 
   it('round-trips theme fields through the store', () => {

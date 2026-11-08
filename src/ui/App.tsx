@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { AppWindow, ChevronDown, ChevronRight, Expand, FileCog, FolderOpen, Import, Layers, LayoutDashboard, LibraryBig, Maximize2, Network, Plus, Save, Settings, SquareArrowOutUpRight, Wand2, X, Zap } from 'lucide-react'
+import { AppWindow, ChevronDown, ChevronRight, Expand, FileCog, FolderOpen, Layers, LayoutDashboard, LibraryBig, Maximize2, Network, Settings, SquareArrowOutUpRight, Wand2, X, Zap } from 'lucide-react'
 import { FileTree } from './components/FileTree'
 import { Library } from './components/Library'
 import { MonacoEditor } from './components/MonacoEditor'
@@ -11,12 +11,16 @@ import { AgentActionsMenu } from './components/AgentActionsMenu'
 import { ActionsPalette } from './components/ActionsPalette'
 import { ActionCommandPalette } from './components/ActionCommandPalette'
 import { WizardsMenu } from './components/WizardsMenu'
+import { InsertIcon, HelpIcon, CaretIcon, ProjectIcon } from './components/menuIcons'
+import { actionAvailability, actionById } from './lib/agentActions'
+import { runAction } from './lib/actionDispatch'
+import { wizardById, wizardRowState } from './lib/wizards'
 import { MenuStrip } from './components/MenuStrip'
 import { ButtonGrid } from './components/ButtonGrid'
 import { AddFeatureWizard } from './components/AddFeatureWizard'
 import { FileActionsMenu } from './components/FileActionsMenu'
 import { FacetView } from './components/FacetView'
-import { FACET_IDS, FACET_TITLES, formatRoute, parseRoute, type AppLayout, type FacetId, type RouteModal } from './lib/layoutRoute'
+import { formatRoute, parseRoute, type AppLayout, type FacetId, type RouteModal } from './lib/layoutRoute'
 import { themeById } from './lib/themes'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
@@ -58,6 +62,30 @@ function connTone(status: string): string {
   if (status.startsWith('real FS:')) return 'good'
   if (status.startsWith('Failed') || status.startsWith('connecting')) return status.startsWith('Failed') ? 'bad' : ''
   return ''
+}
+
+/**
+ * Fixed-width status text with a ticker transition: the capsule never
+ * changes width (sized to "000 files"), so neighbors don't shift when
+ * the count or status changes. On change the outgoing text scrolls
+ * left and out, revealing the incoming text underneath it.
+ */
+function TickerText({ text }: { text: string }) {
+  const [state, setState] = useState({ shown: text, leaving: null as string | null })
+  useEffect(() => {
+    setState(s => (s.shown === text ? s : { shown: text, leaving: s.shown }))
+  }, [text])
+  useEffect(() => {
+    if (state.leaving === null) return
+    const t = setTimeout(() => setState(s => ({ ...s, leaving: null })), 450)
+    return () => clearTimeout(t)
+  }, [state.leaving])
+  return (
+    <span className="tick-view" aria-hidden={false}>
+      {state.leaving !== null && <span key="old" className="tick-old">{state.leaving}</span>}
+      <span key="new" className="tick-cur">{state.shown}</span>
+    </span>
+  )
 }
 
 export default function App() {
@@ -103,6 +131,15 @@ export default function App() {
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   // Wizards (slice 3): the per-facet Wizards menu + the open wizard.
   const [wizardsMenuOpen, setWizardsMenuOpen] = useState(false)
+  // Top-bar Insert + Help dropdowns: the same registry rows as the
+  // classic menu strip's pops, so the bar has menu parity when the
+  // strip is off.
+  const [insertOpen, setInsertOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [projectOpen, setProjectOpen] = useState(false)
+  // Top-bar Project menu: the classic Project menu's rows in the bar, so
+  // New/Import/Open/Save live in one dropdown instead of four buttons.
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [wizard, setWizard] = useState<string | null>(null)
   // Context palette (slice 4): the preview mark lives in the launcher
   // workflow state; App mirrors it so page-context actions know
@@ -186,6 +223,54 @@ export default function App() {
     window.addEventListener('pointerdown', close)
     return () => window.removeEventListener('pointerdown', close)
   }, [wizardsMenuOpen])
+  useEffect(() => {
+    if (!insertOpen) return
+    const close = () => setInsertOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [insertOpen])
+  useEffect(() => {
+    if (!helpOpen) return
+    const close = () => setHelpOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [helpOpen])
+  useEffect(() => {
+    if (!projectOpen) return
+    const close = () => setProjectOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [projectOpen])
+  useEffect(() => {
+    if (!projectMenuOpen) return
+    const close = () => setProjectMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [projectMenuOpen])
+
+  /** One registry row for the top-bar Insert dropdown (mirrors the strip). */
+  function insertActionRow(id: string) {
+    const a = actionById(id)
+    if (!a) return null
+    const v = actionAvailability(a, actionCtx)
+    return (
+      <button
+        key={a.id}
+        type="button"
+        role="menuitem"
+        className="ms-row"
+        disabled={!v.available}
+        title={v.available ? a.title : `${a.title} — ${v.reason ?? ''}`}
+        onClick={() => { setInsertOpen(false); runAction(a, actionCtx, { openLibrary: () => setLeftView('library'), openSettings }) }}
+      >
+        <span className="ms-row-main">
+          <span className="ms-row-title">{a.title.replace(/…$/, '')}</span>
+          <span className="ms-row-sub">{v.available ? a.blurb : (v.reason ?? a.blurb)}</span>
+        </span>
+        {a.writes && <span className="ms-tag">writes files</span>}
+      </button>
+    )
+  }
 
   const [config, setConfig] = useState<LauncherConfig | null>(null)
   const [editorTheme, setEditorTheme] = useState(() => localStorage.getItem(EDITOR_THEME_KEY) || 'vs-dark')
@@ -195,12 +280,25 @@ export default function App() {
     window.addEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
     return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
   }, [])
+  // Grid or list for the top-bar dropdowns — same pref as the strip pops.
+  const menuGrid = uiPrefsState.menuLayout !== 'list'
+  const insertPopClass = menuGrid ? 'ms-pop grid' : 'ms-pop'
+  const rightPopClass = menuGrid ? 'ms-pop grid right' : 'ms-pop'
   // Settings → Themes: the theme + UI font size live on the document
   // root (data-ui-theme selects the token block in index.css;
   // --ui-scale multiplies every CSS font size).
   useEffect(() => {
     applyUiTheme(uiPrefsState.uiTheme, uiPrefsState.uiFontSize)
   }, [uiPrefsState.uiTheme, uiPrefsState.uiFontSize])
+  // Settings → Header Bar → Show description lines: off hides the
+  // description line under every menu-pop item (titles, tags, and
+  // stub reasons stay). One root class, so every menu surface —
+  // classic strip pops and top-bar pops — follows it.
+  useEffect(() => {
+    try {
+      document.documentElement.classList.toggle('hide-menu-desc', !uiPrefsState.menuDescriptions)
+    } catch { /* non-DOM test env */ }
+  }, [uiPrefsState.menuDescriptions])
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
   // App settings converge on boot: the server's SQLite store is the
   // source of truth and overwrites this browser's cache. No migration:
@@ -1121,17 +1219,72 @@ export default function App() {
   const hasKey = Boolean(config?.hasApiKey ?? config?.hasOpenAiKey)
   const keyTone = config === null ? '' : hasKey ? 'good' : 'warn'
 
+  /** The AI connection/model selects. They live in the top bar's AI
+   * segment, except in classic-only header mode where the same node
+   * renders in the classic strip's trailing slot. */
+  function renderAiSelects() {
+    return activeConn ? (
+      <>
+        <select
+          className={`pill mono ${keyTone}`}
+          value={activeConn.id}
+          onChange={e => { void handleConnection(e.target.value) }}
+          title="Provider connection"
+          style={{ maxWidth: 190 }}
+        >
+          {(connPayload?.connections || []).map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          className={`pill mono ${keyTone}`}
+          value={activeConn.model}
+          onChange={e => { void handleModel(e.target.value) }}
+          title="Chat model"
+          style={{ maxWidth: 220 }}
+        >
+          {!activeConn.verifiedModels.some(m => m.id === activeConn.model) && (
+            <option value={activeConn.model}>{activeConn.model}</option>
+          )}
+          {activeConn.verifiedModels
+            .filter(m => m.modalities.includes('text'))
+            .map(m => (
+              <option key={m.id} value={m.id}>{m.id}</option>
+            ))}
+        </select>
+      </>
+    ) : (
+      <select
+        className={`pill mono ${keyTone}`}
+        value={hasKey ? (config?.modelName || '') : ''}
+        disabled={!hasKey}
+        onChange={e => { void handleModel(e.target.value) }}
+        title="Chat model"
+      >
+        {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
+        {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
+          <option value={config.modelName}>{config.modelName}</option>
+        )}
+        {models.map(m => (
+          <option key={m} value={m}>{m}</option>
+        ))}
+      </select>
+    )
+  }
+
   return (
     <div className="deck-app">
       {!setupDone && <SetupWizard onDone={finishSetup} />}
 
-      {uiPrefsState.menuStrip && (
+      {uiPrefsState.headerBar !== 'buttons' && (
         <MenuStrip
           ctx={actionCtx}
           route={route}
           leftView={leftView}
           uiTheme={uiPrefsState.uiTheme}
-          menuStripOn={uiPrefsState.menuStrip}
+          menuLayout={uiPrefsState.menuLayout}
+          headerBar={uiPrefsState.headerBar}
+          trailing={uiPrefsState.headerBar === 'classic' ? renderAiSelects() : undefined}
           onNewProject={() => { void handleNewProject() }}
           onImport={() => { void handleOpenFolder() }}
           onOpenSync={() => { void handleOpenSync() }}
@@ -1145,79 +1298,133 @@ export default function App() {
           onLeftView={setLeftView}
           onOpenCmdk={() => setCmdkOpen(true)}
           onSetTheme={(id) => { saveUiPrefs({ uiTheme: id }) }}
-          onToggleMenuStrip={() => { saveUiPrefs({ menuStrip: !uiPrefsState.menuStrip }) }}
+          onSetHeaderBar={(h) => { saveUiPrefs({ headerBar: h }) }}
           onAbout={() => setNotice('AI Live Editor — a local-first editor where the agent builds from menus, wizards and plans, not just chat.')}
         />
       )}
+      {uiPrefsState.headerBar !== 'classic' && (
       <header className="topbar">
-        <div className="bar-seg" role="group" aria-label="Layout and facet">
+        <div className="bar-seg" role="group" aria-label="Layout">
           <div className="layout-switch" role="group" aria-label="Layout">
             <button type="button" className={route.kind === 'workbench' ? 'on' : ''} onClick={() => navigate({ kind: 'workbench' })} title="The workbench layout: files, editor, preview"><LayoutDashboard size={13} />Workbench</button>
             <button type="button" className={route.kind === 'facets' ? 'on' : ''} onClick={() => navigate({ kind: 'facets', facet: lastFacet })} title="The facets layout: one screen per facet — state, actions, wizards"><Layers size={13} />Facets</button>
           </div>
-          <select
-            className="deck-btn"
-            value={route.kind === 'facets' ? route.facet : lastFacet}
-            onChange={e => navigate({ kind: 'facets', facet: e.target.value as FacetId })}
-            title="Which facet is shown"
-            style={{ maxWidth: 150 }}
-          >
-            {FACET_IDS.map(f => (
-              <option key={f} value={f}>{FACET_TITLES[f]}</option>
-            ))}
-          </select>
         </div>
         <div className="toolbar bar-seg" aria-label="Project and files" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span className={`pill mono ${connTone(status)}`} title={status}>
-            <span className="dot" />{status.startsWith('real FS:') ? status.replace(/^real FS: (\d+ files) @ .*$/, '$1') : status.slice(0, 42)}
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(false); setInsertOpen(false); setHelpOpen(false); setProjectOpen(false); setProjectMenuOpen(o => !o) }} title="Project — new, open, import, save" aria-haspopup="menu" aria-expanded={projectMenuOpen}><ProjectIcon size={13} />Project<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
+            {projectMenuOpen && (
+              <div className={insertPopClass} role="menu" aria-label="Project">
+                <div className="aa-group">Project</div>
+                <button type="button" role="menuitem" className="ms-row" onClick={() => { setProjectMenuOpen(false); void handleNewProject() }}>
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">New project</span>
+                    <span className="ms-row-sub">Create a new app under projects/</span>
+                  </span>
+                </button>
+                <button type="button" role="menuitem" className="ms-row" onClick={() => { setProjectMenuOpen(false); void handleOpenSync() }}>
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Open…</span>
+                    <span className="ms-row-sub">Pick a folder and keep it in live two-way sync</span>
+                  </span>
+                </button>
+                <button type="button" role="menuitem" className="ms-row" onClick={() => { setProjectMenuOpen(false); void handleOpenFolder() }}>
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Import…</span>
+                    <span className="ms-row-sub">Import a copy of a folder as a new project</span>
+                  </span>
+                </button>
+                <div className="ms-sep" />
+                {(() => {
+                  const w = wizardById('new-project')
+                  if (!w) return null
+                  const s = wizardRowState(w)
+                  return (
+                    <button key={w.id} type="button" role="menuitem" className="ms-row" disabled={s.disabled} title={s.title} onClick={() => { setProjectMenuOpen(false); setWizard(w.id) }}>
+                      <span className="ms-row-main">
+                        <span className="ms-row-title">{w.title}</span>
+                        <span className="ms-row-sub">{s.sub}</span>
+                      </span>
+                      <span className="ms-tag">wizard</span>
+                    </button>
+                  )
+                })()}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ms-row"
+                  disabled={!files.includes('project.ai.json')}
+                  title={!files.includes('project.ai.json') ? `Edit project.ai.json… — ${actionCtx.hasProject ? 'This project has no project.ai.json' : 'Open a project first'}` : 'Edit project.ai.json…'}
+                  onClick={() => { setProjectMenuOpen(false); void loadFile('project.ai.json') }}
+                >
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Edit project.ai.json…</span>
+                    <span className="ms-row-sub">{files.includes('project.ai.json') ? 'The project manifest — type, format, targets, style set' : (actionCtx.hasProject ? 'This project has no project.ai.json' : 'Open a project first')}</span>
+                  </span>
+                </button>
+                <div className="ms-sep" />
+                <button type="button" role="menuitem" className="ms-row" onClick={() => { setProjectMenuOpen(false); save() }}>
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Save</span>
+                    <span className="ms-row-sub">The editor autosaves as you type, too</span>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button
+              className="deck-btn"
+              style={{ maxWidth: 180 }}
+              onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(false); setInsertOpen(false); setHelpOpen(false); setProjectMenuOpen(false); setProjectOpen(o => !o) }}
+              title={activeProject || 'Active project'}
+              aria-haspopup="menu"
+              aria-expanded={projectOpen}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeProject || 'no projects'}</span>
+              <CaretIcon size={11} aria-hidden className="deck-caret" />
+            </button>
+            {projectOpen && (
+              <div className="ms-pop" role="menu" aria-label="Active project">
+                {projects.length === 0 && <div className="aa-group">No projects yet</div>}
+                {projects.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={p.id === activeProject}
+                    className={`ms-row${p.id === activeProject ? ' on' : ''}`}
+                    onClick={() => { setProjectOpen(false); void handleSelectProject(p.id) }}
+                  >
+                    <span className="ms-check" aria-hidden="true">{p.id === activeProject ? '✓' : ''}</span>
+                    <span className="ms-row-main">
+                      <span className="ms-row-title">{p.id}</span>
+                      {p.setup && p.setup.kind !== 'ready' && <span className="ms-row-sub">Not set up</span>}
+                    </span>
+                  </button>
+                ))}
+                <div className="ms-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ms-row"
+                  onClick={() => { setProjectOpen(false); void loadProjects(); void loadFiles() }}
+                >
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Refresh list</span>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+          <span className={`pill mono tick ${connTone(status)}`} title={status}>
+            <span className="dot" /><TickerText text={status.startsWith('real FS:') ? status.replace(/^real FS: (\d+ files) @ .*$/, '$1') : status.slice(0, 42)} />
           </span>
-          <select
-            className="deck-btn"
-            value={activeProject}
-            onChange={e => {
-              const id = e.target.value
-              if (id === '__refresh') {
-                void loadProjects()
-                void loadFiles()
-                return
-              }
-              void handleSelectProject(id)
-            }}
-            title="Active project"
-            style={{ maxWidth: 180 }}
-          >
-            {projects.length === 0 && <option value="">no projects</option>}
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.id}{p.setup && p.setup.kind !== 'ready' ? ' — not set up' : ''}</option>
-            ))}
-            <hr />
-            <option value="__refresh">Refresh list</option>
-          </select>
-          <button className="deck-btn" onClick={() => { void handleNewProject() }} title="Create a new app under projects/"><Plus size={13} />New project</button>
-          <button
-            className="deck-btn"
-            onClick={() => { void handleOpenFolder() }}
-            title={isFolderImportSupported()
-              ? 'Pick a folder on your disk (Chrome/Edge/Opera) — imports a copy as a new project'
-              : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
-          >
-            <Import size={13} />Import…
-          </button>
-          <button
-            className="deck-btn"
-            onClick={() => { void handleOpenSync() }}
-            title={isFolderImportSupported()
-              ? 'Pick a folder and keep it in live two-way sync with the project (Chrome/Edge/Opera)'
-              : 'Folder picker needs Chrome, Edge, or Opera on desktop'}
-          >
-            <FolderOpen size={13} />Open…
-          </button>
           <ReimportButton projectId={activeProject} suppress={syncSession?.projectId === activeProject} onPick={(getFolder) => { void handleReimport(getFolder) }} />
-          <button className="deck-btn" onClick={() => save()}><Save size={13} />Save</button>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
-            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setWizardsMenuOpen(false); setActionsMenuOpen(o => !o) }} title="Agent Actions — start work from a menu instead of typing a command" aria-haspopup="menu" aria-expanded={actionsMenuOpen}><Zap size={13} />Agent Actions</button>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setWizardsMenuOpen(false); setInsertOpen(false); setHelpOpen(false); setProjectOpen(false); setProjectMenuOpen(false); setActionsMenuOpen(o => !o) }} title="Agent Actions — start work from a menu instead of typing a command" aria-haspopup="menu" aria-expanded={actionsMenuOpen}><Zap size={13} />Agent Actions<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
             {actionsMenuOpen && (
               <AgentActionsMenu
                 ctx={actionCtx}
@@ -1228,7 +1435,7 @@ export default function App() {
             )}
           </div>
           <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
-            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(o => !o) }} title="Wizards — guided changes, grouped by facet" aria-haspopup="menu" aria-expanded={wizardsMenuOpen}><Wand2 size={13} />Wizards</button>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(o => !o); setInsertOpen(false); setHelpOpen(false); setProjectOpen(false); setProjectMenuOpen(false) }} title="Wizards — guided changes, grouped by facet" aria-haspopup="menu" aria-expanded={wizardsMenuOpen}><Wand2 size={13} />Wizards<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
             {wizardsMenuOpen && (
               <WizardsMenu
                 onOpenWizard={(id) => setWizard(id)}
@@ -1236,61 +1443,110 @@ export default function App() {
               />
             )}
           </div>
-          <div className="bar-seg" role="group" aria-label="AI settings" style={{ marginLeft: 'auto' }}>
-            {activeConn ? (
-              <>
-                <select
-                  className={`pill mono ${keyTone}`}
-                  value={activeConn.id}
-                  onChange={e => { void handleConnection(e.target.value) }}
-                  title="Provider connection"
-                  style={{ maxWidth: 190 }}
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(false); setHelpOpen(false); setProjectOpen(false); setProjectMenuOpen(false); setInsertOpen(o => !o) }} title="Insert — the catalog ladder: component → template → pack" aria-haspopup="menu" aria-expanded={insertOpen}><InsertIcon size={13} />Insert<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
+            {insertOpen && (
+              <div className={insertPopClass} role="menu" aria-label="Insert">
+                <div className="aa-group">The catalog ladder — component → template → pack</div>
+                {insertActionRow('add-component')}
+                {insertActionRow('install-pack')}
+                <div className="ms-sep" />
+                {(() => {
+                  const w = wizardById('add-feature')
+                  if (!w) return null
+                  const s = wizardRowState(w)
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      role="menuitem"
+                      className="ms-row"
+                      disabled={s.disabled}
+                      title={s.title}
+                      onClick={() => { setInsertOpen(false); setWizard(w.id) }}
+                    >
+                      <span className="ms-row-main">
+                        <span className="ms-row-title">{w.title}</span>
+                        <span className="ms-row-sub">{s.sub}</span>
+                      </span>
+                      <span className="ms-tag">wizard</span>
+                    </button>
+                  )
+                })()}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ms-row"
+                  onClick={() => { setInsertOpen(false); navigate({ kind: 'workbench' }); setLeftView('library') }}
                 >
-                  {(connPayload?.connections || []).map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <select
-                  className={`pill mono ${keyTone}`}
-                  value={activeConn.model}
-                  onChange={e => { void handleModel(e.target.value) }}
-                  title="Chat model"
-                  style={{ maxWidth: 220 }}
-                >
-                  {!activeConn.verifiedModels.some(m => m.id === activeConn.model) && (
-                    <option value={activeConn.model}>{activeConn.model}</option>
-                  )}
-                  {activeConn.verifiedModels
-                    .filter(m => m.modalities.includes('text'))
-                    .map(m => (
-                      <option key={m.id} value={m.id}>{m.id}</option>
-                    ))}
-                </select>
-              </>
-            ) : (
-              <select
-                className={`pill mono ${keyTone}`}
-                value={hasKey ? (config?.modelName || '') : ''}
-                disabled={!hasKey}
-                onChange={e => { void handleModel(e.target.value) }}
-                title="Chat model"
-              >
-                {!hasKey && <option value="">{config ? 'no API key' : 'config…'}</option>}
-                {hasKey && (config?.modelName && !models.includes(config.modelName)) && (
-                  <option value={config.modelName}>{config.modelName}</option>
-                )}
-                {models.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Open the Library</span>
+                    <span className="ms-row-sub">All three tiers of the catalog</span>
+                  </span>
+                </button>
+              </div>
             )}
+          </div>
+          <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
+            <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(false); setInsertOpen(false); setProjectOpen(false); setProjectMenuOpen(false); setHelpOpen(o => !o) }} title="Help — search, shortcuts, about" aria-haspopup="menu" aria-expanded={helpOpen}><HelpIcon size={13} />Help<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
+            {helpOpen && (
+              <div className={rightPopClass} role="menu" aria-label="Help">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ms-row"
+                  onClick={() => { setHelpOpen(false); setCmdkOpen(true) }}
+                >
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Search all actions…</span>
+                    <span className="ms-row-sub">Every Agent Action, by name</span>
+                  </span>
+                  <span className="ms-tag">⌘K</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ms-row"
+                  onClick={() => { setHelpOpen(false); openSettings('shortcuts') }}
+                >
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">Keyboard shortcuts</span>
+                    <span className="ms-row-sub">The shortcut registry, in Settings</span>
+                  </span>
+                </button>
+                <div className="ms-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ms-row"
+                  onClick={() => { setHelpOpen(false); setNotice('AI Live Editor — a local-first editor where the agent builds from menus, wizards and plans, not just chat.') }}
+                >
+                  <span className="ms-row-main">
+                    <span className="ms-row-title">About AI Live Editor</span>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="bar-seg" role="group" aria-label="AI settings" style={{ marginLeft: 'auto' }}>
+            {renderAiSelects()}
+          </div>
+          <div className="bar-seg" role="group" aria-label="Settings">
             <div style={{ position: 'relative' }} onPointerDown={e => e.stopPropagation()}>
-              <button className="deck-btn" onClick={() => { setActionsMenuOpen(false); setWizardsMenuOpen(false); setSettingsMenuOpen(o => !o) }} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings</button>
+              <button className="deck-btn" onClick={() => { setActionsMenuOpen(false); setWizardsMenuOpen(false); setInsertOpen(false); setHelpOpen(false); setProjectOpen(false); setProjectMenuOpen(false); setSettingsMenuOpen(o => !o) }} title="Settings" aria-haspopup="menu" aria-expanded={settingsMenuOpen}><Settings size={13} />Settings<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
               {settingsMenuOpen && (
-                <div className="set-menu" role="menu">
+                <div className={rightPopClass} role="menu" aria-label="Settings">
                   {SETTING_SECTIONS.map(s => (
-                    <button key={s.id} type="button" role="menuitem" onClick={() => { setSettingsMenuOpen(false); openSettings(s.id) }}>
-                      {s.title}
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="menuitem"
+                      className="ms-row"
+                      onClick={() => { setSettingsMenuOpen(false); openSettings(s.id) }}
+                    >
+                      <span className="ms-row-main">
+                        <span className="ms-row-title">{s.title}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1299,6 +1555,7 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
       {syncSession && syncSession.projectId === activeProject && (
         <SyncStatusBar
           dirName={syncSession.dirName}

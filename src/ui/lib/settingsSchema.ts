@@ -17,7 +17,7 @@
 
 export type SettingScope = 'global' | 'project' | 'device'
 export type SettingStore = 'project' | 'prefs' | 'agent'
-export type SettingControl = 'select' | 'toggle' | 'slider' | 'text' | 'checkboxes'
+export type SettingControl = 'select' | 'toggle' | 'slider' | 'text' | 'checkboxes' | 'segmented'
 
 export interface SettingOption { value: string, label: string }
 
@@ -25,6 +25,9 @@ export interface SettingField {
   /** Instance key: the property name in the store's record. */
   id: string
   section: string
+  /** Optional subsection heading rendered above the row inside its
+   * section (e.g. 'Header Bar' inside User Interface). */
+  group?: string
   label: string
   hint?: string
   control: SettingControl
@@ -50,7 +53,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'providers', title: 'AI Providers & Models', scope: 'global', custom: 'providers', keywords: 'api key connection model provider modality openai meta' },
   { id: 'search', title: 'Search & Research', scope: 'global', custom: 'search', keywords: 'brave web search research backend' },
   { id: 'appearance', title: 'Appearance', scope: 'device', keywords: 'chat view panel deck' },
-  { id: 'interface', title: 'User Interface', scope: 'device', keywords: 'menu bar menu strip classic menus top bar interface' },
+  { id: 'interface', title: 'User Interface', scope: 'device', keywords: 'menu bar menu strip classic menus top bar interface header' },
   { id: 'themes', title: 'Themes', scope: 'device', custom: 'themes', keywords: 'theme color font size dark pro classic gray design tokens editor theme' },
   { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
   { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
@@ -92,9 +95,22 @@ export const SETTING_FIELDS: SettingField[] = [
   },
   // User Interface — device prefs (uiPrefs instance).
   {
-    id: 'menuStrip', section: 'interface', label: 'Classic menu strip', control: 'toggle', store: 'prefs',
-    hint: 'The Project · Agent Actions · Insert · Verify · Wizards · View · Settings · Help menu bar under the top bar. The same actions stay on the top-bar buttons and in the Actions pane either way.',
-    keywords: 'menu bar strip classic menus top bar',
+    id: 'menuLayout', section: 'interface', label: 'Menu layout', control: 'select', store: 'prefs',
+    hint: 'Multi-column card panels like Agent Actions and Wizards, or the classic single-column list.',
+    options: [{ value: 'grid', label: 'Multi-column cards' }, { value: 'list', label: 'Single-column list' }],
+    keywords: 'menu layout grid list columns cards',
+  },
+  // Header Bar subsection — device prefs (uiPrefs instance).
+  {
+    id: 'headerBar', section: 'interface', group: 'Header Bar', label: 'Header bar', control: 'segmented', store: 'prefs',
+    hint: 'Buttons is the top button bar only. Classic is the classic menu strip only, with the AI connection and model selects moved into it. Both shows the strip under the button bar.',
+    options: [{ value: 'buttons', label: 'Buttons' }, { value: 'classic', label: 'Classic' }, { value: 'both', label: 'Both' }],
+    keywords: 'header bar buttons classic both strip top bar layout',
+  },
+  {
+    id: 'menuDescriptions', section: 'interface', group: 'Header Bar', label: 'Show description lines', control: 'toggle', store: 'prefs',
+    hint: 'Menu items show their description line under the title. Off leaves titles only (tags and stub reasons stay).',
+    keywords: 'menu descriptions blurbs subtitles rows titles',
   },
   {
     id: 'fileSort', section: 'files', label: 'File pane sort order', control: 'select', store: 'prefs',

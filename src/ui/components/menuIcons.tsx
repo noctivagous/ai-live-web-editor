@@ -50,6 +50,14 @@ export function ProjectIcon(props: MenuIconProps) {
   ))
 }
 
+/** Menu caret — marks buttons that open a dropdown menu, telling them
+ * apart from regular action buttons like New project. */
+export function CaretIcon(props: MenuIconProps) {
+  return frame(props, (
+    <path d="m6 9 6 6 6-6" />
+  ))
+}
+
 /** Agent Actions — a single four-point working spark. */
 export function AgentActionsIcon(props: MenuIconProps) {
   return frame(props, (

@@ -38,6 +38,23 @@ export async function writeFile(path: string, content: string) {
   })
   return r.json()
 }
+/** URL that serves a project file's raw bytes (the image editor's
+ * load path — /projects/ static serving is shadowed by the UI's
+ * SPA fallback when the UI runs from source). */
+export function binaryFileUrl(path: string) {
+  return `${API}/api/fs/read-binary?path=${encodeURIComponent(path)}`
+}
+/** Write binary content (base64) — the image editor's save path. */
+export async function writeBinaryFile(path: string, base64: string) {
+  const r = await fetch(`${API}/api/fs/write-binary`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({path, base64})
+  })
+  const data = await r.json() as { ok?: boolean, error?: string }
+  if (!r.ok || data.ok === false) throw new Error(data.error || `write failed (${r.status})`)
+  return data
+}
 export interface LauncherConfig {
   ok: boolean
   hasApiKey: boolean

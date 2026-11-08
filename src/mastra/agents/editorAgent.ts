@@ -19,6 +19,9 @@ import {
 import { toolResultTrimProcessor } from '../../contextTrim.js'
 import { readSkillTool } from '../tools/skillTools.js'
 import { readSymbolTool, unpackCodeTool } from '../tools/codeTools.js'
+import { spreadsheetAddRowTool, spreadsheetFindTool, spreadsheetInspectTool, spreadsheetSetCellTool } from '../tools/spreadsheetTools.js'
+import { dataAddTool, dataFindTool, dataGetTool, dataInspectTool, dataRemoveTool, dataSetTool } from '../tools/dataTools.js'
+import { docAddBlockTool, docFindTool, docGetTool, docInspectTool, docRemoveBlockTool, docSetItemTool, docSetStyleTool, docSetTextTool } from '../tools/docTools.js'
 import { skillIndexText } from '../../skills/skills.js'
 import { editorMemory } from '../memory.js'
 
@@ -37,7 +40,7 @@ Chat has two workflows (header pill): Files (default) and Live sketch.
 Routing: Live sketch only applies to the live page. The host may switch a files-only turn from sketch to Files. If you are still in sketch and the ask is not about the rendered page, say they need Files. If the ask is mixed, only patch the page, then say the file work needs Files. Never enter Live sketch on your own.
 
 Tools (the host sends only the set for the current workflow):
-- Files: list-real-files, codebase-map, grep, read-real-file, str-replace, write-real-file, delete-file, rename-file, make-dir, take-snapshot, inspect-dom, resolve-source, read-skill — plus the groups this turn calls for: layout-snapshot / layout-svg / pool-open for page and layout work (scope layout-snapshot with a page-sections selector via scopeSelector rather than re-snapshotting the whole page), page-sections for the live page's section map (names, rects, digests, data-ai-loc stamps — resolve a named part of the page with it before drilling in), run-in-page to verify a runtime fact instead of inferring it (what a module actually exports, what a function really returns, live state — it executes in the page, so check with it, never edit with it), find-component / install-catalog-component / place-template for catalog work, the plan tools while a plan is active, the feature tools while a feature graph exists, unpack-code / read-symbol for dense or minified files (unpack-code returns a section map over a formatted copy under .ai-live/unpacked/, read-symbol pulls one named top-level function or class out of a file — read from the copy, make edits against the original), and the web tools when search is on and the ask needs it. If a tool you need is not in this turn's set, say so in one line and continue with what you have — the set is chosen per turn, not per project.
+- Files: list-real-files, codebase-map, grep, read-real-file, str-replace, write-real-file, delete-file, rename-file, make-dir, take-snapshot, inspect-dom, resolve-source, read-skill — plus the groups this turn calls for: layout-snapshot / layout-svg / pool-open for page and layout work (scope layout-snapshot with a page-sections selector via scopeSelector rather than re-snapshotting the whole page), page-sections for the live page's section map (names, rects, digests, data-ai-loc stamps — resolve a named part of the page with it before drilling in), run-in-page to verify a runtime fact instead of inferring it (what a module actually exports, what a function really returns, live state — it executes in the page, so check with it, never edit with it), find-component / install-catalog-component / place-template for catalog work, the plan tools while a plan is active, the feature tools while a feature graph exists, unpack-code / read-symbol for dense or minified files (unpack-code returns a section map over a formatted copy under .ai-live/unpacked/, read-symbol pulls one named top-level function or class out of a file — read from the copy, make edits against the original), the spreadsheet tools for CSV/TSV files (spreadsheet-inspect for the shape and a sample, spreadsheet-find for cell coordinates, spreadsheet-set-cell and spreadsheet-add-row to edit — they splice through the file's own format, so prefer them over rewriting a spreadsheet with write-real-file), the data tools for JSON/YAML/TOML/.env/XML files (data-inspect for the recognised profile and a tree outline, data-find and data-get by dotted address, data-set to change one value in place, data-add and data-remove for structure — prefer them over reading or rewriting a config file raw), the doc tools for Markdown/RTF documents (doc-inspect for the block list, doc-get/doc-find by block number, doc-set-text/doc-set-item to edit, doc-set-style for size/weight/alignment/heading level — the format's own support rules apply and refusals come with their reasons, doc-add-block/doc-remove-block for structure), and the web tools when search is on and the ask needs it. If a tool you need is not in this turn's set, say so in one line and continue with what you have — the set is chosen per turn, not per project.
 - Live sketch: take-snapshot, inspect-dom, patch-dom, eval-js, layout-snapshot, layout-svg, pool-open
 
 Web research (Files only): web-search for quick current facts (API shapes, versions, docs), fetch-page to read one page, and research for anything that needs several sources reconciled — plan 3-6 sub-queries when you call it, and prefer building from its cited brief over building from memory. When the user will keep building from a brief, save it with saveTo under ai-research/.
@@ -102,6 +105,24 @@ Priority: bug, move, layout, style, copy, note. Never write repo files unless th
     'codebase-map': codebaseMapTool,
     'unpack-code': unpackCodeTool,
     'read-symbol': readSymbolTool,
+    'spreadsheet-inspect': spreadsheetInspectTool,
+    'spreadsheet-find': spreadsheetFindTool,
+    'spreadsheet-set-cell': spreadsheetSetCellTool,
+    'spreadsheet-add-row': spreadsheetAddRowTool,
+    'data-inspect': dataInspectTool,
+    'data-get': dataGetTool,
+    'data-set': dataSetTool,
+    'data-find': dataFindTool,
+    'data-add': dataAddTool,
+    'data-remove': dataRemoveTool,
+    'doc-inspect': docInspectTool,
+    'doc-get': docGetTool,
+    'doc-find': docFindTool,
+    'doc-set-text': docSetTextTool,
+    'doc-set-item': docSetItemTool,
+    'doc-set-style': docSetStyleTool,
+    'doc-add-block': docAddBlockTool,
+    'doc-remove-block': docRemoveBlockTool,
     'adopt-registry': adoptRegistryTool,
     'install-catalog-component': installCatalogComponentTool,
     'place-template': placeTemplateTool,

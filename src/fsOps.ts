@@ -76,6 +76,31 @@ export function mkdirPath(root: string, p: unknown): { path: string } {
 
 /** Number of entries (files + folders) under a project path — the
  * delete confirmation counts with this so it can name a real number. */
+/** Write a binary file from base64 — the write path the image
+ * editor needs, since /api/fs/write is UTF-8 text only. Decoded
+ * size is capped; the payload must be canonical base64. */
+export function writeBinaryFile(root: string, p: unknown, base64: unknown, maxBytes = 12 * 1024 * 1024): { path: string; bytes: number } {
+  const full = resolveUnder(root, p, 'path')
+  if (typeof base64 !== 'string' || base64.length === 0) throw new Error('base64 content required')
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64) || base64.length % 4 !== 0) throw new Error('content is not valid base64')
+  const buf = Buffer.from(base64, 'base64')
+  if (buf.length === 0) throw new Error('content is empty')
+  if (buf.length > maxBytes) throw new Error(`file too large (max ${maxBytes} bytes)`)
+  fs.mkdirSync(path.dirname(full), { recursive: true })
+  fs.writeFileSync(full, buf)
+  return { path: p as string, bytes: buf.length }
+}
+
+/** Read a binary file's bytes — the read side of the binary path
+ * (the image editor loads through it; /api/fs/read is text-only). */
+export function readBinaryFile(root: string, p: unknown): { path: string; buffer: Buffer } {
+  const full = resolveUnder(root, p, 'path')
+  const st = statOrNull(full)
+  if (!st) throw new Error('Not found: ' + String(p))
+  if (!st.isFile()) throw new Error('Not a file: ' + String(p))
+  return { path: p as string, buffer: fs.readFileSync(full) }
+}
+
 export function countEntries(root: string, p: unknown): number {
   const full = resolveUnder(root, p, 'path')
   const st = statOrNull(full)

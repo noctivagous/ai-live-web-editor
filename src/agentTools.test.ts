@@ -9,7 +9,10 @@ import {
   FILE_FEATURE_TOOLS,
   FILE_LAYOUT_TOOLS,
   FILE_PLAN_TOOLS,
+  FILE_DATA_TOOLS,
+  FILE_DOC_TOOLS,
   FILE_RESEARCH_TOOLS,
+  FILE_SPREADSHEET_TOOLS,
   fileToolsForTurn,
   isWriteTool,
   SKETCH_ACTIVE_TOOLS,
@@ -59,6 +62,30 @@ describe('fileToolsForTurn', () => {
     for (const t of FILE_CATALOG_TOOLS) assert.ok(tools.includes(t), t)
   })
 
+  it('adds the data group for structured-data asks only', () => {
+    for (const t of FILE_DATA_TOOLS) {
+      assert.ok(fileToolsForTurn({ userText: 'bump the version in package.json' }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'change the timeout in the workflow yaml' }).includes(t), t)
+      assert.equal(fileToolsForTurn({ userText: 'fix the typo in the greeting function' }).includes(t), false, t)
+    }
+  })
+
+  it('adds the doc group for document asks only', () => {
+    for (const t of FILE_DOC_TOOLS) {
+      assert.ok(fileToolsForTurn({ userText: 'rewrite the second paragraph of the readme' }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'make the markdown heading bigger' }).includes(t), t)
+      assert.equal(fileToolsForTurn({ userText: 'fix the typo in the greeting function' }).includes(t), false, t)
+    }
+  })
+
+  it('adds the spreadsheet group for spreadsheet asks only', () => {
+    for (const t of FILE_SPREADSHEET_TOOLS) {
+      assert.ok(fileToolsForTurn({ userText: 'update the price cell in sales.csv' }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'add a row to the spreadsheet' }).includes(t), t)
+      assert.equal(fileToolsForTurn({ userText: 'lay the cards out in two columns' }).includes(t), false, t)
+    }
+  })
+
   it('adds the workbench code group for dense-code asks', () => {
     for (const t of FILE_CODE_TOOLS) {
       assert.ok(fileToolsForTurn({ userText: 'unpack the minified vendor bundle' }).includes(t), t)
@@ -93,10 +120,10 @@ describe('fileToolsForTurn', () => {
   })
 
   it('the groups partition the full set, and a fully-triggered turn gets all of it', () => {
-    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS, ...FILE_FEATURE_TOOLS]
+    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS, ...FILE_FEATURE_TOOLS, ...FILE_SPREADSHEET_TOOLS, ...FILE_DATA_TOOLS, ...FILE_DOC_TOOLS]
     assert.deepEqual([...grouped].sort(), [...FILE_ACTIVE_TOOLS].sort())
     const all = fileToolsForTurn({
-      userText: 'check the layout of the pricing page, search the latest docs, unpack the bundle, then update the plan and the feature graph',
+      userText: 'check the layout of the pricing page, search the latest docs, unpack the bundle, then update the plan and the feature graph and fix the sales spreadsheet and the app config json and rewrite the readme heading',
       hasActivePlan: true,
       hasFeatureGraph: true,
       searchAvailable: true,
@@ -108,13 +135,23 @@ describe('fileToolsForTurn', () => {
 describe('WRITE_TOOLS (slice 3)', () => {
   it('is exactly the tools that write project files', () => {
     assert.deepEqual([...WRITE_TOOLS].sort(), [
+      'data-add',
+      'data-remove',
+      'data-set',
       'delete-file',
+      'doc-add-block',
+      'doc-remove-block',
+      'doc-set-item',
+      'doc-set-style',
+      'doc-set-text',
       'feature-build-node',
       'feature-set-param',
       'install-catalog-component',
       'make-dir',
       'place-template',
       'rename-file',
+      'spreadsheet-add-row',
+      'spreadsheet-set-cell',
       'str-replace',
       'write-real-file',
     ])

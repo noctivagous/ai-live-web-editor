@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { countEntries, deletePath, mkdirPath, renamePath } from './fsOps.js'
+import { countEntries, deletePath, mkdirPath, readBinaryFile, renamePath, writeBinaryFile } from './fsOps.js'
 
 function tmpRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fsops-test-'))
@@ -94,6 +94,40 @@ describe('mkdirPath + countEntries', () => {
     try {
       assert.equal(countEntries(root, '/index.html'), 1)
       assert.equal(countEntries(root, '/src'), 3) // a.ts, lib, lib/b.ts
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('writeBinaryFile', () => {
+  it('writes decoded bytes exactly, creating parent folders', () => {
+    const root = tmpRoot()
+    try {
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff])
+      const r = writeBinaryFile(root, '/img/logo.png', bytes.toString('base64'))
+      assert.equal(r.bytes, 6)
+      assert.deepEqual(fs.readFileSync(path.join(root, 'img', 'logo.png')), bytes)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('refuses traversal, bad base64 and oversize payloads', () => {
+    const root = tmpRoot()
+    try {
+      assert.throws(() => writeBinaryFile(root, '/../escape.png', 'AAAA'), /traversal/i)
+      assert.throws(() => writeBinaryFile(root, '/x.png', 'not base64!'), /base64/i)
+      assert.throws(() => writeBinaryFile(root, '/x.png', Buffer.alloc(64).toString('base64'), 16), /too large/i)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('readBinaryFile', () => {
+  it('reads back exactly what writeBinaryFile wrote', () => {
+    const root = tmpRoot()
+    try {
+      const bytes = Buffer.from([0x00, 0x01, 0xfe, 0xff])
+      writeBinaryFile(root, '/img/a.bin', bytes.toString('base64'))
+      assert.deepEqual(readBinaryFile(root, '/img/a.bin').buffer, bytes)
+      assert.throws(() => readBinaryFile(root, '/img/missing.bin'), /not found/i)
+      assert.throws(() => readBinaryFile(root, '/../x.bin'), /traversal/i)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

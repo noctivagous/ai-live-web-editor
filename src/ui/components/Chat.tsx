@@ -15,6 +15,7 @@ import {
   withStopped,
   type LogItem,
   type ToolStep,
+  appendTextDelta,
 } from '../lib/chatSession'
 import {
   parseWorkflowSnapshot,
@@ -87,12 +88,6 @@ function upsertToolStep(log: LogItem[], step: ToolStep): LogItem[] {
     return [...log.slice(0, -1), { role: 'tools', steps }]
   }
   return [...log, { role: 'tools', steps: [stampStep(step)] }]
-}
-
-function appendRole(log: LogItem[], role: 'ai' | 'think', text: string): LogItem[] {
-  const last = log[log.length - 1]
-  if (last && last.role === role) return [...log.slice(0, -1), { role, text }]
-  return [...log, { role, text }]
 }
 
 export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, projectId = '', onOpenPath, pricing }: {
@@ -299,8 +294,6 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     setWorkingLabel('starting…')
     const ctrl = new AbortController()
     abortRef.current = ctrl
-    let aiText = ''
-    let thinkText = ''
     let wroteFiles = false
     const toolArgs: Record<string, string> = {}
     const applyEvent = (ev: ChatStreamEvent) => {
@@ -312,9 +305,8 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         void refreshWorkflow().then(() => publishWorkflowChanged())
         if (ev.reason) setLog(l => [...l, { role: 'system', text: ev.reason }])
       } else if (ev.type === 'reasoning-delta') {
-        thinkText += ev.text
         setWorkingLabel('thinking…')
-        setLog(l => appendRole(l, 'think', thinkText))
+        setLog(l => appendTextDelta(l, 'think', ev.text))
       } else if (ev.type === 'tool-call') {
         setWorkingLabel(ev.detail || ev.name)
         setLog(l => upsertToolStep(l, { id: ev.id, name: ev.name, detail: ev.detail, status: 'running' }))
@@ -342,9 +334,8 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           }]
         })
       } else if (ev.type === 'text-delta') {
-        aiText += ev.text
         setWorkingLabel('writing…')
-        setLog(l => appendRole(l, 'ai', aiText))
+        setLog(l => appendTextDelta(l, 'ai', ev.text))
       } else if (ev.type === 'error') {
         const msg = ev.error
         setLog(l => [...l, { role: 'error', text: looksLikeKeyError(msg) ? guidedKeyError(keyKnown === true) : `Chat failed: ${msg.slice(0, 2000)}` }])

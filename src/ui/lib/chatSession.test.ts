@@ -1,8 +1,58 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bootStopped, casWinner, createSendGuard, emptyChat, historyForAgent, HISTORY_TURN_CHAR_CAP, parseChat, rebaseLocalUserItems, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
+import { appendTextDelta, bootStopped, casWinner, createSendGuard, emptyChat, historyForAgent, HISTORY_TURN_CHAR_CAP, parseChat, rebaseLocalUserItems, repairCumulativeSegments, serializeChat, withStopped, STOPPED_TEXT, type ChatShared, type LogItem } from './chatSession.js'
 
 describe('chatSession', () => {
+  it('appendTextDelta: deltas extend the trailing segment; a tool step starts a fresh one', () => {
+    let log: LogItem[] = [{ role: 'user', text: 'make a blue theme' }]
+    log = appendTextDelta(log, 'ai', 'Making it blue — ')
+    log = appendTextDelta(log, 'ai', 'first a look.')
+    assert.deepEqual(log[1], { role: 'ai', text: 'Making it blue — first a look.' })
+    // A tool step seals the segment…
+    log = [...log, { role: 'tools', steps: [{ id: '1', name: 'grep', detail: 'grep', status: 'done' }] }]
+    log = appendTextDelta(log, 'ai', 'Got the themes.')
+    // …so the next segment holds ONLY its own text (this is the
+    // repetition bug: it used to hold both segments).
+    assert.deepEqual(log[3], { role: 'ai', text: 'Got the themes.' })
+    log = appendTextDelta(log, 'ai', '')
+    assert.equal(log.length, 4, 'empty delta is a no-op')
+    // Reasoning segments are scoped the same way.
+    log = appendTextDelta(log, 'think', 'hmm')
+    assert.deepEqual(log[4], { role: 'think', text: 'hmm' })
+  })
+
+  it('repairCumulativeSegments: heals a persisted cumulative log, leaves healthy logs untouched', () => {
+    const buggy: LogItem[] = [
+      { role: 'user', text: 'make a blue theme for lumen' },
+      { role: 'ai', text: 'Making it blue — first a look.' },
+      { role: 'tools', steps: [{ id: '1', name: 'codebase-map', detail: 'map', status: 'done' }] },
+      { role: 'ai', text: 'Making it blue — first a look.Got the current themes.' },
+      { role: 'tools', steps: [{ id: '2', name: 'grep', detail: 'grep', status: 'done' }] },
+      { role: 'ai', text: 'Making it blue — first a look.Got the current themes.Now the blue variant.' },
+      { role: 'user', text: 'next turn' },
+      { role: 'ai', text: 'Making it blue — first a look.' },
+    ]
+    const healed = repairCumulativeSegments(buggy)
+    assert.deepEqual(healed.map(i => ('text' in i ? i.text : '<tools>')), [
+      'make a blue theme for lumen',
+      'Making it blue — first a look.',
+      '<tools>',
+      'Got the current themes.',
+      '<tools>',
+      'Now the blue variant.',
+      'next turn',
+      'Making it blue — first a look.', // new turn: trackers reset, no cross-turn stripping
+    ])
+
+    const healthy: LogItem[] = [
+      { role: 'user', text: 'hi' },
+      { role: 'ai', text: 'one' },
+      { role: 'tools', steps: [] },
+      { role: 'ai', text: 'two' },
+    ]
+    assert.equal(repairCumulativeSegments(healthy), healthy, 'healthy log passes through by identity')
+  })
+
   it('round-trips a log and drops other projects', () => {
     const state = emptyChat('lumen')
     state.log = [

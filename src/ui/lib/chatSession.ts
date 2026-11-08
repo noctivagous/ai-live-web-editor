@@ -136,11 +136,63 @@ export function stripLegacyHint(log: LogItem[]): LogItem[] {
   return log.filter((m) => !(m.role === 'system' && 'text' in m && m.text === LEGACY_HINT))
 }
 
+/**
+ * Append one streamed text delta to the log: extend the trailing
+ * item when it has the same role, otherwise start a NEW item
+ * holding only this delta. Segment-scoped by construction — the
+ * whole-turn accumulator this replaces kept every earlier
+ * segment's text in each later segment, so the chat view repeated
+ * the entire reply-so-far after every tool call.
+ */
+export function appendTextDelta(log: LogItem[], role: 'ai' | 'think', delta: string): LogItem[] {
+  if (!delta) return log
+  const last = log[log.length - 1]
+  if (last && last.role === role && 'text' in last) {
+    return [...log.slice(0, -1), { ...last, text: last.text + delta }]
+  }
+  return [...log, { role, text: delta }]
+}
+
+/**
+ * Repair logs persisted while the accumulator bug was live: each
+ * later 'ai' (or 'think') item in a turn contains every earlier
+ * segment as a prefix. Strip the accumulated prefix so each item
+ * holds only its own segment. Runs at load, like stripLegacyHint,
+ * so the stored log itself heals — views and the history sent to
+ * the agent both stop repeating. Healthy logs pass through
+ * unchanged (same array back).
+ */
+export function repairCumulativeSegments(log: LogItem[]): LogItem[] {
+  let changed = false
+  let lastAi = ''
+  let lastThink = ''
+  const out = log.map(item => {
+    if (item.role === 'user') { lastAi = ''; lastThink = ''; return item }
+    if ((item.role === 'ai' || item.role === 'think') && 'text' in item) {
+      const prev = item.role === 'ai' ? lastAi : lastThink
+      let text = item.text
+      if (prev && text.length > prev.length && text.startsWith(prev)) {
+        text = text.slice(prev.length)
+        changed = true
+      }
+      // Usage-only markers carry no text: they must not reset the
+      // prefix base for a later segment.
+      if (item.text) {
+        if (item.role === 'ai') lastAi = item.text
+        else lastThink = item.text
+      }
+      return text === item.text ? item : { ...item, text }
+    }
+    return item
+  })
+  return changed ? out : log
+}
+
 export function loadChat(projectId: string): ChatShared {
   try {
     const stored = readStoredChat(projectId)
     if (!stored) return emptyChat(projectId)
-    return bootStopped({ ...stored, log: stripLegacyHint(stored.log) })
+    return bootStopped({ ...stored, log: repairCumulativeSegments(stripLegacyHint(stored.log)) })
   } catch {
     return emptyChat(projectId)
   }

@@ -16,7 +16,7 @@ import { ButtonGrid } from './components/ButtonGrid'
 import { AddFeatureWizard } from './components/AddFeatureWizard'
 import { FileActionsMenu } from './components/FileActionsMenu'
 import { FacetView } from './components/FacetView'
-import { formatRoute, parseRoute, type AppLayout, type FacetId } from './lib/layoutRoute'
+import { formatRoute, parseRoute, type AppLayout, type FacetId, type RouteModal } from './lib/layoutRoute'
 import { themeById } from './lib/themes'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
@@ -92,7 +92,6 @@ export default function App() {
   const [content, setContent] = useState('// loading...')
   const [status, setStatus] = useState('connecting to :4112...')
   const [notice, setNotice] = useState<string | null>(null)
-  const [settingsAt, setSettingsAt] = useState<string | null>(null)
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
   // Agent Actions menu (slice 1): the registry-driven card menu in the
   // top bar. Feature-graph presence is fetched per project so graph
@@ -116,19 +115,43 @@ export default function App() {
   // Planning (§O): the /plan overlay floats over files + middle; chat stays live.
   const [planOpen, setPlanOpen] = useState<{ level?: number, goal?: string, n: number } | null>(null)
   // Feature graph: the /graph overlay shares the planner's float
-  // space; the two never stack.
-  const [graphOpen, setGraphOpen] = useState<{ n: number } | null>(null)
+  // space; the two never stack. The graph is route-driven
+  // (#/facets/features/graph/report|diagram); the ai-live:graph-open
+  // event stays as a thin shim so existing dispatchers (chat /graph,
+  // FacetView, agent actions, /graph-update) keep working.
+  const graphView = route.kind === 'facets' ? route.view : undefined
+  function openGraph(modal?: RouteModal) {
+    setPlanOpen(null)
+    navigate({ kind: 'facets', facet: 'features', view: 'graph-report', ...(modal ? { modal } : {}) })
+  }
+  function closeGraphView() {
+    if (route.kind !== 'facets' || !route.view) return
+    navigate({ kind: 'facets', facet: route.facet, ...(route.modal ? { modal: route.modal } : {}) })
+  }
+  // Settings is a route-driven backdrop modal (?globalModal=settings&tab=…):
+  // opening navigates, closing strips the query, so Back closes it.
+  function openSettings(section: string) {
+    navigate({ ...route, modal: { name: 'settings', tab: section } })
+  }
+  function closeModal() {
+    const { modal: _dropped, ...rest } = route
+    navigate(rest)
+  }
   useEffect(() => {
     const onGraphOpen = () => {
-      setPlanOpen(null)
-      setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 }))
+      const cur = parseRoute(window.location.hash)
+      openGraph(cur.modal)
     }
     window.addEventListener('ai-live:graph-open', onGraphOpen)
     return () => window.removeEventListener('ai-live:graph-open', onGraphOpen)
   }, [])
   useEffect(() => {
     const onPlanOpen = (e: Event) => {
-      setGraphOpen(null)
+      const cur = parseRoute(window.location.hash)
+      if (cur.kind === 'facets' && cur.view) {
+        const { view: _dropped, ...rest } = cur
+        navigate(rest)
+      }
       const d = (e as CustomEvent).detail as { level?: number, goal?: string } | undefined
       const open = (level?: number) => setPlanOpen(prev => ({ level, goal: d?.goal, n: (prev?.n ?? 0) + 1 }))
       if (d?.level) { open(d.level); return }
@@ -199,7 +222,7 @@ export default function App() {
       .then(r => { if (live) setHasFeatureGraph(!!r.graph) })
       .catch(() => { if (live) setHasFeatureGraph(null) })
     return () => { live = false }
-  }, [activeProject, graphOpen])
+  }, [activeProject, graphView])
   /** The active project's designated start page (project.ai.json
    * entry), shared by the file pane's badge and the Preview. */
   const [startPage, setStartPage] = useState<string | null>(null)
@@ -997,7 +1020,7 @@ export default function App() {
 
   function reopenSetup() {
     localStorage.removeItem(SETUP_DONE_KEY)
-    setSettingsAt(null)
+    closeModal()
     setSetupDone(false)
   }
 
@@ -1027,7 +1050,7 @@ export default function App() {
           hasManifest={files.includes('project.ai.json')}
           onOpenManifest={() => { void loadFile('project.ai.json') }}
           onOpenLibrary={() => setLeftView('library')}
-          onOpenSettings={(section) => setSettingsAt(section)}
+          onOpenSettings={openSettings}
           onOpenWizard={(id) => setWizard(id)}
           onNavigate={navigate}
           onLeftView={setLeftView}
@@ -1147,7 +1170,7 @@ export default function App() {
               <AgentActionsMenu
                 ctx={actionCtx}
                 onOpenLibrary={() => setLeftView('library')}
-                onOpenSettings={(section) => setSettingsAt(section)}
+                onOpenSettings={openSettings}
                 onClose={() => setActionsMenuOpen(false)}
               />
             )}
@@ -1166,7 +1189,7 @@ export default function App() {
             {settingsMenuOpen && (
               <div className="set-menu" role="menu">
                 {SETTING_SECTIONS.map(s => (
-                  <button key={s.id} type="button" role="menuitem" onClick={() => { setSettingsMenuOpen(false); setSettingsAt(s.id) }}>
+                  <button key={s.id} type="button" role="menuitem" onClick={() => { setSettingsMenuOpen(false); openSettings(s.id) }}>
                     {s.title}
                   </button>
                 ))}
@@ -1199,11 +1222,13 @@ export default function App() {
             style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
           />
         )}
-        {graphOpen && (
+        {graphView && (
           <GraphOverlay
-            key={`${activeProject}-graph-${graphOpen.n}`}
-            onClose={() => setGraphOpen(null)}
-            onShowLibrary={() => { setLeftView('library'); setGraphOpen(null) }}
+            key={`${activeProject}-graph`}
+            view={graphView}
+            onClose={closeGraphView}
+            onOpenReport={() => openGraph(route.modal)}
+            onShowLibrary={() => { setLeftView('library'); navigate({ kind: 'workbench', ...(route.modal ? { modal: route.modal } : {}) }) }}
             style={{ left: 5, top: 5, bottom: 5, right: rightW + 22 }}
           />
         )}
@@ -1211,7 +1236,7 @@ export default function App() {
           <ActionCommandPalette
             ctx={actionCtx}
             onOpenLibrary={() => setLeftView('library')}
-            onOpenSettings={(section) => setSettingsAt(section)}
+            onOpenSettings={openSettings}
             onClose={() => setCmdkOpen(false)}
           />
         )}
@@ -1230,7 +1255,7 @@ export default function App() {
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'files' ? 1 : 0.55 }} onClick={() => setLeftView('files')}><FolderOpen size={13} />Files <span className="sub">{files.length}</span></button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'library' ? 1 : 0.55 }} onClick={() => setLeftView('library')} title="Component catalog + layout templates"><LibraryBig size={13} />Library</button>
             <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: leftView === 'actions' ? 1 : 0.55 }} onClick={() => setLeftView('actions')} title="Agent Actions palette — every action, searchable, pinnable (⌘K searches too)"><Zap size={13} />Actions</button>
-            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphOpen ? 1 : 0.55 }} onClick={() => { setPlanOpen(null); setGraphOpen(prev => ({ n: (prev?.n ?? 0) + 1 })) }} title="The project's feature graph — regions, features, and build status"><Network size={13} />Graph</button>
+            <button type="button" className="deck-btn" style={{ padding: '2px 8px', opacity: graphView ? 1 : 0.55 }} onClick={() => openGraph(route.modal)} title="The project's feature graph — regions, features, and build status"><Network size={13} />Graph</button>
           </ButtonGrid>
           {leftView === 'files' ? (
             <FileTree
@@ -1260,7 +1285,7 @@ export default function App() {
               key={activeProject}
               ctx={actionCtx}
               onOpenLibrary={() => setLeftView('library')}
-              onOpenSettings={(section) => setSettingsAt(section)}
+              onOpenSettings={openSettings}
             />
           )}
         </div>
@@ -1285,7 +1310,7 @@ export default function App() {
                   <FileActionsMenu
                     ctx={actionCtx}
                     onOpenLibrary={() => setLeftView('library')}
-                    onOpenSettings={(section) => setSettingsAt(section)}
+                    onOpenSettings={openSettings}
                     onClose={() => setFileMenuOpen(false)}
                   />
                 )}
@@ -1356,7 +1381,7 @@ export default function App() {
               ctx={actionCtx}
               onNavigateFacet={(f) => navigate({ kind: 'facets', facet: f })}
               onOpenWizard={(id) => setWizard(id)}
-              onOpenSettings={(section) => setSettingsAt(section)}
+              onOpenSettings={openSettings}
               onOpenLibrary={() => { setLeftView('library'); navigate({ kind: 'workbench' }) }}
             />
           </div>
@@ -1405,10 +1430,11 @@ export default function App() {
           onPostpone={postponeSyncConflicts}
         />
       )}
-      {settingsAt && (
+      {route.modal?.name === 'settings' && (
         <SettingsWindow
-          initialSection={settingsAt}
-          onClose={() => setSettingsAt(null)}
+          key={route.modal.tab}
+          initialSection={route.modal.tab || 'providers'}
+          onClose={closeModal}
           config={config}
           editorTheme={editorTheme}
           onTheme={changeTheme}

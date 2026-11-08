@@ -29,4 +29,42 @@ describe('layoutRoute', () => {
     }
     assert.deepEqual(parseRoute(formatRoute({ kind: 'workbench' })), { kind: 'workbench' })
   })
+
+  it('graph report and diagram routes parse under the features facet', () => {
+    assert.deepEqual(parseRoute('#/facets/features/graph/report'), { kind: 'facets', facet: 'features', view: 'graph-report' })
+    assert.deepEqual(parseRoute('#/facets/features/graph/diagram'), { kind: 'facets', facet: 'features', view: 'graph-diagram' })
+    // A bare /graph lands on the report — the current viewer.
+    assert.deepEqual(parseRoute('#/facets/features/graph'), { kind: 'facets', facet: 'features', view: 'graph-report' })
+  })
+
+  it('graph routes format and round-trip', () => {
+    assert.equal(formatRoute({ kind: 'facets', facet: 'features', view: 'graph-report' }), '#/facets/features/graph/report')
+    assert.equal(formatRoute({ kind: 'facets', facet: 'features', view: 'graph-diagram' }), '#/facets/features/graph/diagram')
+    assert.deepEqual(parseRoute('#/facets/features/graph/diagram'), { kind: 'facets', facet: 'features', view: 'graph-diagram' })
+  })
+
+  it('graph views outside the features facet are ignored', () => {
+    assert.deepEqual(parseRoute('#/facets/styles/graph/report'), { kind: 'facets', facet: 'styles' })
+    assert.deepEqual(parseRoute('#/facets/features/graph/bogus'), { kind: 'facets', facet: 'features' })
+  })
+
+  it('a settings modal query parses on any layout and round-trips', () => {
+    assert.deepEqual(
+      parseRoute('#/facets/features/graph/report?globalModal=settings&tab=providers'),
+      { kind: 'facets', facet: 'features', view: 'graph-report', modal: { name: 'settings', tab: 'providers' } },
+    )
+    assert.deepEqual(
+      parseRoute('#/workbench?globalModal=settings&tab=themes'),
+      { kind: 'workbench', modal: { name: 'settings', tab: 'themes' } },
+    )
+    assert.equal(
+      formatRoute({ kind: 'workbench', modal: { name: 'settings', tab: 'providers' } }),
+      '#/workbench?globalModal=settings&tab=providers',
+    )
+  })
+
+  it('unknown modal queries are ignored, keeping the route', () => {
+    assert.deepEqual(parseRoute('#/workbench?globalModal=bogus&tab=x'), { kind: 'workbench' })
+    assert.deepEqual(parseRoute('#/facets/features?tab=providers'), { kind: 'facets', facet: 'features' })
+  })
 })

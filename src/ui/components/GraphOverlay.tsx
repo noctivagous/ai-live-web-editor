@@ -6,6 +6,7 @@ import {
   type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphProblemItem,
 } from '../lib/api'
 import { launchGraphUpdate } from '../lib/graphUpdate'
+import type { GraphView } from '../lib/layoutRoute'
 
 /**
  * The feature graph overlay: floats over the file manager + middle
@@ -81,9 +82,11 @@ function diffGraphs(prev: FeatureGraphItem, next: FeatureGraphItem): { feed: str
   return { feed, flash }
 }
 
-export function GraphOverlay({ onClose, onShowLibrary, style }: {
+export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, view = 'graph-report', style }: {
   onClose: () => void
   onShowLibrary?: () => void
+  onOpenReport?: () => void
+  view?: GraphView
   style?: React.CSSProperties
 }) {
   const [graph, setGraph] = useState<FeatureGraphItem | null>(null)
@@ -431,6 +434,20 @@ export function GraphOverlay({ onClose, onShowLibrary, style }: {
           </div>
           <p className="graph-cmd-hint mono">launches /graph-update feature</p>
           <p className="graph-cmd-note">/graph-update takes a target — feature is the first graph; others will use the same command.</p>
+        </div>
+      ) : view === 'graph-diagram' ? (
+        <div className="graph-body">
+          <div className="graph-empty">
+            <p>Diagram viewer isn't built yet.</p>
+            <p>A navigable node-link diagram will live here — regions and features laid out as a graph, with the same selection and inspector as the report. Until then, the report is the viewer.</p>
+            <div className="graph-empty-actions">
+              {onOpenReport && (
+                <button type="button" className="deck-btn graph-build-btn" onClick={onOpenReport}>
+                  Open the report
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="graph-body">

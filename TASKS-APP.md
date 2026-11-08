@@ -3,6 +3,18 @@
 
 ---
 
+command bar.  only contains commands after search
+results like "Update Feature Graph"
+
+---
+
+Feature Graph: 
+  - estimated % complete for each node.  includes manual data entry field
+  for AI to enter manual value.
+  - export graph
+
+---
+
 Facet > [Facet] > Drift Guard AI Agent
   software architecture - makes sure that the codebase
   remains within a stated architecture

@@ -15,7 +15,27 @@ export interface TreeNode {
   children: TreeNode[]
 }
 
-export type SortMode = 'name' | 'type' | 'modified'
+export type SortMode = 'name' | 'name-desc' | 'type' | 'type-desc' | 'modified' | 'modified-asc'
+
+export type SortBase = 'name' | 'type' | 'modified'
+
+/** Split a SortMode into field + direction. Ascending means A→Z for
+ * name/type and oldest-first for modified. */
+export function splitSort(mode: SortMode): { base: SortBase; asc: boolean } {
+  if (mode === 'name-desc') return { base: 'name', asc: false }
+  if (mode === 'type') return { base: 'type', asc: true }
+  if (mode === 'type-desc') return { base: 'type', asc: false }
+  if (mode === 'modified') return { base: 'modified', asc: false }
+  if (mode === 'modified-asc') return { base: 'modified', asc: true }
+  return { base: 'name', asc: true }
+}
+
+/** Recombine a field + direction into a SortMode. */
+export function joinSort(base: SortBase, asc: boolean): SortMode {
+  if (base === 'type') return asc ? 'type' : 'type-desc'
+  if (base === 'modified') return asc ? 'modified-asc' : 'modified'
+  return asc ? 'name' : 'name-desc'
+}
 
 function segments(p: string): string[] {
   return p.split('/').filter(Boolean)
@@ -64,21 +84,23 @@ function newestMtime(node: TreeNode, mtimes: Record<string, number>): number {
 }
 
 /** Sort recursively: folders always group before files; within a group
- * the mode decides (name A→Z, type by extension then name, modified
- * newest first — a folder sorts by its newest descendant). */
+ * the mode decides (name A→Z or Z→A, type by extension then name in
+ * either direction, modified newest-first or oldest-first — a folder
+ * sorts by its newest descendant). */
 export function sortTree(nodes: TreeNode[], mode: SortMode, mtimes: Record<string, number> = {}): TreeNode[] {
+  const { base, asc } = splitSort(mode)
+  const dir = asc ? 1 : -1
   const byName = (a: TreeNode, b: TreeNode) => a.name.localeCompare(b.name)
   const cmp = (a: TreeNode, b: TreeNode): number => {
     if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
-    if (mode === 'type' && !a.isDir) {
-      const d = extensionOf(a.name).localeCompare(extensionOf(b.name))
-      if (d) return d
+    let d = 0
+    if (base === 'name') d = dir * byName(a, b)
+    else {
+      if (base === 'type' && !a.isDir) d = dir * extensionOf(a.name).localeCompare(extensionOf(b.name))
+      if (!d && base === 'modified') d = dir * (newestMtime(a, mtimes) - newestMtime(b, mtimes))
+      if (!d) d = byName(a, b)
     }
-    if (mode === 'modified') {
-      const d = newestMtime(b, mtimes) - newestMtime(a, mtimes)
-      if (d) return d
-    }
-    return byName(a, b)
+    return d
   }
   return [...nodes].sort(cmp).map(n => (n.isDir ? { ...n, children: sortTree(n.children, mode, mtimes) } : n))
 }

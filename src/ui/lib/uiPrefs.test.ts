@@ -35,6 +35,16 @@ describe('uiPrefs', () => {
     assert.equal(partial.chatView, 'panel')
     assert.equal(partial.fileSort, 'name')
   })
+
+  it('preview mode defaults to follow, keeps an explicit marked', () => {
+    assert.equal(UI_PREFS_DEFAULTS.filePreviewMode, 'follow')
+    assert.equal(validateUiPrefs({}).filePreviewMode, 'follow')
+    assert.equal(validateUiPrefs({ filePreviewMode: 'marked' }).filePreviewMode, 'marked')
+    assert.equal(validateUiPrefs({ filePreviewMode: 'bogus' }).filePreviewMode, 'follow')
+    const store = fakeStore()
+    saveUiPrefs({ filePreviewMode: 'marked' }, store)
+    assert.equal(loadUiPrefs(store).filePreviewMode, 'marked')
+  })
 })
 
 describe('uiPrefs editor fields + replace', () => {

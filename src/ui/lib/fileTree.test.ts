@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   allDirPaths, buildTree, countMatches, entriesUnder, filterTree, findNode,
-  flattenVisible, isHiddenPath, siblingNames, sortTree, validateEntryName, visibleTree,
+  flattenVisible, isHiddenPath, joinSort, siblingNames, sortTree, splitSort, validateEntryName, visibleTree,
+  type SortMode,
 } from './fileTree.js'
 
 const FILES = ['/index.html', '/src/App.tsx', '/src/lib/panel.ts', '/src/lib/deck.ts', '/src/index.css', '/.env', '/README.md']
@@ -42,6 +43,38 @@ describe('sortTree', () => {
     const tree = sortTree(buildTree(FILES), 'modified', mtimes)
     const src = findNode(tree, '/src')!
     assert.deepEqual(src.children.filter(c => !c.isDir).map(c => c.name), ['index.css', 'App.tsx'])
+  })
+
+  it('reverses name order in name-desc mode, folders still first', () => {
+    const tree = sortTree(buildTree(FILES), 'name-desc')
+    const src = findNode(tree, '/src')!
+    assert.deepEqual(src.children.map(c => c.name), ['lib', 'index.css', 'App.tsx'])
+  })
+
+  it('reverses extension order in type-desc mode', () => {
+    const tree = sortTree(buildTree(FILES), 'type-desc')
+    const src = findNode(tree, '/src')!
+    assert.deepEqual(src.children.filter(c => !c.isDir).map(c => c.name), ['App.tsx', 'index.css'])
+  })
+
+  it('sorts oldest first in modified-asc mode', () => {
+    const mtimes = { '/src/App.tsx': 100, '/src/index.css': 300, '/src/lib/panel.ts': 200, '/src/lib/deck.ts': 50 }
+    const tree = sortTree(buildTree(FILES), 'modified-asc', mtimes)
+    const src = findNode(tree, '/src')!
+    assert.deepEqual(src.children.filter(c => !c.isDir).map(c => c.name), ['App.tsx', 'index.css'])
+  })
+
+  it('splits every mode into field + direction and rejoins it', () => {
+    const modes: SortMode[] = ['name', 'name-desc', 'type', 'type-desc', 'modified', 'modified-asc']
+    for (const mode of modes) {
+      const { base, asc } = splitSort(mode)
+      assert.equal(joinSort(base, asc), mode)
+    }
+    assert.deepEqual(splitSort('name'), { base: 'name', asc: true })
+    assert.deepEqual(splitSort('modified'), { base: 'modified', asc: false })
+    assert.deepEqual(splitSort('modified-asc'), { base: 'modified', asc: true })
+    // Switching field keeps the direction: Z–A name → Z–A type.
+    assert.equal(joinSort('type', splitSort('name-desc').asc), 'type-desc')
   })
 })
 

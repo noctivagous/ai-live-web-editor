@@ -12,10 +12,10 @@ import { sanitizeOverrides } from './shortcuts'
 import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, type UiThemeId } from './themes'
 
 export type ChatViewPref = 'chat' | 'panel'
-export type FileSortPref = 'name' | 'type' | 'modified'
+export type FileSortPref = 'name' | 'name-desc' | 'type' | 'type-desc' | 'modified' | 'modified-asc'
 /** How the preview's file gets chosen in the file pane (slice B):
- * 'marked' = only an explicit mark moves the preview (default);
- * 'follow' = clicking a file marks it too. */
+ * 'follow' = clicking a file marks it too (default);
+ * 'marked' = only an explicit mark moves the preview. */
 export type FilePreviewModePref = 'marked' | 'follow'
 
 export interface UiPrefs {
@@ -56,7 +56,7 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   chatView: 'chat',
   fileSort: 'name',
   fileShowHidden: false,
-  filePreviewMode: 'marked',
+  filePreviewMode: 'follow',
   formatToolbar: true,
   editorFontSize: 13,
   editorTabSize: 4,
@@ -90,9 +90,9 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     uiFontSize: clampInt(v.uiFontSize, UI_FONT_SIZE_MIN, UI_FONT_SIZE_MAX, UI_PREFS_DEFAULTS.uiFontSize),
     menuStrip: v.menuStrip !== false,
     chatView: v.chatView === 'panel' ? 'panel' : 'chat',
-    fileSort: v.fileSort === 'type' || v.fileSort === 'modified' ? v.fileSort : 'name',
+    fileSort: v.fileSort === 'name-desc' || v.fileSort === 'type' || v.fileSort === 'type-desc' || v.fileSort === 'modified' || v.fileSort === 'modified-asc' ? v.fileSort : 'name',
     fileShowHidden: v.fileShowHidden === true,
-    filePreviewMode: v.filePreviewMode === 'follow' ? 'follow' : 'marked',
+    filePreviewMode: v.filePreviewMode === 'marked' ? 'marked' : 'follow',
     formatToolbar: v.formatToolbar !== false,
     editorFontSize: clampInt(v.editorFontSize, 10, 20, UI_PREFS_DEFAULTS.editorFontSize),
     editorTabSize: v.editorTabSize === 2 ? 2 : 4,

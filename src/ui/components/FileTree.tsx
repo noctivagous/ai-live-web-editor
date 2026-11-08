@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ChevronDown, ChevronRight, ChevronsDownUp, Copy, Eye, EyeOff, File as FileIcon, FileArchive,
-  FileBraces, FileCode, FileCog, FileImage, FilePlus, FileText, Folder, FolderOpen, FolderPlus,
+  ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronsDownUp, Copy, Eye, EyeOff, File as FileIcon,
+  FileArchive, FileBraces, FileCode, FileCog, FileImage, FilePlus, FileText, Folder, FolderOpen, FolderPlus,
   Pencil, RefreshCw, Search, Trash, X,
 } from 'lucide-react'
 import {
   allDirPaths, baseName, buildTree, countMatches, entriesUnder, filterTree, flattenVisible,
-  parentPath, siblingNames, sortTree, validateEntryName, visibleTree,
-  type SortMode, type TreeNode,
+  joinSort, parentPath, siblingNames, sortTree, splitSort, validateEntryName, visibleTree,
+  type SortBase, type SortMode, type TreeNode,
 } from '../lib/fileTree'
 import { ButtonGrid } from './ButtonGrid'
 import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type FilePreviewModePref } from '../lib/uiPrefs'
@@ -64,6 +64,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
   const [sort, setSortState] = useState<SortMode>(() => loadUiPrefs().fileSort)
   const [showHidden, setShowHiddenState] = useState(() => loadUiPrefs().fileShowHidden)
   const setSort = (m: SortMode) => { setSortState(m); saveUiPrefs({ fileSort: m }) }
+  const { base: sortBase, asc: sortAsc } = splitSort(sort)
   const setShowHidden = (fn: (v: boolean) => boolean) => setShowHiddenState(v => {
     const next = fn(v)
     saveUiPrefs({ fileShowHidden: next })
@@ -298,17 +299,53 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <ButtonGrid className="ft-toolbar">
-        <select className="deck-select ft-sort" value={sort} onChange={e => setSort(e.target.value as SortMode)} title="Sort order" aria-label="Sort order">
-          <option value="name">Name</option>
-          <option value="type">Type</option>
-          <option value="modified">Modified</option>
-        </select>
-        <div className="seg" role="group" aria-label="Preview selection">
-          <button type="button" className={previewMode === 'marked' ? 'on' : ''} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
-          <button type="button" className={previewMode === 'follow' ? 'on' : ''} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
+      <div className="ft-toolbar">
+        <div className="ft-bar">
+          <div className="ft-segs">
+            <div className="seg" role="group" aria-label="Sort field">
+              {(['name', 'type', 'modified'] as SortBase[]).map(base => (
+                <button key={base} type="button" className={sortBase === base ? 'on' : ''}
+                  onClick={() => setSort(joinSort(base, sortAsc))}
+                  title={base === 'name' ? 'Sort by name' : base === 'type' ? 'Sort by extension' : 'Sort by modified time'}>
+                  {base === 'name' ? 'Name' : base === 'type' ? 'Ext' : 'Mod'}
+                </button>
+              ))}
+            </div>
+            <div className="seg" role="group" aria-label="Sort direction">
+              {sortBase === 'modified' ? (
+                <>
+                  <button type="button" className={sortAsc ? 'on' : ''} onClick={() => setSort(joinSort(sortBase, true))}
+                    title="Ascending: oldest first">
+                    <ArrowUp size={12} />Old
+                  </button>
+                  <button type="button" className={!sortAsc ? 'on' : ''} onClick={() => setSort(joinSort(sortBase, false))}
+                    title="Descending: newest first">
+                    <ArrowDown size={12} />New
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className={sortAsc ? 'on' : ''} onClick={() => setSort(joinSort(sortBase, true))}
+                    title={sortBase === 'type' ? 'Ascending: extension A to Z' : 'Ascending: A to Z'}>
+                    <ArrowUp size={12} />asc
+                  </button>
+                  <button type="button" className={!sortAsc ? 'on' : ''} onClick={() => setSort(joinSort(sortBase, false))}
+                    title={sortBase === 'type' ? 'Descending: extension Z to A' : 'Descending: Z to A'}>
+                    <ArrowDown size={12} />desc
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-      </ButtonGrid>
+        <div className="ft-bar">
+          <span className="ft-bar-label">Preview:</span>
+          <div className="seg" role="group" aria-label="Preview selection">
+            <button type="button" className={previewMode === 'follow' ? 'on' : ''} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
+            <button type="button" className={previewMode === 'marked' ? 'on' : ''} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
+          </div>
+        </div>
+      </div>
       <div className="ft-filter">
         <Search size={12} className="ft-filter-icon" />
         <input

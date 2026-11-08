@@ -99,7 +99,7 @@ export const SETTING_FIELDS: SettingField[] = [
   {
     id: 'fileSort', section: 'files', label: 'File pane sort order', control: 'select', store: 'prefs',
     hint: 'The file browser pane starts in this order; changing it in the pane updates this.',
-    options: [{ value: 'name', label: 'Name' }, { value: 'type', label: 'Type' }, { value: 'modified', label: 'Modified' }],
+    options: [{ value: 'name', label: 'Name A–Z' }, { value: 'name-desc', label: 'Name Z–A' }, { value: 'type', label: 'Ext A–Z' }, { value: 'type-desc', label: 'Ext Z–A' }, { value: 'modified', label: 'Modified, newest first' }, { value: 'modified-asc', label: 'Modified, oldest first' }],
     keywords: 'files explorer order',
   },
   {

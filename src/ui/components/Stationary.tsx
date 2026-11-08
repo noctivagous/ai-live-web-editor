@@ -3,6 +3,7 @@ import { Check, Loader2, X } from 'lucide-react'
 import { formatElapsed, type DeckTurn } from '../lib/deck'
 import { deriveStationary, type EarlierEntry, type StationaryNote } from '../lib/stationary'
 import type { ToolStep } from '../lib/chatSession'
+import { Markdown } from './Markdown'
 
 /* Stationary view: the chat with fixed homes instead of a scroll.
    The latest message holds the top edge of the pane — a WORKING
@@ -61,7 +62,11 @@ export function StationaryView({ turns, sending, workingLabel }: {
             )}
             {m.live && <Loader2 size={11} aria-hidden className="st-spin" />}
           </div>
-          <pre className="st-pin-text">{m.pinned.text}</pre>
+          {m.pinned.kind === 'error' ? (
+            <pre className="st-pin-text">{m.pinned.text}</pre>
+          ) : (
+            <div className="st-pin-text"><Markdown text={m.pinned.text} /></div>
+          )}
           {m.pinned.kind === 'working' && (
             <div className="st-pin-sub">Interim — this note is replaced as the work proceeds. The final report takes this place when the turn finishes.</div>
           )}
@@ -106,13 +111,17 @@ export function StationaryView({ turns, sending, workingLabel }: {
           {m.notes.map((n: StationaryNote, i: number) => (
             <div key={`note-${i}`} className="st-old" style={{ opacity: fadeFor(i) }}>
               <span className="st-old-label">{n.reasoning ? 'Reasoning' : `Working note ${n.n} of ${n.total}`}</span>
-              <pre className="st-old-text">{n.text}</pre>
+              <div className="st-old-text"><Markdown text={n.text} /></div>
             </div>
           ))}
           {m.earlier.map((e: EarlierEntry, j: number) => (
             <div key={`earlier-${e.turnIndex}-${j}`} className="st-old" style={{ opacity: fadeFor(m.notes.length + j) }}>
               <span className={`st-old-label ${e.kind}`}>{e.kind === 'working' && e.reasoning ? 'Reasoning' : EARLIER_LABEL[e.kind]}</span>
-              <pre className="st-old-text">{e.text}</pre>
+              {(e.kind === 'working' || e.kind === 'final') ? (
+                <div className="st-old-text"><Markdown text={e.text} /></div>
+              ) : (
+                <pre className="st-old-text">{e.text}</pre>
+              )}
             </div>
           ))}
         </div>

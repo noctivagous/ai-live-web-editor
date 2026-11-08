@@ -454,11 +454,16 @@ export async function pipeAgentChatStream(
     withSystemPreamble,
   } = await import('./workflowRoute.js')
   const { buildTurnContext, latestUserText } = await import('./turnContext.js')
+  // Chat debug/reporting mode (AI_LIVE_CHAT_DEBUG=1): a strict no-op
+  // recorder unless the flag is on — see chatDebug.ts.
+  const { createChatDebugTurn } = await import('./chatDebug.js')
+  const dbg = createChatDebugTurn()
   const parsed = parseSketchMode(workflow)
   if (parsed) setSketchMode(parsed)
   const routed = routeChatTurn(getSketchMode(), messages)
   if (routed.switched) setSketchMode(routed.mode)
   const mode = getSketchMode()
+  dbg.noteMode(mode, routed.switched)
   let payload: unknown = messages
   if (mode === 'sketch' && routed.intent === 'mixed') payload = withSystemPreamble(SKETCH_MIXED_PREAMBLE, messages)
   else if (mode === 'sketch') payload = withSystemPreamble(SKETCH_TURN_PREAMBLE, messages)
@@ -493,7 +498,13 @@ export async function pipeAgentChatStream(
     const { isSelfWorkspace, createSelfSnapshot } = await import('./selfMode.js')
     if (isSelfWorkspace()) await createSelfSnapshot('chat turn')
   }
-  const { send } = beginChatSse(res, req)
+  const { send: rawSend } = beginChatSse(res, req)
+  // Every client-bound event also lands in the debug recorder
+  // (a no-op unless AI_LIVE_CHAT_DEBUG=1).
+  const send = (obj: unknown) => {
+    dbg.recordEvent(obj as ChatStreamEvent)
+    rawSend(obj)
+  }
   const abortSignal = abortSignalFromReq(req)
   if (routed.switched) send({ type: 'workflow', mode: routed.mode, reason: routed.reason })
   send({ type: 'status', text: mode === 'sketch' ? 'live sketch…' : routed.switched ? 'switched to Files…' : 'starting…' })
@@ -516,6 +527,7 @@ export async function pipeAgentChatStream(
         baselineError = e instanceof Error ? e.message : String(e)
       }
     }
+    dbg.noteGateArmed(mode === 'files' && verifyGateEnabled(), { captured: Boolean(baseline), error: baselineError })
     const streamChunks = async (stream: AsyncIterable<unknown>) => {
       for await (const chunk of stream) {
         if (req?.aborted || abortSignal.aborted) break
@@ -527,6 +539,7 @@ export async function pipeAgentChatStream(
         const mapped = mapMastraChunk(chunk)
         if (mapped) {
           if (mapped.type === 'tool-call') toolTrace.push(mapped.name)
+          dbg.noteToolChunk(mapped, chunk)
           send(mapped)
         }
       }
@@ -551,7 +564,9 @@ export async function pipeAgentChatStream(
         searchAvailable = getSearchBackend() !== 'off'
       } catch { /* research tools stay off */ }
       turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
+      dbg.noteTools(turnTools, { hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
     }
+    if (mode !== 'files') dbg.noteTools(turnTools, {})
     const result = await agent.stream(payload as never, {
       maxSteps: 12,
       abortSignal,
@@ -565,11 +580,16 @@ export async function pipeAgentChatStream(
     let followResult: unknown = null
     // P0-b host gate: Files turns that wrote files get re-checked here.
     let verification: VerifySummary = { ran: false }
+    // Extracted once so the debug recorder sees the same decision the
+    // branches below act on (shouldTriggerGate is pure — no behavior
+    // change from computing it up front).
+    const gateTriggered = mode === 'files' && shouldTriggerGate(mode, toolTrace)
+    dbg.noteGateDecision(gateTriggered, [...toolTrace])
     if (
       mode === 'files' &&
       verifyGateEnabled() &&
       baseline &&
-      shouldTriggerGate(mode, toolTrace) &&
+      gateTriggered &&
       !req?.aborted &&
       !abortSignal.aborted
     ) {
@@ -629,7 +649,7 @@ export async function pipeAgentChatStream(
       }
     } else if (mode === 'files' && !verifyGateEnabled()) {
       verification = { ran: false, skipped: 'AI_LIVE_VERIFY=0' }
-    } else if (mode === 'files' && baselineError && shouldTriggerGate(mode, toolTrace)) {
+    } else if (mode === 'files' && baselineError && gateTriggered) {
       // A baseline-capture failure must read as a skipped gate with a
       // reason, not as a silent "nothing to verify" (slice 5a).
       verification = { ran: false, skipped: `baseline capture failed: ${baselineError}` }
@@ -665,10 +685,12 @@ export async function pipeAgentChatStream(
     }
     send({ type: 'done', usage, model, verification })
     res.end()
+    dbg.finish({ aborted: Boolean(req?.aborted || abortSignal.aborted) })
   } catch (e: unknown) {
     if (req?.aborted || abortSignal.aborted || isAbortError(e)) {
       try { send({ type: 'done' }) } catch { /* closed */ }
       try { res.end() } catch { /* closed */ }
+      dbg.finish({ aborted: true })
       return
     }
     console.error(e)
@@ -676,5 +698,6 @@ export async function pipeAgentChatStream(
     logServerError({ kind: 'chat-error', route: 'POST /api/chat/stream', message: e instanceof Error ? e.message : String(e) })
     try { send({ type: 'error', error: describeUpstreamError(e) }) } catch { /* closed */ }
     res.end()
+    dbg.finish({ error: e instanceof Error ? e.message : String(e) })
   }
 }

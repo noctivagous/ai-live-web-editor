@@ -80,7 +80,9 @@ section.
   - architecture
      - the architecture plan, software engineering philosophy used,
       architecture guide to follow
+
   - features
+
   - graphic design - design system manager.  places 
      design resources to configure, in different areas,
      in a location (this facet of the project).
@@ -95,6 +97,12 @@ section.
       show previews of the different gui controls being used.
       - the graphic design graph and report will pertain to different
       aspects of the design system and design.
+      - this is where design packs, which are like skins
+     packs (e.g. WinAmp skins) that let the user choose
+     from premade packages that contain combinations 
+     of design system, icons, etc. 
+   
+   
     - tech stack - can be referenced elsewhere
     but manages and refers to what technologies are
      being used, what npm packages, programming languages,

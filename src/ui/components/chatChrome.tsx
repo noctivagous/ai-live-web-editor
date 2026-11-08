@@ -2,6 +2,7 @@ import React from 'react'
 import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet } from 'lucide-react'
 import type { ChatWorkflow, DeviceTarget, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
+import { ButtonGrid } from './ButtonGrid'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
@@ -78,7 +79,7 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
         </span>
       )}
       <span className="pill mono" title={tokenTotal != null ? 'Total tokens used in this chat across all turns' : 'No token usage reported yet'} style={{ marginLeft: 'auto' }}><Coins size={12} />{tokenTotal != null ? fmtTokens(tokenTotal) : '—'}</span>
-      <span className="btn-grid" style={{ flex: '1 1 240px' }}>
+      <ButtonGrid style={{ flex: '1 1 240px' }}>
       <button type="button" className="deck-btn btn-icon" disabled={sending} onClick={onClear} title="Clear this chat" style={{ padding: '4px 8px' }}><Eraser size={12} />Clear</button>
       {showDeckButton && (
         <button type="button" className="deck-btn btn-icon" onClick={onOpenDeck} title="Open Deck mode — turns as horizontal slides (← → navigate, O overview)" style={{ padding: '4px 8px' }}><Layers size={12} />Deck</button>
@@ -86,7 +87,7 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
       {onTogglePanel && (
         <button type="button" className={`deck-btn btn-icon${panelActive ? ' on' : ''}`} onClick={onTogglePanel} title={panelActive ? 'Back to the scrolling chat view' : 'Panel view — stationary indicators instead of scrolling text'} style={{ padding: '4px 8px' }} aria-pressed={Boolean(panelActive)}><Gauge size={12} />Panel</button>
       )}
-      </span>
+      </ButtonGrid>
       {sending && (
         <span className="pill warn" style={{ maxWidth: '46%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           <span className="dot" />{workingLabel || 'working'}

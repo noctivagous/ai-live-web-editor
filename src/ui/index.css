@@ -298,9 +298,9 @@ select.pill:disabled{cursor:default; opacity:.7}
    Actions/Graph switcher, chat Clear/Deck/Panel cluster): equal grid
    columns instead of ragged flex flow. Narrow bars wrap 4→2+2 or to a
    single column, always aligned. */
-.panel-head.btn-grid, .btn-grid{
+.panel-head.btn-grid, .ft-toolbar.btn-grid, .btn-grid{
   display:grid; gap:4px 6px; align-items:center;
-  grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
+  grid-template-columns:repeat(auto-fill, minmax(var(--btn-grid-min, 72px), 1fr));
 }
 
 .deck-input, .deck-select{

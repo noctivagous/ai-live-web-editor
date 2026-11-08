@@ -9,6 +9,7 @@ import {
   parentPath, siblingNames, sortTree, validateEntryName, visibleTree,
   type SortMode, type TreeNode,
 } from '../lib/fileTree'
+import { ButtonGrid } from './ButtonGrid'
 import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type FilePreviewModePref } from '../lib/uiPrefs'
 import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
 import { getWorkflow, postWorkflow, readFile } from '../lib/api'
@@ -297,7 +298,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <div className="ft-toolbar">
+      <ButtonGrid className="ft-toolbar">
         <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => startCreate('create-file', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New file (in the selected folder)"><FilePlus size={13} /></button>
         <button type="button" className="deck-btn btn-icon ft-tool" onClick={() => startCreate('create-folder', focused && findIsDir(fullTree, focused) ? focused : parentPath(focused || active))} title="New folder"><FolderPlus size={13} /></button>
         <button type="button" className="deck-btn btn-icon ft-tool" onClick={onRefresh} title="Refresh the file list"><RefreshCw size={13} /></button>
@@ -312,7 +313,7 @@ export function FileTree({ files, dirs = [], mtimes = {}, active, onSelect, onRe
           <button type="button" className={`deck-btn btn-icon ft-tool${previewMode === 'marked' ? ' on' : ''}`} onClick={() => setPreviewMode('marked')} title="Preview selection: Marked — the preview only moves when you mark a file (eye button)">Marked</button>
           <button type="button" className={`deck-btn btn-icon ft-tool${previewMode === 'follow' ? ' on' : ''}`} onClick={() => setPreviewMode('follow')} title="Preview selection: Follow — clicking a file previews it too">Follow</button>
         </span>
-      </div>
+      </ButtonGrid>
       <div className="ft-filter">
         <Search size={12} className="ft-filter-icon" />
         <input

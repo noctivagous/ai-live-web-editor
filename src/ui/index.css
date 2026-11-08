@@ -750,17 +750,17 @@ select.pill:disabled{cursor:default; opacity:.7}
 .ft-filter-clear { display: inline-flex; background: none; border: none; color: var(--faint); cursor: pointer; padding: 1px; }
 .ft-filter-clear:hover { color: var(--text); }
 .ft-tree { flex: 1; min-height: 0; overflow: auto; padding: 2px 6px 8px; outline: none; }
-.ft-row { display: flex; align-items: center; gap: 5px; padding: 3px 6px 3px 0; border-radius: 7px; cursor: pointer; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-soft); border: 1px solid transparent; white-space: nowrap; }
+.ft-row { display: flex; align-items: center; gap: 5px; padding: 3px 6px 3px 0; border-radius: 0; cursor: pointer; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-soft); border: 1px solid transparent; border-left: none; border-right: none; white-space: nowrap; }
 /* Nested shading: rows stripe by tree depth (ft-depth-N comes from the
    row's depth, clamped at 3; depth 0 carries no class and shows the
-   pane). Tints mix live from the theme's own well and panel, so every
-   theme — present and future — stripes toward its own inset surface
-   with no per-theme values to maintain. These sit before the state
-   rules below so hover, active, drop, and editing backgrounds keep
-   winning. */
-.ft-row.ft-depth-1 { background: color-mix(in srgb, var(--well) 25%, var(--panel)); }
-.ft-row.ft-depth-2 { background: color-mix(in srgb, var(--well) 50%, var(--panel)); }
-.ft-row.ft-depth-3 { background: color-mix(in srgb, var(--well) 75%, var(--panel)); }
+   pane). Tints mix live from the theme's own text and panel colors:
+   text runs near-white on dark themes and near-black on lights, so
+   deeper rows lighten on dark themes and darken on light ones, with
+   no per-theme values to maintain. These sit before the state rules
+   below so hover, active, drop, and editing backgrounds keep winning. */
+.ft-row.ft-depth-1 { background: color-mix(in srgb, var(--text) 6%, var(--panel)); }
+.ft-row.ft-depth-2 { background: color-mix(in srgb, var(--text) 12%, var(--panel)); }
+.ft-row.ft-depth-3 { background: color-mix(in srgb, var(--text) 18%, var(--panel)); }
 .ft-row:hover { background: var(--panel); }
 .ft-row.active { background: var(--card); border-color: var(--border); color: var(--text-strong); }
 .ft-row.focused { border-color: var(--border-strong); }

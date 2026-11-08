@@ -384,6 +384,21 @@ export default function App() {
     setContent(data.content || data.error || '')
   }
 
+  // File ↔ URL sync: the open file rides ?mainPreview=. A deep link or
+  // Back/Forward step loads that file; any local open updates the URL.
+  const routeFile = route.mainPreview
+  useEffect(() => {
+    if (routeFile && routeFile !== activePath) void loadFile(routeFile)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeFile])
+  useEffect(() => {
+    const cur = parseRoute(window.location.hash)
+    // An inbound file still loading wins — never clobber it.
+    if (cur.mainPreview && cur.mainPreview !== activePath) return
+    if ((cur.mainPreview ?? null) !== activePath) navigate({ ...cur, mainPreview: activePath })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePath])
+
   async function refreshConfig() {
     try {
       const data = await getConfig()

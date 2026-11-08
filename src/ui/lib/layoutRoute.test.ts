@@ -67,4 +67,17 @@ describe('layoutRoute', () => {
     assert.deepEqual(parseRoute('#/workbench?globalModal=bogus&tab=x'), { kind: 'workbench' })
     assert.deepEqual(parseRoute('#/facets/features?tab=providers'), { kind: 'facets', facet: 'features' })
   })
+
+  it('a mainPreview file query parses on any layout and round-trips', () => {
+    assert.deepEqual(parseRoute('#/workbench?mainPreview=%2Fxyz.txt'), { kind: 'workbench', mainPreview: '/xyz.txt' })
+    assert.deepEqual(
+      parseRoute('#/facets/features/graph/report?mainPreview=%2Fnotes.md&globalModal=settings&tab=providers'),
+      { kind: 'facets', facet: 'features', view: 'graph-report', mainPreview: '/notes.md', modal: { name: 'settings', tab: 'providers' } },
+    )
+    assert.equal(formatRoute({ kind: 'workbench', mainPreview: '/xyz.txt' }), '#/workbench?mainPreview=%2Fxyz.txt')
+  })
+
+  it('an empty mainPreview is ignored', () => {
+    assert.deepEqual(parseRoute('#/workbench?mainPreview='), { kind: 'workbench' })
+  })
 })

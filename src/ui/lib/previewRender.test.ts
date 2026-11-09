@@ -5,7 +5,7 @@ import { RENDERERS, describeRenderer, rendererFor } from './previewRender'
 test('registry: every renderer id has exactly one descriptor', () => {
   const ids = RENDERERS.map((r) => r.id)
   assert.equal(new Set(ids).size, ids.length)
-  for (const id of ['page', 'markdown', 'reading', 'image', 'css', 'json', 'yaml', 'toml', 'env', 'spreadsheet', 'richtext', 'document', 'workbook', 'host', 'none'] as const) {
+  for (const id of ['page', 'markdown', 'reading', 'image', 'css', 'json', 'yaml', 'toml', 'env', 'spreadsheet', 'richtext', 'document', 'workbook', 'jsx', 'host', 'none'] as const) {
     assert.equal(describeRenderer(id).id, id)
     assert.ok(describeRenderer(id).summary.length > 0, `${id} needs a summary`)
   }
@@ -40,6 +40,7 @@ test('rendererFor: extension dispatch follows the table', () => {
   assert.equal(rendererFor('/prod.env'), 'env')
   assert.equal(rendererFor('/book.xlsx'), 'workbook')
   assert.equal(rendererFor('/App.tsx'), 'host')
+  assert.equal(rendererFor('/src/components/FieldLabel.jsx'), 'jsx')
 })
 
 test('rendererFor: script fallback is unchanged — components host, logic files none', () => {
@@ -52,7 +53,7 @@ test('rendererFor: script fallback is unchanged — components host, logic files
 
 test('descriptors: markdown, css and json write in place; richtext and image write whole-file', () => {
   const writable = RENDERERS.filter((r) => r.write !== 'none').map((r) => r.id)
-  assert.deepEqual(writable, ['markdown', 'image', 'css', 'json', 'yaml', 'toml', 'env', 'xml', 'spreadsheet', 'richtext'])
+  assert.deepEqual(writable, ['markdown', 'image', 'css', 'json', 'yaml', 'toml', 'env', 'xml', 'spreadsheet', 'richtext', 'jsx'])
   assert.equal(describeRenderer('richtext').write, 'whole-file')
   assert.equal(describeRenderer('image').write, 'whole-file')
   assert.equal(describeRenderer('spreadsheet').write, 'in-place')

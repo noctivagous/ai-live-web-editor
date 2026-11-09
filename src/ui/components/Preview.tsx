@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Expand, Maximize2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Expand, Maximize2, Monitor, MousePointerClick, SendHorizontal, Smartphone, StickyNote, Tablet, Trash2, X } from 'lucide-react'
 import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
 import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
@@ -10,6 +10,7 @@ import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT } from '../lib/uiPrefs
 import { CssBoxes } from './CssBoxes'
 import { FormatToolbar } from './FormatToolbar'
 import { JsonView } from './JsonView'
+import { JsxView } from './JsxView'
 import { ConfigView } from './ConfigView'
 import { MarkdownEditor } from './MarkdownEditor'
 import { RichTextEditor } from './RichTextEditor'
@@ -222,7 +223,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     ? `${STATIC_URL.replace(/\/$/, '')}${pagePath}`
     : pagePath === '/index.html' ? `${liveUrl}/` : `${liveUrl}${pagePath}`
   const isReading = renderer === 'reading' || renderer === 'xml'
-  const displayUrl = isReading || renderer === 'markdown' || renderer === 'richtext' || renderer === 'image' || renderer === 'json' || renderer === 'yaml' || renderer === 'toml' || renderer === 'env' || renderer === 'spreadsheet' || renderer === 'document' || renderer === 'workbook' ? (mark ?? '') : frameSrc
+  const displayUrl = isReading || renderer === 'markdown' || renderer === 'richtext' || renderer === 'image' || renderer === 'json' || renderer === 'yaml' || renderer === 'toml' || renderer === 'env' || renderer === 'spreadsheet' || renderer === 'document' || renderer === 'workbook' || renderer === 'jsx' ? (mark ?? '') : frameSrc
   const frameMode = renderer === 'page' || renderer === 'host'
 
   // A new mark restarts the frame on the live server for that file.
@@ -269,18 +270,46 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     setKey(k => k + 1)
   }
 
-  // Poll the in-page note count while annotate mode is on.
+  // Annotate dropdown: the in-page toolbar's elements, driven from the
+  // preview bar so annotation never requires reaching into the page.
+  // (Declared before the polling effect below, which refreshes it.)
+  const [annotateMenuOpen, setAnnotateMenuOpen] = useState(false)
+  const [menuAnns, setMenuAnns] = useState<(PageNote & { id?: string })[]>([])
+  const [menuPageNotes, setMenuPageNotes] = useState('')
+
+  function readAnnotState(): { anns: (PageNote & { id?: string })[], pageNotes: string } {
+    try {
+      const api = overlayApi(frameRef.current)
+      if (!api) return { anns: [], pageNotes: '' }
+      const anns = api.exportAnnotations?.() ?? []
+      const pageNotes = api.getPageNotes?.() ?? ''
+      return { anns: Array.isArray(anns) ? anns : [], pageNotes: typeof pageNotes === 'string' ? pageNotes : '' }
+    } catch { return { anns: [], pageNotes: '' } }
+  }
+
+  function refreshAnnotMenu() {
+    const { anns, pageNotes } = readAnnotState()
+    setMenuAnns(anns)
+    setMenuPageNotes(pageNotes)
+    setNoteCount(anns.length)
+  }
+
+  // Poll the in-page note count while annotate mode is on; when the
+  // annotate menu is open, refresh its snapshot too so picks made in
+  // the page land in the list without reopening the menu.
   useEffect(() => {
-    if (!annotating) return
+    if (!annotating && !annotateMenuOpen) return
     const t = setInterval(() => {
       try {
+        if (annotateMenuOpen) { refreshAnnotMenu(); return }
         const api = overlayApi(frameRef.current)
         const n = api?.exportAnnotations?.()?.length ?? 0
         setNoteCount(n)
       } catch { /* cross-origin or unloaded */ }
     }, 1500)
     return () => clearInterval(t)
-  }, [annotating, url, key])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotating, annotateMenuOpen, url, key])
 
   async function toggleAnnotate() {
     if (annotating) {
@@ -340,6 +369,55 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
       setSubmitting(false)
     }
   }
+
+  function openAnnotMenu() {
+    refreshAnnotMenu()
+    setAnnotateMenuOpen(true)
+  }
+
+  // The overlay listens for these chat commands (same handler the chat
+  // pane's Annotate chips use): postMessage works same-origin here, and
+  // the overlay applies save + re-render itself.
+  async function toggleNotesPanel() {
+    try {
+      if (!overlayApi(frameRef.current)) {
+        const ok = await ensureOverlay(frameRef.current)
+        if (!ok) {
+          onResult('Page-notes panel failed: could not inject the overlay into the preview. Reload and try Static preview.')
+          return
+        }
+      }
+      frameRef.current?.contentWindow?.postMessage({ ns: 'ai-live-chat-cmd', cmd: 'notes' }, '*')
+    } catch { /* unloaded frame */ }
+  }
+
+  function removeAnnotation(idx: number) {
+    try {
+      const api = overlayApi(frameRef.current)
+      const anns = api?.exportAnnotations?.() ?? []
+      if (!Array.isArray(anns) || !api?.importAnnotations) return
+      api.importAnnotations(anns.filter((_: unknown, i: number) => i !== idx))
+      refreshAnnotMenu()
+    } catch { /* cross-origin or unloaded */ }
+  }
+
+  function clearAnnotationsMenu() {
+    try { overlayApi(frameRef.current)?.clearAnnotations?.() } catch { /* cross-origin or unloaded */ }
+    refreshAnnotMenu()
+  }
+
+  function clearPageNotesMenu() {
+    try { overlayApi(frameRef.current)?.setPageNotes?.('') } catch { /* cross-origin or unloaded */ }
+    refreshAnnotMenu()
+  }
+
+  // Outside click closes the annotate menu (same pattern as the App menus).
+  useEffect(() => {
+    if (!annotateMenuOpen) return
+    const close = () => setAnnotateMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [annotateMenuOpen])
 
   const smallBtn = { padding: '2px 8px', fontSize: 'calc(11px * var(--ui-scale, 1))' } as const
   return (
@@ -409,24 +487,82 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             <option value="app">App shell</option>
             <option value="page">Page flow</option>
           </select>
-          <span className="seg" role="group" aria-label="Device target">
-            <button type="button" className={deviceTarget === 'phone' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('phone')} title="Phone (375px)">Phone</button>
-            <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('tablet')} title="Tablet (768px)">Tablet</button>
-            <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('desktop')} title="Desktop (1280px)">Desktop</button>
+          <span className="seg" role="group" aria-label="Device target" title="Device target: the design surface. The app must still work at every declared target.">
+            <button type="button" className={deviceTarget === 'phone' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('phone')} title="Phone (375px)"><Smartphone size={12} />Phone</button>
+            <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('tablet')} title="Tablet (768px)"><Tablet size={12} />Tablet</button>
+            <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} style={smallBtn} onClick={() => void chooseDevice('desktop')} title="Desktop (1280px)"><Monitor size={12} />Desktop</button>
           </span>
           <button type="button" className="deck-btn" style={smallBtn} onClick={() => setKey(k => k + 1)}>Reload</button>
           <button type="button" className="deck-btn" style={smallBtn} onClick={() => void switchUrl(STATIC_URL)}>Static</button>
           <button type="button" className="deck-btn" style={smallBtn} onClick={() => void switchUrl(liveUrl)}>Live :5173</button>
-          <button
-            type="button"
-            className="deck-btn"
-            style={annotating ? { ...smallBtn, borderColor: 'rgba(34,197,94,.5)', color: 'var(--green-text)' } : smallBtn}
-            onClick={() => void toggleAnnotate()}
-            title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
-            disabled={onHmr}
-          >
-            {annotating ? 'Annotating…' : 'Annotate'}
-          </button>
+          <div style={{ position: 'relative', display: 'flex' }} onPointerDown={e => e.stopPropagation()}>
+            <button
+              type="button"
+              className="deck-btn"
+              style={annotating ? { ...smallBtn, borderColor: 'rgba(34,197,94,.5)', color: 'var(--green-text)', borderTopRightRadius: 0, borderBottomRightRadius: 0 } : { ...smallBtn, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              onClick={() => void toggleAnnotate()}
+              title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
+              disabled={onHmr}
+            >
+              {annotating ? 'Annotating…' : 'Annotate'}
+            </button>
+            <button
+              type="button"
+              className="deck-btn"
+              style={{ ...smallBtn, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid var(--border-soft)', padding: '2px 5px' }}
+              onClick={() => (annotateMenuOpen ? setAnnotateMenuOpen(false) : openAnnotMenu())}
+              title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Annotation menu — pick, notes, submit, and the current annotations'}
+              aria-haspopup="menu"
+              aria-expanded={annotateMenuOpen}
+              disabled={onHmr}
+            >
+              <ChevronDown size={12} />
+            </button>
+            {annotateMenuOpen && (
+              <div className="aa-menu narrow" role="menu" aria-label="Annotation" style={{ left: 'auto', right: 0 }}>
+                <div className="aa-group">Annotate this preview</div>
+                <div className="aa-grid" style={{ gridTemplateColumns: '1fr' }}>
+                  <button type="button" role="menuitem" className="aa-card" onClick={() => void toggleAnnotate()}>
+                    <b><MousePointerClick size={12} style={{ verticalAlign: -2 }} /> {annotating ? 'Stop picking' : 'Pick element'}</b>
+                    <span>{annotating ? 'Picking — click a page element to attach a note.' : 'Click page elements to attach notes for the AI.'}</span>
+                    {annotating && <span className="aa-tag">active</span>}
+                  </button>
+                  <button type="button" role="menuitem" className="aa-card" onClick={() => { void toggleNotesPanel(); setAnnotateMenuOpen(false) }}>
+                    <b><StickyNote size={12} style={{ verticalAlign: -2 }} /> Page notes</b>
+                    <span>{menuPageNotes ? menuPageNotes.slice(0, 120) : 'Show or hide the page-notes panel in the preview.'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="aa-card"
+                    disabled={(menuAnns.length + (menuPageNotes ? 1 : 0)) === 0 || submitting}
+                    onClick={() => { setAnnotateMenuOpen(false); void submitNotes() }}
+                  >
+                    <b><SendHorizontal size={12} style={{ verticalAlign: -2 }} /> Submit notes to the AI</b>
+                    <span>{menuAnns.length || menuPageNotes ? `Send ${menuAnns.length} annotation${menuAnns.length === 1 ? '' : 's'}${menuPageNotes ? ' + page notes' : ''} to the AI.` : 'Nothing to submit yet — pick an element first.'}</span>
+                  </button>
+                </div>
+                <div className="aa-group">Annotations ({menuAnns.length})</div>
+                {menuAnns.length ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+                    {menuAnns.map((a, i) => (
+                      <div key={a.id || `${a.selector}-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'var(--card)', border: '1px solid var(--border-soft)', borderRadius: 8, padding: '6px 8px' }}>
+                        <span className="mono" title={a.selector} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '45%', flexShrink: 0 }}>{a.selector}</span>
+                        <span title={a.text} style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-soft)', fontSize: 'calc(11.5px * var(--ui-scale, 1))' }}>{a.text || '—'}</span>
+                        <button type="button" className="deck-btn" style={{ padding: '0 6px' }} onClick={() => removeAnnotation(i)} title={`Remove the note on ${a.selector}`}><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 'calc(11.5px * var(--ui-scale, 1))', color: 'var(--text-soft)', marginBottom: 6 }}>No annotations yet — Pick an element on the page.</div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="deck-btn" style={smallBtn} disabled={!menuAnns.length} onClick={clearAnnotationsMenu} title="Delete all element annotations"><Trash2 size={12} />Clear annotations</button>
+                  <button type="button" className="deck-btn" style={smallBtn} disabled={!menuPageNotes} onClick={clearPageNotesMenu} title="Delete the page notes">Clear page notes</button>
+                </div>
+              </div>
+            )}
+          </div>
           {annotating && (
             <button type="button" className="deck-btn primary" style={smallBtn} onClick={() => void submitNotes()} disabled={submitting} title="Send page notes to the AI">
               {submitting ? 'Sending…' : 'Submit notes'}
@@ -475,6 +611,8 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           <RichTextEditor key={mark} path={mark} onSaved={onChanged} showAi={showFormatToolbar} onDispatched={(title) => onResult(`Sent to the AI: ${title} — watch the chat pane for the result.`)} />
         ) : renderer === 'spreadsheet' && mark ? (
           <SpreadsheetView key={mark} path={mark} onSaved={onChanged} />
+        ) : renderer === 'jsx' && mark ? (
+          <JsxView key={mark} path={mark} onSaved={onChanged} />
         ) : (renderer === 'document' || renderer === 'workbook') && mark ? (
           <FormatStub key={mark} path={mark} descriptor={describeRenderer(renderer)} />
         ) : isReading ? (

@@ -38,6 +38,15 @@ export async function writeFile(path: string, content: string) {
   })
   return r.json()
 }
+
+export async function bundleJsx(path: string) {
+  const r = await fetch(`${API}/api/jsx/bundle`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ path })
+  })
+  return r.json() as Promise<{ ok: boolean, code?: string, error?: string }>
+}
 /** URL that serves a project file's raw bytes (the image editor's
  * load path — /projects/ static serving is shadowed by the UI's
  * SPA fallback when the UI runs from source). */

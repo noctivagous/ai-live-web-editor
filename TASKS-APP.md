@@ -3,6 +3,13 @@
 
 ---
 
+dependencies and installed packages with version
+management.  button for querying if latest, button
+for installing latest.  button for going back to another version.
+
+
+---
+
 some things we'll have to address in the future:
 app orientation packs.  can configure the 
 app and UI around different software development 
@@ -19,11 +26,11 @@ to be able to make their own app orientation packs.
 at the same time, whatever their needs and requirements
 are, they can make use of the app being located inside
 the browser, that it can run and analyze things dynamically.
-This then relates to a second topic, which is AI chat
+This then relates to a second topic, which is AI Chat Incarnations
 para-contexts or sub-contexts, which is another section in this text.
 That topic relates to the AI chat being utilized on the side
-in a way that is different than software development,
-utilizing the same machinery we put in for AI chat but
+in a way that is different than direct software development changes
+to the code base, utilizing the same machinery we put in for AI chat but
 for purposes within the app under development or 
 to the side of the ALE app.
 
@@ -35,8 +42,23 @@ app orientation pack examples:
 	    available unless opt-in.
 	- kernel development
 	- graphic design
-	- electronic schematics
-	
+	- electronic schematics - would come with utilities specific
+	to navigating electronics schematics but will make
+	use of in the pack the utilities that ALE provides
+	for zoomable maps.
+	- consumer app development - regular computer
+	users can, with this app.
+
+We should then establish Workflows and States
+and Workflow States as a part of the app orientation pack
+file format (what we might call its API)
+
+This would relate to the project files as well, as a project
+file might have fields that tell the ALE app what app orientation
+pack to use.  If the app orientation pack isn't available,
+a dialog will show up.  We could make the default
+General Development
+
 ---
 
 command bar.  only contains commands after search
@@ -51,9 +73,10 @@ in a way that is different than direct changes
 to the code base for software development,
 utilizing the same machinery we put in for AI chat for
 software development but able to swap out tools
-for entirely different purposes, able to place the AI
-chat inside the running that is under development (embedded) or 
-within the ALE app to achieve goals that are different (para/sub).
+for different purposes, able to place the AI
+chat inside the running app that is under development (embedded) or 
+within the ALE app to achieve goals that are different (para/sub)
+than our general purpose AI chat incarnation default.
 
 examples:
  - embedded: the software developer is working on an app
@@ -62,7 +85,7 @@ examples:
  an AI chat embedded in the window of the Game of Life app
  so that the AI can change the rules, the grid, etc., and report back,
  then communicate to the main AI chat for software development.
- implication: the main AI chat is built out of an AI Chat incarnation pack
+ implication: the main, default AI chat is built out of an AI Chat incarnation pack
  - para/sub: within the ALE app the user wants to make an AI chat
  to operate on specific file types.
 

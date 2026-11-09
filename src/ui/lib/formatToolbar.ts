@@ -213,6 +213,7 @@ const IMAGE_MENUS: FormatMenu[] = [
 const LABELS: Partial<Record<PreviewRenderer, string>> = {
   page: 'HTML page',
   host: 'Component (shown through its host page)',
+  jsx: 'Component (rendered live in isolation)',
   css: 'Stylesheet',
   markdown: 'Markdown document',
   reading: 'Text file',
@@ -231,6 +232,7 @@ const LABELS: Partial<Record<PreviewRenderer, string>> = {
 const MENUS: Partial<Record<PreviewRenderer, FormatMenu[]>> = {
   page: PAGE_MENUS,
   host: HOST_MENUS,
+  jsx: HOST_MENUS,
   css: CSS_MENUS,
   json: JSON_MENUS,
   markdown: MARKDOWN_MENUS,

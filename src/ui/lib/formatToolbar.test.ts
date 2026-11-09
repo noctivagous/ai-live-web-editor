@@ -3,7 +3,7 @@ import test from 'node:test'
 import { promptForFormatAction, toolbarFor } from './formatToolbar'
 import type { PreviewRenderer } from './previewRender'
 
-const ALL: PreviewRenderer[] = ['page', 'markdown', 'reading', 'image', 'css', 'json', 'yaml', 'toml', 'env', 'spreadsheet', 'richtext', 'document', 'workbook', 'host', 'none']
+const ALL: PreviewRenderer[] = ['page', 'markdown', 'reading', 'image', 'css', 'json', 'yaml', 'toml', 'env', 'spreadsheet', 'richtext', 'document', 'workbook', 'jsx', 'host', 'none']
 
 test('every renderer gets a toolbar with at least one menu and one action', () => {
   for (const r of ALL) {
@@ -17,6 +17,7 @@ test('every renderer gets a toolbar with at least one menu and one action', () =
 test('html and tsx (host) toolbars lead with their own format menus', () => {
   assert.equal(toolbarFor('page', '/index.html').menus[0].title, 'Page')
   assert.equal(toolbarFor('host', '/src/App.tsx').menus[0].title, 'Component')
+  assert.equal(toolbarFor('jsx', '/src/FieldLabel.jsx').menus[0].title, 'Component')
   assert.equal(toolbarFor('css', '/styles.css').menus[0].title, 'Styles')
 })
 

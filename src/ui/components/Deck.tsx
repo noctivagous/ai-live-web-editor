@@ -14,7 +14,7 @@ import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { Markdown } from './Markdown'
 import { FailureDetailsDialog, errorFailureReport, stepFailureReport } from './Modal'
-import type { ChatWorkflow, DeviceTarget, SearchBackendId, WorkflowSnapshot } from '../lib/api'
+import type { ChatWorkflow, SearchBackendId, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 
 /* Deck rendering, ported from web-artifacts/agentic-chat-deck_* (v2):
@@ -294,7 +294,7 @@ function packKey(pack: Record<number, number[][]>): string {
   return Object.keys(pack).sort().map(k => `${k}:${pack[Number(k)].map(s => s.join(',')).join('|')}`).join(';')
 }
 
-export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, onOpenPath, workflow, onWorkflowMode, deviceTarget, onDeviceTarget, onSearchBackend, onClear, sketch, onSketchAction, input, onInput, onSend, onStop, annot, inIframe, onPick, onSubmit, onInsertToken, pricing }: {
+export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, onOpenPath, workflow, onWorkflowMode, onSearchBackend, onClear, sketch, onSketchAction, input, onInput, onSend, onStop, annot, inIframe, onPick, onSubmit, onInsertToken, pricing }: {
   turns: DeckTurn[]
   sending: boolean
   workingLabel: string
@@ -303,8 +303,6 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
   onOpenPath?: (path: string) => void
   workflow: ChatWorkflow
   onWorkflowMode: (mode: ChatWorkflow) => void
-  deviceTarget: DeviceTarget
-  onDeviceTarget: (target: DeviceTarget) => void
   onSearchBackend: (backend: SearchBackendId) => void
   onClear: () => void
   sketch: WorkflowSnapshot | null
@@ -474,7 +472,6 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
     <div className="deckmode" role="dialog" aria-label="Chat deck">
       <ChatHeader
         workflow={workflow}
-        deviceTarget={deviceTarget}
         selfMode={sketch?.selfMode}
         selfCheck={sketch?.selfCheck}
         searchBackend={sketch?.searchBackend}
@@ -486,7 +483,6 @@ export function DeckMode({ turns, sending, workingLabel, onClose, onNeedSetup, o
         showDeckButton={false}
         tokenTotal={tokenTotal}
         onWorkflowMode={onWorkflowMode}
-        onDeviceTarget={onDeviceTarget}
         onSearchBackend={onSearchBackend}
         onClear={onClear}
         onOpenDeck={() => {}}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type DeviceTarget, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
+import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import { PanelView } from './Panel'
@@ -191,15 +191,6 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
   async function sketchAction(action: 'undo' | 'discard' | 'accept') {
     try {
       const data = await postWorkflow({ action })
-      applySnapshot(data)
-      publishWorkflowChanged()
-    } catch { /* ignore */ }
-  }
-
-  async function setDeviceTarget(target: DeviceTarget) {
-    // Same pattern as the workflow control: the server snapshot decides.
-    try {
-      const data = await postWorkflow({ deviceTarget: target })
       applySnapshot(data)
       publishWorkflowChanged()
     } catch { /* ignore */ }
@@ -580,7 +571,6 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <ChatHeader
         workflow={workflow}
-        deviceTarget={sketch?.deviceTarget ?? 'desktop'}
         selfMode={sketch?.selfMode}
         selfCheck={sketch?.selfCheck}
         searchBackend={sketch?.searchBackend}
@@ -592,7 +582,6 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
         showDeckButton
         tokenTotal={chatTokens}
         onWorkflowMode={(mode) => void setWorkflowMode(mode)}
-        onDeviceTarget={(target) => void setDeviceTarget(target)}
         onSearchBackend={(backend) => void setSearchBackend(backend)}
         onClear={clearChat}
         onOpenDeck={openDeck}
@@ -663,8 +652,6 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           onOpenPath={onOpenPath}
           workflow={workflow}
           onWorkflowMode={(mode) => void setWorkflowMode(mode)}
-          deviceTarget={sketch?.deviceTarget ?? 'desktop'}
-          onDeviceTarget={(target) => void setDeviceTarget(target)}
           onSearchBackend={(backend) => void setSearchBackend(backend)}
           onClear={clearChat}
           sketch={sketch}

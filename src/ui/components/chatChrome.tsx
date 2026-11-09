@@ -1,15 +1,14 @@
 import React from 'react'
-import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, Monitor, MousePointerClick, PenTool, Pin, Search, SendHorizontal, Smartphone, Square, StickyNote, Tablet, Waves } from 'lucide-react'
+import { Coins, Eraser, Folder, Gauge, Layers, MessageSquarePlus, MousePointerClick, PenTool, Pin, Search, SendHorizontal, Square, StickyNote, Waves } from 'lucide-react'
 import type { ChatViewPref } from '../lib/uiPrefs'
-import type { ChatWorkflow, DeviceTarget, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
+import type { ChatWorkflow, SearchBackendId, SearchOption, SelfCheck, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 import { abbreviateSelector, elementToken, noteToken } from '../lib/annotateChips'
 import { fmtTokens } from '../lib/deck'
 
 /** Header bar shared by the single-pane chat and Deck mode. */
-export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onDeviceTarget, onSearchBackend, onClear, onOpenDeck, chatView, onChatView }: {
+export function ChatHeader({ workflow, selfMode, selfCheck, searchBackend, searchOptions, plan, onOpenPlan, sending, workingLabel, showDeckButton, tokenTotal, onWorkflowMode, onSearchBackend, onClear, onOpenDeck, chatView, onChatView }: {
   workflow: ChatWorkflow
-  deviceTarget: DeviceTarget
   /** Self mode (§L): the workspace is this editor itself. */
   selfMode?: boolean
   selfCheck?: SelfCheck | null
@@ -24,7 +23,6 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
   showDeckButton: boolean
   tokenTotal: number | null
   onWorkflowMode: (mode: ChatWorkflow) => void
-  onDeviceTarget: (target: DeviceTarget) => void
   onSearchBackend?: (backend: SearchBackendId) => void
   onClear: () => void
   onOpenDeck: () => void
@@ -40,11 +38,6 @@ export function ChatHeader({ workflow, deviceTarget, selfMode, selfCheck, search
       <div className="seg" role="group" aria-label="Chat workflow">
         <button type="button" className={workflow === 'files' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('files')}><Folder size={12} />Files</button>
         <button type="button" className={workflow === 'sketch' ? 'on' : ''} disabled={sending} onClick={() => onWorkflowMode('sketch')}><PenTool size={12} />Live sketch</button>
-      </div>
-      <div className="seg" role="group" aria-label="Device target" title="Device target: the design surface. The app must still work at every declared target.">
-        <button type="button" className={deviceTarget === 'phone' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('phone')} title="Phone (375px)"><Smartphone size={13} /></button>
-        <button type="button" className={deviceTarget === 'tablet' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('tablet')} title="Tablet (768px)"><Tablet size={13} /></button>
-        <button type="button" className={deviceTarget === 'desktop' ? 'on' : ''} disabled={sending} onClick={() => onDeviceTarget('desktop')} title="Desktop (1280px)"><Monitor size={13} /></button>
       </div>
       {availableSearch.length > 0 && (
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }} title="Web search source for the agent's web-search and research tools">

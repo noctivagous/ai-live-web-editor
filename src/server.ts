@@ -29,6 +29,7 @@ import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
 import { mountFsApi } from './fsApi.js'
+import { mountJsxBundleApi } from './jsxBundleApi.js'
 import { mountAppSettingsApi } from './appSettings.js'
 import { buildAndPersistMap, createMapRebuilder } from './codebaseMap/mapStore.js'
 import { activePublic, syncFromLegacy } from './connections.js'
@@ -84,6 +85,7 @@ mountMemoryApi(app)
 mountCodebaseMapApi(app)
 mountCatalogApi(app)
 mountFsApi(app)
+mountJsxBundleApi(app)
 
 ensureWorkspace()
 try { buildAndPersistMap() } catch { /* map is generated lazily by the tool too */ }

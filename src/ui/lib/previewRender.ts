@@ -42,7 +42,7 @@
  *   none        — no rendering; the preview stays where it is
  */
 
-export type PreviewRenderer = 'page' | 'markdown' | 'reading' | 'image' | 'css' | 'json' | 'yaml' | 'toml' | 'env' | 'xml' | 'spreadsheet' | 'richtext' | 'document' | 'workbook' | 'host' | 'none'
+export type PreviewRenderer = 'page' | 'markdown' | 'reading' | 'image' | 'css' | 'json' | 'yaml' | 'toml' | 'env' | 'xml' | 'spreadsheet' | 'richtext' | 'document' | 'workbook' | 'jsx' | 'host' | 'none'
 
 export type RendererWrite = 'in-place' | 'whole-file' | 'none'
 export type RendererEncoding = 'text' | 'binary' | 'none'
@@ -80,7 +80,8 @@ export const RENDERERS: RendererDescriptor[] = [
   { id: 'richtext', extensions: ['rtf'], surface: 'document editor', encoding: 'text', write: 'whole-file', summary: 'A rich-text document in the base text editor (font size, weight, alignment); edits rewrite the file from the document model.', tools: ['doc-inspect', 'doc-get', 'doc-find', 'doc-set-text', 'doc-set-item', 'doc-set-style', 'doc-add-block', 'doc-remove-block'] },
   { id: 'document', extensions: ['docx'], surface: 'document placeholder', encoding: 'binary', write: 'none', summary: 'A Word document. Reading and editing are not built yet — it joins the base text editor when its adapter lands.' },
   { id: 'workbook', extensions: ['xlsx'], surface: 'workbook placeholder', encoding: 'binary', write: 'none', summary: 'A spreadsheet workbook. Reading and editing are not built yet.' },
-  { id: 'host', extensions: ['tsx', 'jsx', 'vue', 'svelte'], surface: 'host page', encoding: 'none', write: 'none', summary: 'A component shown through the page that renders it.' },
+  { id: 'jsx', extensions: ['jsx'], surface: 'component + code', encoding: 'text', write: 'in-place', summary: 'A .jsx component rendered live in isolation, with a nested code view beside it; an edit rewrites that value in the file.' },
+  { id: 'host', extensions: ['tsx', 'vue', 'svelte'], surface: 'host page', encoding: 'none', write: 'none', summary: 'A component shown through the page that renders it.' },
   { id: 'none', extensions: [], surface: 'none', encoding: 'none', write: 'none', summary: 'No rendering for this file type.' },
 ]
 

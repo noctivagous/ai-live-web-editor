@@ -1,5 +1,6 @@
 import { MCPClient, type MCPClientToolsets, type MCPServerMap } from '@mastra/mcp'
 import { loadMcpConfig, type McpConfig, type McpServer } from './mcpStore.js'
+import { createMcpOAuthProvider, hasOAuthTokens } from './mcpOAuth.js'
 
 /** One server's tools as MCPClient returns them. */
 type OneToolset = MCPClientToolsets<MCPServerMap>[string]
@@ -80,7 +81,8 @@ export function filterMcpToolset(
   key: string,
   rawToolset: OneToolset,
 ): OneToolset {
-  const enabled = new Set(server.tools.filter(t => t.enabled).map(t => t.name))
+  // Offered = switched on and not held for review.
+  const enabled = new Set(server.tools.filter(t => t.enabled && !t.needsReview).map(t => t.name))
   const out: OneToolset = {}
   for (const [rawName, tool] of Object.entries(rawToolset)) {
     if (enabled.has(rawName)) out[mcpToolName(key, rawName)] = tool
@@ -92,6 +94,7 @@ const CONNECT_TIMEOUT_MS = 10_000
 
 /** The reach fields a server definition is built from. */
 export type McpServerReach = Pick<McpServer, 'transport' | 'command' | 'args' | 'env' | 'url' | 'headers' | 'protocolVersion'>
+  & Partial<Pick<McpServer, 'id' | 'oauth' | 'oauthClientId' | 'oauthClientMetadataUrl'>>
 
 /** Store record → MCPClient server definition. Shared with the
  * manager's connection probe, so Test exercises exactly what a
@@ -107,7 +110,11 @@ export type McpServerReach = Pick<McpServer, 'transport' | 'command' | 'args' | 
  * Settings gate (protocolChoiceEnabled) is on does a server's
  * own stored choice apply: 'auto' leaves the definition
  * unpinned (probe), '2026' requires the new revision. */
-export function buildMcpServerDefinition(server: McpServerReach, protocolChoiceEnabled = false): Record<string, unknown> {
+export function buildMcpServerDefinition(
+  server: McpServerReach,
+  protocolChoiceEnabled = false,
+  opts?: { forceOAuth?: boolean, onRedirectToAuthorization?: (url: URL) => void },
+): Record<string, unknown> {
   const choice = protocolChoiceEnabled ? server.protocolVersion : undefined
   const base = choice === 'auto'
     ? {}
@@ -122,10 +129,26 @@ export function buildMcpServerDefinition(server: McpServerReach, protocolChoiceE
       ...(server.env ? { env: server.env } : {}),
     }
   }
+  // OAuth (slice 8): remote servers flagged for sign-in — or
+  // holding stored tokens — get the library's OAuth provider,
+  // so connects carry (and refresh) the bearer token. Without
+  // a redirect handler the provider's redirect is swallowed:
+  // a connect that needs sign-in just fails, and the failure
+  // is read as the needs-auth state. Only the sign-in flow
+  // passes a handler (and forceOAuth for a first sign-in).
+  const useOAuth = !!server.id && (opts?.forceOAuth === true || server.oauth === true || hasOAuthTokens(server.id))
   return {
     ...base,
     url: new URL(server.url ?? ''),
     ...(server.headers ? { requestInit: { headers: server.headers } } : {}),
+    ...(useOAuth
+      ? {
+          authProvider: createMcpOAuthProvider(
+            { id: server.id!, oauthClientId: server.oauthClientId, oauthClientMetadataUrl: server.oauthClientMetadataUrl },
+            { onRedirectToAuthorization: opts?.onRedirectToAuthorization ?? (() => { /* connect-time: nowhere to send the user */ }) },
+          ),
+        }
+      : {}),
   }
 }
 
@@ -171,7 +194,7 @@ export async function getMcpToolsetsForTurn(cfg: McpConfig = loadMcpConfig()): P
     return { toolsets: {}, toolNames: [], summary: [], failures: [], close: async () => { /* nothing connected */ } }
   }
   const protocolChoiceEnabled = cfg.settings?.protocolChoiceEnabled === true
-  const candidates = cfg.servers.filter(s => s.enabled && s.tools.some(t => t.enabled))
+  const candidates = cfg.servers.filter(s => s.enabled && s.tools.some(t => t.enabled && !t.needsReview))
   const keys = assignMcpServerKeys(candidates)
   const turnId = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
   const clients: MCPClient[] = []

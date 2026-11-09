@@ -19,12 +19,37 @@ import { fileURLToPath } from 'node:url'
  */
 
 export type McpTransport = 'stdio' | 'http' | 'sse'
-export type McpServerStatus = 'untested' | 'ok' | 'error'
+export type McpServerStatus = 'untested' | 'ok' | 'error' | 'needs-auth'
+
+/** A server's own declarations about a tool, from its MCP
+ * annotations (readOnlyHint / destructiveHint) at test time. */
+export interface McpToolAnnotations {
+  readOnly?: boolean
+  destructive?: boolean
+}
 
 export interface McpToolState {
   name: string
   description: string
   enabled: boolean
+  annotations?: McpToolAnnotations
+  /** Probe fingerprint of the tool's input schema. */
+  schemaHash?: string
+  /** Held from chat until the user reviews it in the manager:
+   * set when a tool arrives marked destructive, or when its
+   * description, schema or annotations change under a name
+   * the user already approved. Approval keyed to a name is
+   * not approval of changed contents. */
+  needsReview?: boolean
+}
+
+/** What a re-test found different from the stored snapshot.
+ * Kept on the server until the user marks it reviewed. */
+export interface McpToolChanges {
+  at: string
+  added: string[]
+  removed: string[]
+  changed: { name: string, what: string }[]
 }
 
 /** Which protocol revision a server should speak, when the
@@ -56,9 +81,21 @@ export interface McpServer {
   headers?: Record<string, string>
   /** Only stored when it isn't 'legacy' (the default). */
   protocolVersion?: McpProtocolChoice
+  /** This remote server signs in with OAuth (set when a test
+   * finds it needs sign-in, or when a sign-in starts). Once
+   * set, probes and chat turns attach the OAuth provider. */
+  oauth?: boolean
+  /** Pre-registered OAuth client id for this server, when the
+   * authorization server issued one. Not a secret. */
+  oauthClientId?: string
+  /** Client ID Metadata Document URL (SEP-991) — used as the
+   * client identity instead of a pre-registered id. */
+  oauthClientMetadataUrl?: string
   enabled: boolean
   /** Tools from the last successful test; toggles persist here. */
   tools: McpToolState[]
+  /** The diff the last re-test found, until it is reviewed. */
+  toolChanges?: McpToolChanges
   status: McpServerStatus
   lastTestAt?: string
   lastLatencyMs?: number
@@ -100,6 +137,8 @@ export interface McpServerInput {
   url?: string
   headers?: Record<string, string>
   protocolVersion?: McpProtocolChoice
+  oauthClientId?: string
+  oauthClientMetadataUrl?: string
   enabled?: boolean
   origin?: McpServerOrigin
 }
@@ -157,11 +196,42 @@ function cleanServer(raw: unknown): McpServer | null {
     ? r.tools.flatMap(t => {
         if (!t || typeof t !== 'object') return []
         const tt = t as Record<string, unknown>
-        return typeof tt.name === 'string'
-          ? [{ name: tt.name, description: typeof tt.description === 'string' ? tt.description : '', enabled: tt.enabled !== false }]
-          : []
+        if (typeof tt.name !== 'string') return []
+        const ann = ((): McpToolAnnotations | undefined => {
+          if (!tt.annotations || typeof tt.annotations !== 'object') return undefined
+          const a = tt.annotations as Record<string, unknown>
+          const out: McpToolAnnotations = {
+            ...(typeof a.readOnly === 'boolean' ? { readOnly: a.readOnly } : {}),
+            ...(typeof a.destructive === 'boolean' ? { destructive: a.destructive } : {}),
+          }
+          return Object.keys(out).length ? out : undefined
+        })()
+        return [{
+          name: tt.name,
+          description: typeof tt.description === 'string' ? tt.description : '',
+          enabled: tt.enabled !== false,
+          ...(ann ? { annotations: ann } : {}),
+          ...(typeof tt.schemaHash === 'string' && tt.schemaHash ? { schemaHash: tt.schemaHash } : {}),
+          ...(tt.needsReview === true ? { needsReview: true } : {}),
+        }]
       })
     : []
+  const toolChanges = ((): McpToolChanges | undefined => {
+    if (!r.toolChanges || typeof r.toolChanges !== 'object') return undefined
+    const c = r.toolChanges as Record<string, unknown>
+    const strs = (v: unknown) => (Array.isArray(v) ? v.filter(x => typeof x === 'string') as string[] : [])
+    const changed = Array.isArray(c.changed)
+      ? c.changed.flatMap(x => {
+          if (!x || typeof x !== 'object') return []
+          const cc = x as Record<string, unknown>
+          return typeof cc.name === 'string' && typeof cc.what === 'string' ? [{ name: cc.name, what: cc.what }] : []
+        })
+      : []
+    const added = strs(c.added)
+    const removed = strs(c.removed)
+    if (!added.length && !removed.length && !changed.length) return undefined
+    return { at: typeof c.at === 'string' ? c.at : '', added, removed, changed }
+  })()
   const origin = ((): McpServerOrigin | undefined => {
     if (!r.origin || typeof r.origin !== 'object') return undefined
     const o = r.origin as Record<string, unknown>
@@ -180,9 +250,13 @@ function cleanServer(raw: unknown): McpServer | null {
     ...(typeof r.url === 'string' && r.url ? { url: r.url } : {}),
     ...(cleanRecord(r.headers) ? { headers: cleanRecord(r.headers) } : {}),
     ...(cleanProtocolChoice(r.protocolVersion) ? { protocolVersion: cleanProtocolChoice(r.protocolVersion) } : {}),
+    ...(r.oauth === true ? { oauth: true } : {}),
+    ...(typeof r.oauthClientId === 'string' && r.oauthClientId ? { oauthClientId: r.oauthClientId } : {}),
+    ...(typeof r.oauthClientMetadataUrl === 'string' && r.oauthClientMetadataUrl ? { oauthClientMetadataUrl: r.oauthClientMetadataUrl } : {}),
     enabled: r.enabled !== false,
     tools,
-    status: r.status === 'ok' || r.status === 'error' ? r.status : 'untested',
+    ...(toolChanges ? { toolChanges } : {}),
+    status: r.status === 'ok' || r.status === 'error' || r.status === 'needs-auth' ? r.status : 'untested',
     ...(typeof r.lastTestAt === 'string' ? { lastTestAt: r.lastTestAt } : {}),
     ...(typeof r.lastLatencyMs === 'number' ? { lastLatencyMs: r.lastLatencyMs } : {}),
     ...(typeof r.lastError === 'string' ? { lastError: r.lastError } : {}),
@@ -221,13 +295,15 @@ export function getMcpServer(cfg: McpConfig, id: string): McpServer | undefined 
   return cfg.servers.find(s => s.id === id)
 }
 
-/** Enabled tools = tools switched on inside servers switched on. */
+/** Enabled tools = what chat is actually offered: tools
+ * switched on inside servers switched on, minus any held for
+ * review (a held tool keeps its toggle but does not run). */
 export function countMcpTools(cfg: McpConfig): { enabled: number, total: number } {
   let enabled = 0
   let total = 0
   for (const s of cfg.servers) {
     total += s.tools.length
-    if (s.enabled) enabled += s.tools.filter(t => t.enabled).length
+    if (s.enabled) enabled += s.tools.filter(t => t.enabled && !t.needsReview).length
   }
   return { enabled, total }
 }
@@ -241,7 +317,7 @@ export function mcpOverBudget(cfg: McpConfig): boolean {
 export function serversByEnabledTools(cfg: McpConfig): McpServer[] {
   return cfg.servers
     .filter(s => s.enabled)
-    .map(s => ({ s, n: s.tools.filter(t => t.enabled).length }))
+    .map(s => ({ s, n: s.tools.filter(t => t.enabled && !t.needsReview).length }))
     .filter(x => x.n > 0)
     .sort((a, b) => b.n - a.n)
     .map(x => x.s)
@@ -262,7 +338,9 @@ export function trimMcpToBudget(cfg: McpConfig): { serverId: string, serverName:
     const off: string[] = []
     for (let i = server.tools.length - 1; i >= 0 && excess > 0; i--) {
       const tool = server.tools[i]
-      if (tool.enabled) {
+      // Only offered tools count against the budget, so only
+      // they are trim candidates — a held tool is already out.
+      if (tool.enabled && !tool.needsReview) {
         tool.enabled = false
         off.push(tool.name)
         excess--
@@ -303,7 +381,7 @@ export function addMcpServer(cfg: McpConfig, input: McpServerInput): McpServer {
 export function updateMcpServer(cfg: McpConfig, id: string, patch: Partial<McpServerInput>): McpServer | null {
   const server = getMcpServer(cfg, id)
   if (!server) return null
-  const reachBefore = JSON.stringify([server.command, server.args, server.env, server.url, server.headers, server.protocolVersion])
+  const reachBefore = JSON.stringify([server.command, server.args, server.env, server.url, server.headers, server.protocolVersion, server.oauthClientId, server.oauthClientMetadataUrl])
   if (typeof patch.name === 'string' && patch.name.trim()) server.name = patch.name.trim()
   if (patch.transport) server.transport = patch.transport
   if ('command' in patch) server.command = patch.command || undefined
@@ -324,8 +402,10 @@ export function updateMcpServer(cfg: McpConfig, id: string, patch: Partial<McpSe
   if ('url' in patch) server.url = patch.url || undefined
   if ('headers' in patch) server.headers = unmask(patch.headers, server.headers)
   if ('protocolVersion' in patch) server.protocolVersion = cleanProtocolChoice(patch.protocolVersion)
+  if ('oauthClientId' in patch) server.oauthClientId = patch.oauthClientId || undefined
+  if ('oauthClientMetadataUrl' in patch) server.oauthClientMetadataUrl = patch.oauthClientMetadataUrl || undefined
   if (typeof patch.enabled === 'boolean') server.enabled = patch.enabled
-  const reachAfter = JSON.stringify([server.command, server.args, server.env, server.url, server.headers, server.protocolVersion])
+  const reachAfter = JSON.stringify([server.command, server.args, server.env, server.url, server.headers, server.protocolVersion, server.oauthClientId, server.oauthClientMetadataUrl])
   if (reachBefore !== reachAfter) {
     server.status = 'untested'
     delete server.lastError
@@ -343,28 +423,98 @@ export function removeMcpServer(cfg: McpConfig, id: string): boolean {
 /** Fold a probe result into a server: status + test metadata,
  * and the tool list — toggles survive by tool name, tools the
  * server no longer offers drop out, new tools arrive ON (the
- * budget alert exists to surface exactly that consequence). */
+ * budget alert exists to surface exactly that consequence).
+ *
+ * The snapshot diff: a successful re-test is compared against
+ * the stored list before it replaces it. Added, removed and
+ * changed tools are recorded on the server (toolChanges) until
+ * reviewed. A tool whose description, schema or annotations
+ * changed under an approved name is held from chat
+ * (needsReview), as is a tool that arrives marked destructive
+ * — approval keyed to a name is not approval of whatever the
+ * name points at today. The first successful test is the
+ * baseline: it records no diff, but the destructive hold
+ * applies from day one. */
 export function applyMcpTestResult(
   server: McpServer,
-  result: { ok: boolean, latencyMs: number, error?: string, serverName?: string, serverVersion?: string, tools?: { name: string, description: string }[] },
+  result: {
+    ok: boolean, latencyMs: number, error?: string, serverName?: string, serverVersion?: string,
+    needsAuth?: boolean,
+    tools?: { name: string, description: string, annotations?: McpToolAnnotations, schemaHash?: string }[],
+  },
 ): void {
   server.lastTestAt = new Date().toISOString()
   server.lastLatencyMs = result.latencyMs
-  if (result.ok) {
-    server.status = 'ok'
+  if (result.needsAuth) {
+    // Not an error: the server answered and asked for sign-in.
+    // The tool list from any earlier success stays as it was,
+    // and from here on the server is wired for OAuth.
+    server.status = 'needs-auth'
+    server.oauth = true
     delete server.lastError
-    if (result.serverName) server.serverName = result.serverName
-    if (result.serverVersion) server.serverVersion = result.serverVersion
-    const wasOn = new Map(server.tools.map(t => [t.name, t.enabled]))
-    server.tools = (result.tools ?? []).map(t => ({
-      name: t.name,
-      description: t.description ?? '',
-      enabled: wasOn.get(t.name) ?? true,
-    }))
-  } else {
+    return
+  }
+  if (!result.ok) {
     server.status = 'error'
     server.lastError = result.error ?? 'Test failed'
+    return
   }
+  server.status = 'ok'
+  delete server.lastError
+  if (result.serverName) server.serverName = result.serverName
+  if (result.serverVersion) server.serverVersion = result.serverVersion
+  const prev = new Map(server.tools.map(t => [t.name, t]))
+  const firstTest = server.tools.length === 0
+  const added: string[] = []
+  const changed: { name: string, what: string }[] = []
+  const next: McpToolState[] = []
+  for (const t of result.tools ?? []) {
+    const ann = t.annotations
+    const old = prev.get(t.name)
+    if (!old) {
+      added.push(t.name)
+      next.push({
+        name: t.name,
+        description: t.description ?? '',
+        enabled: true,
+        ...(ann ? { annotations: ann } : {}),
+        ...(t.schemaHash ? { schemaHash: t.schemaHash } : {}),
+        ...(ann?.destructive ? { needsReview: true } : {}),
+      })
+      continue
+    }
+    const whats: string[] = []
+    if (old.description !== (t.description ?? '')) whats.push('description changed')
+    if (old.schemaHash && t.schemaHash && old.schemaHash !== t.schemaHash) whats.push('schema changed')
+    if (old.annotations?.destructive !== true && ann?.destructive === true) whats.push('now marked destructive')
+    if (whats.length) changed.push({ name: t.name, what: whats.join(', ') })
+    next.push({
+      name: t.name,
+      description: t.description ?? '',
+      enabled: old.enabled,
+      ...(ann ? { annotations: ann } : {}),
+      ...(t.schemaHash ? { schemaHash: t.schemaHash } : {}),
+      ...((old.needsReview || whats.length) ? { needsReview: true } : {}),
+    })
+  }
+  const nextNames = new Set(next.map(t => t.name))
+  const removed = [...prev.keys()].filter(n => !nextNames.has(n))
+  server.tools = next
+  if (!firstTest && (added.length || removed.length || changed.length)) {
+    server.toolChanges = { at: server.lastTestAt, added, removed, changed }
+  } else {
+    delete server.toolChanges
+  }
+}
+
+/** The user has seen the diff: release every held tool and
+ * clear the pending changes. Returns false for no such server. */
+export function markMcpToolsReviewed(cfg: McpConfig, id: string): boolean {
+  const server = getMcpServer(cfg, id)
+  if (!server) return false
+  for (const t of server.tools) delete t.needsReview
+  delete server.toolChanges
+  return true
 }
 
 /**

@@ -1,12 +1,14 @@
 import type { Express } from 'express'
 import {
   addMcpServer, applyMcpTestResult, countMcpTools, getMcpServer, loadMcpConfig,
-  maskMcpConfig, mcpServerToJson, parseMcpServersJson, removeMcpServer,
+  markMcpToolsReviewed, maskMcpConfig, mcpServerToJson, parseMcpServersJson, removeMcpServer,
   saveMcpConfig, trimMcpToBudget, updateMcpServer, updateMcpSettings,
   type McpConfig, type McpServerInput,
 } from './mcpStore.js'
 import { probeMcpServer } from './mcpProbe.js'
 import { buildConnectorInstall, CONNECTOR_CATALOG, findConnector } from './connectorCatalog.js'
+import { cancelMcpSignIn, onMcpSignInSettled, startMcpSignIn } from './mcpAuth.js'
+import { clearOAuthData, hasOAuthTokens } from './mcpOAuth.js'
 
 /**
  * MCP manager HTTP API, mounted on both servers (the featureApi
@@ -17,7 +19,33 @@ import { buildConnectorInstall, CONNECTOR_CATALOG, findConnector } from './conne
  * client will read.
  */
 export function mountMcpApi(app: Express) {
-  const state = (cfg: McpConfig) => ({ ok: true as const, config: maskMcpConfig(cfg), counts: countMcpTools(cfg) })
+  const state = (cfg: McpConfig) => {
+    const config = maskMcpConfig(cfg)
+    // Signed-in is derived from the OAuth store (existence
+    // only — token values never enter a response).
+    for (const s of config.servers) {
+      if (s.transport !== 'stdio' && hasOAuthTokens(s.id)) (s as { oauthSignedIn?: boolean }).oauthSignedIn = true
+    }
+    return { ok: true as const, config, counts: countMcpTools(cfg) }
+  }
+
+  // When a sign-in completes, test the server right away so
+  // its stored state (tools, status) reflects the new tokens;
+  // the manager picks it up on its next state read or poll.
+  onMcpSignInSettled((serverId, ok) => {
+    if (!ok) return
+    void (async () => {
+      const cfg = loadMcpConfig()
+      const server = getMcpServer(cfg, serverId)
+      if (!server) return
+      const result = await probeMcpServer(server, 15_000, { protocolChoiceEnabled: cfg.settings?.protocolChoiceEnabled === true })
+      const fresh = loadMcpConfig()
+      const target = getMcpServer(fresh, serverId)
+      if (!target) return
+      applyMcpTestResult(target, result)
+      saveMcpConfig(fresh)
+    })().catch(() => { /* the next manual test will tell the story */ })
+  })
 
   app.get('/api/mcp/state', (_req, res) => {
     res.json(state(loadMcpConfig()))
@@ -68,9 +96,52 @@ export function mountMcpApi(app: Express) {
   app.post('/api/mcp/servers/update', (req, res) => {
     const id = typeof req.body?.id === 'string' ? req.body.id : ''
     const cfg = loadMcpConfig()
+    const before = getMcpServer(cfg, id)
+    const identityBefore = JSON.stringify([before?.oauthClientId, before?.oauthClientMetadataUrl])
     const patch = readServerPatch(req.body)
     const server = updateMcpServer(cfg, id, patch)
     if (!server) return res.status(404).json({ ok: false, error: 'No such server' })
+    // Tokens belong to the client identity that minted them;
+    // a new identity starts signed out.
+    if (JSON.stringify([server.oauthClientId, server.oauthClientMetadataUrl]) !== identityBefore) {
+      clearOAuthData(id)
+    }
+    saveMcpConfig(cfg)
+    res.json(state(cfg))
+  })
+
+  /** Begin the browser sign-in flow for a remote server. The
+   * flow runs in the background (5-minute window); when it
+   * settles, the server is auto-tested (see the settle hook
+   * above). Returns the authorization URL to open. */
+  app.post('/api/mcp/servers/sign-in', async (req, res) => {
+    const cfg = loadMcpConfig()
+    const server = getMcpServer(cfg, typeof req.body?.id === 'string' ? req.body.id : '')
+    if (!server) return res.status(404).json({ ok: false, error: 'No such server' })
+    if (server.transport === 'stdio') return res.status(400).json({ ok: false, error: 'Only remote servers sign in.' })
+    try {
+      const { authUrl } = await startMcpSignIn(server)
+      server.oauth = true
+      saveMcpConfig(cfg)
+      res.json({ ...state(cfg), authUrl })
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  })
+
+  /** Forget a server's OAuth tokens and stop any pending
+   * sign-in. The server returns to the needs-auth state. */
+  app.post('/api/mcp/servers/sign-out', async (req, res) => {
+    const cfg = loadMcpConfig()
+    const server = getMcpServer(cfg, typeof req.body?.id === 'string' ? req.body.id : '')
+    if (!server) return res.status(404).json({ ok: false, error: 'No such server' })
+    await cancelMcpSignIn(server.id)
+    clearOAuthData(server.id)
+    if (server.oauth) {
+      server.oauth = false
+      server.status = 'needs-auth'
+      delete server.lastError
+    }
     saveMcpConfig(cfg)
     res.json(state(cfg))
   })
@@ -108,6 +179,17 @@ export function mountMcpApi(app: Express) {
     const server = getMcpServer(cfg, typeof req.body?.serverId === 'string' ? req.body.serverId : '')
     if (!server) return res.status(404).json({ ok: false, error: 'No such server' })
     for (const t of server.tools) t.enabled = req.body?.enabled === true
+    saveMcpConfig(cfg)
+    res.json(state(cfg))
+  })
+
+  /** The user reviewed a server's tool changes: release the
+   * held tools and clear the pending diff. */
+  app.post('/api/mcp/tools/reviewed', (req, res) => {
+    const cfg = loadMcpConfig()
+    if (!markMcpToolsReviewed(cfg, typeof req.body?.id === 'string' ? req.body.id : '')) {
+      return res.status(404).json({ ok: false, error: 'No such server' })
+    }
     saveMcpConfig(cfg)
     res.json(state(cfg))
   })
@@ -202,6 +284,8 @@ function readServerInput(body: unknown): McpServerInput | null {
     ...(b.protocolVersion === 'legacy' || b.protocolVersion === 'auto' || b.protocolVersion === '2026'
       ? { protocolVersion: b.protocolVersion }
       : {}),
+    ...(typeof b.oauthClientId === 'string' ? { oauthClientId: b.oauthClientId.trim() } : {}),
+    ...(typeof b.oauthClientMetadataUrl === 'string' ? { oauthClientMetadataUrl: b.oauthClientMetadataUrl.trim() } : {}),
     ...(typeof b.enabled === 'boolean' ? { enabled: b.enabled } : {}),
   }
 }

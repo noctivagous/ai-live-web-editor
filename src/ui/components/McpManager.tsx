@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, Check, ChevronDown, Copy, Eye, EyeOff, Pencil, Plug, Plus,
+  AlertTriangle, Check, ChevronDown, Copy, Eye, EyeOff, KeyRound, Pencil, Plug, Plus,
   RefreshCw, Search, Trash2, X, Zap,
 } from 'lucide-react'
 import {
   addMcpServer, fetchConnectorCatalog, fetchMcpState, importMcpJson, installConnector,
-  keyValuesToText, MCP_PRESETS,
-  parseKeyValues, removeMcpServer, revealMcpServer, serverEnabledTools, serverReach,
-  setMcpBudget, splitArgs, testMcpConfig, testMcpServer, toggleAllMcpTools,
+  keyValuesToText, markMcpToolsReviewed, MCP_PRESETS,
+  parseKeyValues, removeMcpServer, revealMcpServer, serverEnabledTools, serverNeedsReview, serverReach,
+  setMcpBudget, signInMcpServer, signOutMcpServer, splitArgs, testMcpConfig, testMcpServer, toggleAllMcpTools,
   toggleMcpServer, toggleMcpTool, trimMcpBudget, updateMcpServer,
   type ConnectorCatalog, type ConnectorEntry, type McpConfig, type McpProbeResult,
   type McpProtocolChoice, type McpServer,
@@ -40,10 +40,12 @@ interface FormState {
   url: string
   headersText: string
   protocol: McpProtocolChoice
+  oauthClientId: string
+  oauthClientMetadataUrl: string
   hint?: string
 }
 
-const EMPTY_FORM: FormState = { name: '', transport: 'stdio', command: '', argsText: '', envText: '', url: '', headersText: '', protocol: 'legacy' }
+const EMPTY_FORM: FormState = { name: '', transport: 'stdio', command: '', argsText: '', envText: '', url: '', headersText: '', protocol: 'legacy', oauthClientId: '', oauthClientMetadataUrl: '' }
 
 function formFromInput(input: McpServerInput, hint?: string): FormState {
   return {
@@ -55,6 +57,8 @@ function formFromInput(input: McpServerInput, hint?: string): FormState {
     url: input.url ?? '',
     headersText: keyValuesToText(input.headers),
     protocol: input.protocolVersion ?? 'legacy',
+    oauthClientId: input.oauthClientId ?? '',
+    oauthClientMetadataUrl: input.oauthClientMetadataUrl ?? '',
     ...(hint ? { hint } : {}),
   }
 }
@@ -78,6 +82,10 @@ function formToInput(f: FormState): McpServerInput {
       : {
           url: f.url.trim(),
           ...(Object.keys(headers).length ? { headers } : {}),
+          // Always sent for remote servers so clearing a field
+          // clears the stored identity (empty string -> absent).
+          oauthClientId: f.oauthClientId.trim(),
+          oauthClientMetadataUrl: f.oauthClientMetadataUrl.trim(),
         }),
   }
 }
@@ -193,13 +201,69 @@ export function McpManager() {
     try {
       const r = await testMcpServer(server.id)
       apply(r)
-      if (r.result.ok) pushLog(`${verb} ${server.name} — connected in ${r.result.latencyMs} ms, ${r.result.tools?.length ?? 0} tools found`)
-      else pushLog(`${verb} ${server.name} — failed: ${r.result.error ?? 'unknown error'}`)
+      if (r.result.ok) {
+        pushLog(`${verb} ${server.name} — connected in ${r.result.latencyMs} ms, ${r.result.tools?.length ?? 0} tools found`)
+        const after = r.config.servers.find(s => s.id === server.id)
+        if (after && serverNeedsReview(after)) {
+          const held = after.tools.filter(t => t.needsReview).length
+          pushLog(`${server.name} — tool changes need review${held ? ` (${held} held from chat)` : ''}; see the detail pane`)
+        }
+      } else if (r.result.needsAuth) {
+        pushLog(`${verb} ${server.name} — it asks for sign-in before it will answer; use the Sign in button`)
+      } else pushLog(`${verb} ${server.name} — failed: ${r.result.error ?? 'unknown error'}`)
     } catch (e) {
       pushLog(`${verb} ${server.name} — failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy('')
     }
+  }
+
+  const [signInFor, setSignInFor] = useState('')
+  const signInPollRef = useRef<number | null>(null)
+  const stopSignInPolling = () => {
+    if (signInPollRef.current !== null) { window.clearInterval(signInPollRef.current); signInPollRef.current = null }
+  }
+
+  const doSignIn = async (server: McpServer) => {
+    setBusy(`signin:${server.id}`)
+    try {
+      const r = await signInMcpServer(server.id)
+      apply(r)
+      window.open(r.authUrl, '_blank', 'noopener')
+      pushLog(`Signing in to ${server.name} — finish in the tab that opened; it tests itself when you are done`)
+      setSignInFor(server.id)
+      stopSignInPolling()
+      let ticks = 0
+      signInPollRef.current = window.setInterval(() => {
+        ticks++
+        void fetchMcpState().then(latest => {
+          apply(latest)
+          const s = latest.config.servers.find(x => x.id === server.id)
+          if (s?.status === 'ok') {
+            stopSignInPolling()
+            setSignInFor('')
+            pushLog(`Signed in to ${server.name} — ${s.tools.length} tools available`)
+          } else if (ticks > 48) {
+            stopSignInPolling()
+            setSignInFor('')
+            pushLog(`Still waiting on the sign-in to ${server.name} — Test connection will tell you where it stands`)
+          }
+        }).catch(() => { /* keep polling through a hiccup */ })
+      }, 2500)
+    } catch (e) {
+      pushLog(`Sign-in to ${server.name} could not start: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const doSignOut = async (server: McpServer) => {
+    stopSignInPolling()
+    setSignInFor('')
+    try {
+      apply(await signOutMcpServer(server.id))
+      pushLog(`Signed out of ${server.name}`)
+    } catch { /* the next state read will tell the story */ }
   }
 
   const doTrim = async () => {
@@ -590,11 +654,12 @@ export function McpManager() {
                     className={`mcp-row${selected?.id === s.id ? ' sel' : ''}`}
                     onClick={() => { setSelectedId(s.id); setRevealed(null); setEditing(false); setConfirmDelete(false) }}
                   >
-                    <span className={`mcp-dot ${!s.enabled ? 'off' : s.status === 'ok' ? 'ok' : s.status === 'error' ? 'err' : 'untested'}`} />
+                    <span className={`mcp-dot ${!s.enabled ? 'off' : s.status === 'ok' ? 'ok' : s.status === 'error' ? 'err' : s.status === 'needs-auth' ? 'auth' : 'untested'}`} />
                     <span className="mcp-row-main">
                       <span className="mcp-row-name">{s.name}</span>
                       <span className="mcp-row-reach mono">{serverReach(s) || '—'}</span>
                     </span>
+                    {serverNeedsReview(s) && <span className="mcp-review-badge" title="Tool changes awaiting review — held tools are not offered to chat">Review</span>}
                     <span className="mcp-row-count mono">{serverEnabledTools(s)}/{s.tools.length} on</span>
                     <Switch
                       on={s.enabled}
@@ -622,7 +687,7 @@ export function McpManager() {
                       <div className="mcp-detail-head">
                         <strong>{selected.name}</strong>
                         <span className={`mcp-status ${selected.status}`}>
-                          {selected.status === 'ok' ? 'Connected' : selected.status === 'error' ? 'Failed' : 'Untested'}
+                          {selected.status === 'ok' ? 'Connected' : selected.status === 'error' ? 'Failed' : selected.status === 'needs-auth' ? 'Needs sign-in' : 'Untested'}
                         </span>
                         {selected.lastLatencyMs !== undefined && selected.status === 'ok' && (
                           <span className="mcp-lat mono">{selected.lastLatencyMs} ms</span>
@@ -657,6 +722,63 @@ export function McpManager() {
 
                       {selected.status === 'error' && selected.lastError && (
                         <div className="mcp-error-box">{selected.lastError}</div>
+                      )}
+                      {serverNeedsReview(selected) && (
+                        <div className="mcp-review-box">
+                          <div className="mcp-review-title"><AlertTriangle size={12} /> Tool changes to review</div>
+                          <div className="mcp-review-lines">
+                            {selected.toolChanges?.added.map(n => (
+                              <div key={`a-${n}`}>+ <span className="mono">{n}</span> — new tool{selected.tools.find(t => t.name === n)?.needsReview ? ' · marked destructive, held from chat' : ''}</div>
+                            ))}
+                            {selected.toolChanges?.removed.map(n => (
+                              <div key={`r-${n}`}>− <span className="mono">{n}</span> — removed</div>
+                            ))}
+                            {selected.toolChanges?.changed.map(c => (
+                              <div key={`c-${c.name}`}>~ <span className="mono">{c.name}</span> — {c.what} · held from chat</div>
+                            ))}
+                            {selected.tools
+                              .filter(t => t.needsReview
+                                && !selected.toolChanges?.changed.some(c => c.name === t.name)
+                                && !selected.toolChanges?.added.includes(t.name))
+                              .map(t => (
+                                <div key={`h-${t.name}`}>! <span className="mono">{t.name}</span> — held from chat until reviewed</div>
+                              ))}
+                          </div>
+                          <div className="mcp-review-foot">
+                            <span className="mcp-hint">A tool that changed is not the tool you approved. Held tools are not offered to chat.</span>
+                            <button
+                              type="button"
+                              className="deck-btn mcp-primary"
+                              onClick={() => void markMcpToolsReviewed(selected.id).then(r => { apply(r); pushLog(`Reviewed ${selected.name} — held tools released`) })}
+                            >Mark reviewed</button>
+                          </div>
+                        </div>
+                      )}
+                      {selected.transport !== 'stdio' && selected.status === 'needs-auth' && (
+                        <div className="mcp-auth-box">
+                          <div className="mcp-review-title"><KeyRound size={12} /> Sign-in needed</div>
+                          <div className="mcp-hint" style={{ marginTop: 4 }}>
+                            This server asks you to sign in before it will answer. Signing in opens its page in a new tab; when you finish, it tests itself here.
+                          </div>
+                          <div className="mcp-review-foot">
+                            <span style={{ flex: 1 }} />
+                            <button
+                              type="button"
+                              className="deck-btn mcp-primary"
+                              disabled={busy === `signin:${selected.id}` || signInFor === selected.id}
+                              onClick={() => void doSignIn(selected)}
+                            >{signInFor === selected.id ? 'Waiting for sign-in…' : 'Sign in'}</button>
+                          </div>
+                        </div>
+                      )}
+                      {selected.transport !== 'stdio' && selected.status !== 'needs-auth' && selected.oauthSignedIn && (
+                        <div className="mcp-auth-box signed-in">
+                          <div className="mcp-review-title"><KeyRound size={12} /> Signed in</div>
+                          <div className="mcp-review-foot">
+                            <span className="mcp-hint" style={{ flex: 1 }}>Chat turns use your sign-in for this server.</span>
+                            <button type="button" className="deck-btn" onClick={() => void doSignOut(selected)}>Sign out</button>
+                          </div>
+                        </div>
                       )}
                       {(selected.serverName || selected.lastTestAt || selected.origin || (state?.config.settings.protocolChoiceEnabled && selected.protocolVersion)) && (
                         <div className="mcp-meta">
@@ -709,6 +831,8 @@ export function McpManager() {
                           <div key={t.name} className="mcp-tool">
                             <span className="mcp-tool-main">
                               <span className="mcp-tool-name mono">{t.name}</span>
+                              {t.annotations?.destructive && <span className="mcp-destr">destructive</span>}
+                              {t.needsReview && <span className="mcp-review-badge">Needs review — held from chat</span>}
                               {t.description && <span className="mcp-tool-desc">{t.description}</span>}
                             </span>
                             <Switch
@@ -804,6 +928,14 @@ function ServerForm({ form, setForm, showProtocol }: { form: FormState, setForm:
             <span>Headers</span>
             <textarea value={form.headersText} onChange={e => set({ headersText: e.target.value })} placeholder={'Authorization=Bearer …\n(one KEY=value per line)'} rows={2} className="mono" />
           </label>
+          <label className="mcp-field">
+            <span>OAuth client ID (optional)</span>
+            <input value={form.oauthClientId} onChange={e => set({ oauthClientId: e.target.value })} placeholder="For servers that ask you to sign in — blank uses ALE's default" className="mono" />
+          </label>
+          <label className="mcp-field">
+            <span>OAuth client metadata URL (optional)</span>
+            <input value={form.oauthClientMetadataUrl} onChange={e => set({ oauthClientMetadataUrl: e.target.value })} placeholder="https://…/client-metadata.json — instead of a client ID" className="mono" />
+          </label>
         </>
       )}
     </div>
@@ -848,6 +980,13 @@ const MCP_CSS = `
 .mcp-conn-install { margin-top:9px; border-top:1px dashed var(--border-soft); padding-top:9px; display:flex; flex-direction:column; gap:8px; }
 .mcp-conn-reach { font-size:calc(11.5px * var(--ui-scale, 1)); background:var(--bg); border:1px solid var(--border-soft); border-radius:7px; padding:6px 8px; word-break:break-all; }
 .mcp-conn-docs { font-size:calc(12px * var(--ui-scale, 1)); align-self:center; }
+.mcp-review-box { margin-top:10px; border:1px solid #b98a1c; background:rgba(185,138,28,.09); border-radius:9px; padding:9px 11px; }
+.mcp-review-title { display:flex; align-items:center; gap:6px; font-weight:600; font-size:calc(12.5px * var(--ui-scale, 1)); }
+.mcp-review-lines { margin-top:6px; font-size:calc(12px * var(--ui-scale, 1)); display:flex; flex-direction:column; gap:2px; }
+.mcp-review-foot { display:flex; align-items:center; gap:10px; margin-top:8px; }
+.mcp-review-foot .mcp-hint { flex:1; }
+.mcp-review-badge { font-size:calc(10.5px * var(--ui-scale, 1)); font-weight:600; border:1px solid #b98a1c; color:#b98a1c; border-radius:20px; padding:1px 7px; white-space:nowrap; }
+.mcp-destr { font-size:calc(10.5px * var(--ui-scale, 1)); border:1px solid var(--border-strong); border-radius:20px; padding:0 6px; opacity:.8; white-space:nowrap; }
 .mcp-search { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border-strong); border-radius:7px; padding:4px 8px; min-width:210px; }
 .mcp-search input { border:none; background:transparent; color:inherit; outline:none; flex:1; font:inherit; font-size:calc(12.5px * var(--ui-scale, 1)); }
 .mcp-chip.on, .mcp-seg .deck-btn.on, .mcp-add-tabs .deck-btn.on { background:var(--accent-soft-bg); border-color:var(--accent); }
@@ -877,6 +1016,10 @@ const MCP_CSS = `
 .mcp-dot.err { background:var(--red); }
 .mcp-dot.off { background:transparent; border:1.5px solid var(--border-strong); }
 .mcp-dot.untested { background:var(--amber); }
+.mcp-dot.auth { background:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 25%, transparent); }
+.mcp-status.needs-auth { border-color:var(--amber); color:var(--amber); }
+.mcp-auth-box { margin-top:10px; border:1px solid var(--amber); background:color-mix(in srgb, var(--amber) 8%, transparent); border-radius:9px; padding:9px 11px; }
+.mcp-auth-box.signed-in { border-color:var(--border-strong); background:transparent; }
 .mcp-row-main { flex:1; min-width:0; display:flex; flex-direction:column; }
 .mcp-row-name { font-weight:600; font-size:calc(13px * var(--ui-scale, 1)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mcp-row-reach { font-size:calc(11px * var(--ui-scale, 1)); opacity:.65; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

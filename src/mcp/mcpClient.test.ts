@@ -131,6 +131,19 @@ describe('mcpClient turn toolsets (real servers)', () => {
     await turn.close()
   })
 
+  it('a tool held for review is not offered, even when switched on', () => {
+    const server = {
+      id: 'h', name: 'Held', transport: 'stdio', command: 'x', enabled: true, status: 'ok',
+      tools: [
+        { name: 'echo', description: '', enabled: true },
+        { name: 'wipe', description: '', enabled: true, needsReview: true },
+        { name: 'off', description: '', enabled: false },
+      ],
+    } as never
+    const filtered = filterMcpToolset(server, 'held', { echo: {}, wipe: {}, off: {} } as never)
+    assert.deepEqual(Object.keys(filtered), ['held_echo'])
+  })
+
   it('the Settings master switch connects nothing at all', async () => {
     const cfg = emptyMcpConfig()
     cfg.settings.chatToolsEnabled = false

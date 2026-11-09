@@ -39,7 +39,47 @@ function fixtureDir(script: string): string {
   return dir
 }
 
+const ANNOTATED = (schemaProps: string) => `
+import { createInterface } from 'node:readline';
+const tools = [
+  { name: 'read_thing', description: 'Reads a thing.', annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: { type: 'object', properties: { ${schemaProps} }, required: ['path'] } },
+  { name: 'delete_thing', description: 'Deletes a thing.', annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+];
+const rl = createInterface({ input: process.stdin });
+rl.on('line', line => {
+  let m; try { m = JSON.parse(line); } catch { return; }
+  const send = o => process.stdout.write(JSON.stringify(o) + '\\n');
+  if (m.method === 'initialize') send({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'annotated-fixture', version: '2.0.0' } } });
+  else if (m.method === 'tools/list') send({ jsonrpc: '2.0', id: m.id, result: { tools } });
+  else if (m.id !== undefined) send({ jsonrpc: '2.0', id: m.id, result: {} });
+});
+`
+
 describe('mcpProbe', () => {
+  it('captures tool annotations and a stable schema fingerprint', async () => {
+    const dir = fixtureDir(ANNOTATED(`path: { type: 'string' }`))
+    const dir2 = fixtureDir(ANNOTATED(`path: { type: 'string' }, force: { type: 'boolean' }`))
+    try {
+      const target = (d: string) => ({ transport: 'stdio' as const, command: process.execPath, args: [path.join(d, 'server.mjs')] })
+      const r1 = await probeMcpServer(target(dir), 10_000)
+      assert.equal(r1.ok, true)
+      const read = r1.tools?.find(t => t.name === 'read_thing')
+      const del = r1.tools?.find(t => t.name === 'delete_thing')
+      assert.deepEqual(read?.annotations, { readOnly: true, destructive: false })
+      assert.deepEqual(del?.annotations, { readOnly: false, destructive: true })
+      assert.ok(read?.schemaHash, 'a fingerprint is recorded')
+      const r2 = await probeMcpServer(target(dir), 10_000)
+      assert.equal(r2.tools?.find(t => t.name === 'read_thing')?.schemaHash, read?.schemaHash, 'same schema, same fingerprint')
+      const r3 = await probeMcpServer(target(dir2), 10_000)
+      assert.notEqual(r3.tools?.find(t => t.name === 'read_thing')?.schemaHash, read?.schemaHash, 'changed schema, changed fingerprint')
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.rmSync(dir2, { recursive: true, force: true })
+    }
+  })
+
   it('completes a real handshake and lists tools', async () => {
     const dir = fixtureDir(FIXTURE)
     try {

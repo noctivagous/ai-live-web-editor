@@ -5,10 +5,27 @@
  */
 
 export type McpTransport = 'stdio' | 'http' | 'sse'
-export type McpServerStatus = 'untested' | 'ok' | 'error'
+export type McpServerStatus = 'untested' | 'ok' | 'error' | 'needs-auth'
 export type McpProtocolChoice = 'legacy' | 'auto' | '2026'
 
-export interface McpToolState { name: string, description: string, enabled: boolean }
+export interface McpToolAnnotations { readOnly?: boolean, destructive?: boolean }
+
+export interface McpToolState {
+  name: string
+  description: string
+  enabled: boolean
+  annotations?: McpToolAnnotations
+  schemaHash?: string
+  /** Held from chat until reviewed in the manager. */
+  needsReview?: boolean
+}
+
+export interface McpToolChanges {
+  at: string
+  added: string[]
+  removed: string[]
+  changed: { name: string, what: string }[]
+}
 
 export interface McpServerOrigin { catalogId: string, version: string }
 
@@ -23,8 +40,14 @@ export interface McpServer {
   url?: string
   headers?: Record<string, string>
   protocolVersion?: McpProtocolChoice
+  oauth?: boolean
+  oauthClientId?: string
+  oauthClientMetadataUrl?: string
+  /** Set by the API when OAuth tokens exist for this server. */
+  oauthSignedIn?: boolean
   enabled: boolean
   tools: McpToolState[]
+  toolChanges?: McpToolChanges
   status: McpServerStatus
   lastTestAt?: string
   lastLatencyMs?: number
@@ -45,6 +68,7 @@ export interface McpProbeResult {
   error?: string
   serverName?: string
   serverVersion?: string
+  needsAuth?: boolean
   tools?: { name: string, description: string }[]
 }
 
@@ -57,8 +81,15 @@ export interface McpServerInput {
   url?: string
   headers?: Record<string, string>
   protocolVersion?: McpProtocolChoice
+  oauthClientId?: string
+  oauthClientMetadataUrl?: string
   enabled?: boolean
 }
+
+export const signInMcpServer = (id: string) =>
+  postJson<StateReply & { authUrl: string }>('/api/mcp/servers/sign-in', { id })
+export const signOutMcpServer = (id: string) =>
+  postJson<StateReply>('/api/mcp/servers/sign-out', { id })
 
 async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url)
@@ -141,9 +172,17 @@ export const fetchConnectorCatalog = () =>
 export const installConnector = (catalogId: string, values: Record<string, string>) =>
   postJson<StateReply & { serverId: string, alreadyInstalled?: boolean }>('/api/mcp/connectors/install', { catalogId, values })
 
-/** Enabled tools for one server (0 when the server is off). */
+/** Offered tools for one server: on and not held for review (0 when the server is off). */
 export function serverEnabledTools(s: McpServer): number {
-  return s.enabled ? s.tools.filter(t => t.enabled).length : 0
+  return s.enabled ? s.tools.filter(t => t.enabled && !t.needsReview).length : 0
+}
+
+export const markMcpToolsReviewed = (id: string) =>
+  postJson<StateReply>('/api/mcp/tools/reviewed', { id })
+
+/** True when a server has tool changes awaiting review. */
+export function serverNeedsReview(s: McpServer): boolean {
+  return !!s.toolChanges || s.tools.some(t => t.needsReview)
 }
 
 /** The one-line "how it's reached" summary for list rows. */

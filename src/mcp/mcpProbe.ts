@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import type { McpServer } from './mcpStore.js'
 
 /**
@@ -20,7 +21,49 @@ import type { McpServer } from './mcpStore.js'
  * verdict, only the wording.
  */
 
-export interface McpProbeTool { name: string, description: string }
+export interface McpProbeTool {
+  name: string
+  description: string
+  /** The server's own readOnly/destructive declarations. */
+  annotations?: { readOnly?: boolean, destructive?: boolean }
+  /** Fingerprint of the tool's input schema as the client
+   * library converts it — a re-test whose fingerprint differs
+   * means the tool's contract changed under the same name. */
+  schemaHash?: string
+}
+
+/** Canonical JSON (sorted keys) so fingerprints are stable. */
+function stableStringify(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null'
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
+  const entries = Object.entries(v as Record<string, unknown>)
+    .filter(([, x]) => x !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+  return `{${entries.map(([k, x]) => `${JSON.stringify(k)}:${stableStringify(x)}`).join(',')}}`
+}
+
+function probeToolShape(tool: unknown): Pick<McpProbeTool, 'annotations' | 'schemaHash'> {
+  const t = tool as {
+    mcp?: { annotations?: { readOnlyHint?: unknown, destructiveHint?: unknown } }
+    inputSchema?: Record<string, unknown>
+  }
+  const out: Pick<McpProbeTool, 'annotations' | 'schemaHash'> = {}
+  const ann = t.mcp?.annotations
+  if (ann && (typeof ann.readOnlyHint === 'boolean' || typeof ann.destructiveHint === 'boolean')) {
+    out.annotations = {
+      ...(typeof ann.readOnlyHint === 'boolean' ? { readOnly: ann.readOnlyHint } : {}),
+      ...(typeof ann.destructiveHint === 'boolean' ? { destructive: ann.destructiveHint } : {}),
+    }
+  }
+  try {
+    const std = t.inputSchema?.['~standard'] as { jsonSchema?: { input?: (o: unknown) => unknown } } | undefined
+    const schema = std?.jsonSchema?.input?.({ target: 'draft-07' })
+    if (schema && typeof schema === 'object') {
+      out.schemaHash = createHash('sha256').update(stableStringify(schema)).digest('hex').slice(0, 12)
+    }
+  } catch { /* a schema we cannot fingerprint simply has no fingerprint */ }
+  return out
+}
 
 export interface McpProbeResult {
   ok: boolean
@@ -28,10 +71,13 @@ export interface McpProbeResult {
   error?: string
   serverName?: string
   serverVersion?: string
+  /** The server answered but requires OAuth sign-in first. */
+  needsAuth?: boolean
   tools?: McpProbeTool[]
 }
 
 type ProbeTarget = Pick<McpServer, 'transport' | 'command' | 'args' | 'env' | 'url' | 'headers' | 'protocolVersion'>
+  & Partial<Pick<McpServer, 'id' | 'oauth' | 'oauthClientId' | 'oauthClientMetadataUrl'>>
 
 export async function probeMcpServer(
   target: ProbeTarget,
@@ -47,7 +93,19 @@ export async function probeMcpServer(
     if (!target.url) return { ok: false, latencyMs: 0, error: 'No URL set for this server.' }
     try { new URL(target.url) } catch { return { ok: false, latencyMs: 0, error: `That doesn't look like a valid URL: ${target.url}` } }
   }
-  return probeViaClient(target, started, timeoutMs, opts?.protocolChoiceEnabled === true)
+  const result = await probeViaClient(target, started, timeoutMs, opts?.protocolChoiceEnabled === true, false)
+  // A 401 without an OAuth provider attached is ambiguous —
+  // it might be a wrong API-key header, or a server that wants
+  // a real sign-in. Ask the library once, with a provider, and
+  // let its auth bookkeeping decide: only a needs-auth verdict
+  // (or a success through stored tokens) replaces the first
+  // result; anything else leaves the plain failure standing.
+  if (!result.ok && !result.needsAuth && target.transport !== 'stdio'
+    && target.oauth !== true && /401|unauthor/i.test(result.error ?? '')) {
+    const retry = await probeViaClient(target, started, timeoutMs, opts?.protocolChoiceEnabled === true, true)
+    if (retry.ok || retry.needsAuth) return retry
+  }
+  return result
 }
 
 /**
@@ -83,16 +141,22 @@ export function shortenMcpError(raw: string): string {
   return (msg || raw.split('\n')[0]).slice(0, 300)
 }
 
-async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: number, protocolChoiceEnabled: boolean): Promise<McpProbeResult> {
+async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: number, protocolChoiceEnabled: boolean, forceOAuth: boolean): Promise<McpProbeResult> {
   const { MCPClient } = await import('@mastra/mcp')
   const { buildMcpServerDefinition } = await import('./mcpClient.js')
   const key = 'probe'
+  const reach: ProbeTarget = forceOAuth && !target.id ? { ...target, id: 'probe' } : target
   const client = new MCPClient({
     id: `probe-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
     registerProcessHooks: false,
     timeout: timeoutMs,
-    servers: { [key]: buildMcpServerDefinition(target, protocolChoiceEnabled) },
+    servers: { [key]: buildMcpServerDefinition(reach, protocolChoiceEnabled, { forceOAuth }) },
   } as never)
+  const authState = () => {
+    try {
+      return (client as { getServerAuthState?: (n: string) => string | undefined }).getServerAuthState?.(key)
+    } catch { return undefined }
+  }
   try {
     const listed = await Promise.race([
       client.listToolsetsWithErrors(),
@@ -102,6 +166,9 @@ async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: n
     ])
     const failure = listed.errors?.[key]
     if (typeof failure === 'string' && failure) {
+      if (authState() === 'needs-auth') {
+        return { ok: false, needsAuth: true, latencyMs: Date.now() - started, error: 'This server asks you to sign in before it will answer.' }
+      }
       return { ok: false, latencyMs: Date.now() - started, error: await explainFailure(target, shortenMcpError(failure)) }
     }
     const rawTools = listed.toolsets?.[key] ?? {}
@@ -110,6 +177,7 @@ async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: n
       description: typeof (tool as { description?: unknown }).description === 'string'
         ? (tool as { description: string }).description
         : '',
+      ...probeToolShape(tool),
     }))
     const info = client.getServerInfo()[key]
     return {
@@ -120,6 +188,9 @@ async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: n
       tools,
     }
   } catch (e) {
+    if (authState() === 'needs-auth') {
+      return { ok: false, needsAuth: true, latencyMs: Date.now() - started, error: 'This server asks you to sign in before it will answer.' }
+    }
     const msg = e instanceof Error ? e.message : String(e)
     // The race's own timeout message is already plain; other
     // thrown errors go through the shortener.

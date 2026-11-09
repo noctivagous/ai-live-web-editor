@@ -96,14 +96,19 @@ export async function probeMcpServer(
   const result = await probeViaClient(target, started, timeoutMs, opts?.protocolChoiceEnabled === true, false)
   // A 401 without an OAuth provider attached is ambiguous —
   // it might be a wrong API-key header, or a server that wants
-  // a real sign-in. Ask the library once, with a provider, and
-  // let its auth bookkeeping decide: only a needs-auth verdict
-  // (or a success through stored tokens) replaces the first
-  // result; anything else leaves the plain failure standing.
+  // a real sign-in. Ask the library once, with a provider. The
+  // library marks ANY 401 needs-auth in its bookkeeping, so
+  // that alone proves nothing: the verdict only stands when
+  // discovery actually produced an authorization URL during
+  // the retry (a genuine OAuth server advertises one; a bare
+  // API-key 401 does not). A success through stored tokens
+  // also replaces the first result; anything else leaves the
+  // plain failure standing.
   if (!result.ok && !result.needsAuth && target.transport !== 'stdio'
     && target.oauth !== true && /401|unauthor/i.test(result.error ?? '')) {
-    const retry = await probeViaClient(target, started, timeoutMs, opts?.protocolChoiceEnabled === true, true)
-    if (retry.ok || retry.needsAuth) return retry
+    const redirectSeen = { value: false }
+    const retry = await probeViaClient(target, started, timeoutMs, opts?.protocolChoiceEnabled === true, true, redirectSeen)
+    if (retry.ok || (retry.needsAuth && redirectSeen.value)) return retry
   }
   return result
 }
@@ -141,7 +146,10 @@ export function shortenMcpError(raw: string): string {
   return (msg || raw.split('\n')[0]).slice(0, 300)
 }
 
-async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: number, protocolChoiceEnabled: boolean, forceOAuth: boolean): Promise<McpProbeResult> {
+async function probeViaClient(
+  target: ProbeTarget, started: number, timeoutMs: number, protocolChoiceEnabled: boolean,
+  forceOAuth: boolean, redirectSeen?: { value: boolean },
+): Promise<McpProbeResult> {
   const { MCPClient } = await import('@mastra/mcp')
   const { buildMcpServerDefinition } = await import('./mcpClient.js')
   const key = 'probe'
@@ -150,7 +158,12 @@ async function probeViaClient(target: ProbeTarget, started: number, timeoutMs: n
     id: `probe-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
     registerProcessHooks: false,
     timeout: timeoutMs,
-    servers: { [key]: buildMcpServerDefinition(reach, protocolChoiceEnabled, { forceOAuth }) },
+    servers: {
+      [key]: buildMcpServerDefinition(reach, protocolChoiceEnabled, {
+        forceOAuth,
+        ...(redirectSeen ? { onRedirectToAuthorization: () => { redirectSeen.value = true } } : {}),
+      }),
+    },
   } as never)
   const authState = () => {
     try {

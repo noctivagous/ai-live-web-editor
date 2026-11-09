@@ -11,7 +11,10 @@ function capturePageSnapshot(payload, document) {
   var root = payload.scopeSelector
     ? document.querySelector(String(payload.scopeSelector))
     : (document.body || document.documentElement)
-  if (!root) return { ok: false, error: 'snapshot root not found' }
+  if (!root) {
+    var sel = payload.scopeSelector ? String(payload.scopeSelector) : ''
+    return { ok: false, error: sel ? ('snapshot root not found for scopeSelector "' + sel + '" — drop scopeSelector for the whole page, or run page-sections first for a valid selector') : 'snapshot root not found: the page has no body yet — open the app and retry once it loads' }
+  }
   var t0 = Date.now()
   var lines = []
   var count = 0

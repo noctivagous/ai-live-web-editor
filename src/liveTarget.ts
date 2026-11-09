@@ -110,6 +110,7 @@ export async function annotateAgentLayoutResult(result: unknown, url?: string, o
 
 /** inspect/patch/eval: Vite page bridge unless LIVE_TARGET=pool or `url` is another origin. */
 export async function livePageOp(op: PageOp, payload: Record<string, unknown> = {}) {
+  if (!payload || typeof payload !== 'object') payload = {}
   const url = typeof payload.url === 'string' ? payload.url : undefined
   const sketchOnVite = isSketchMode() && isViteAppUrl(url)
   let result: unknown

@@ -55,6 +55,11 @@ const PAGE_RE = new RegExp([
   '\\bthe live app\\b',
   '\\brendered\\b',
   '\\bpreview iframe\\b',
+  '\\bthemes?\\b',
+  '\\btheming\\b',
+  '\\bdark pro\\b',
+  '\\bdark mode\\b',
+  '\\bcolor scheme\\b',
 ].join('|'), 'i')
 
 const FILE_RE = new RegExp([

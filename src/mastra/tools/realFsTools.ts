@@ -324,7 +324,10 @@ export const inspectDOMTool = createTool({
   id: 'inspect-dom',
   description: 'Deep-dive ONE known element on the live page: capped HTML and text, rect, a child summary (count + tags, so you can tell a leaf from a subtree), and the data-ai-loc source stamp (sourceLoc) when the element carries one. This is the LAST step of the page senses, on one selector — for structure use page-sections first, for geometry layout-snapshot. Default: the Vite app page. Pass url (another origin) to use the optional Playwright pool.',
   inputSchema: z.object({ selector: z.string().optional(), url: z.string().optional() }),
-  execute: async ({ selector, url }) => livePageOp('inspect', { selector, url }),
+  execute: async (input) => {
+    const { selector, url } = ((input ?? {}) as { selector?: string, url?: string })
+    return livePageOp('inspect', { selector, url })
+  },
 })
 
 export const takeSnapshotTool = createTool({
@@ -336,7 +339,7 @@ export const takeSnapshotTool = createTool({
     scopeSelector: z.string().optional().describe('Only snapshot under this selector'),
     url: z.string().optional(),
   }),
-  execute: async (input) => livePageOp('snapshot', input as Record<string, unknown>),
+  execute: async (input) => livePageOp('snapshot', ((input ?? {}) as Record<string, unknown>)),
 })
 
 export const patchDOMTool = createTool({
@@ -354,21 +357,29 @@ export const patchDOMTool = createTool({
     position: z.enum(['before', 'after', 'prepend', 'append']).optional().describe('insert/move placement; default append'),
     url: z.string().optional(),
   }),
-  execute: async (input) => livePageOp('patch', input as Record<string, unknown>),
+  execute: async (input) => livePageOp('patch', ((input ?? {}) as Record<string, unknown>)),
 })
 
 export const evalTool = createTool({
   id: 'eval-js',
   description: 'Run JavaScript in the live Vite app, or in the Playwright pool when url is another origin.',
   inputSchema: z.object({ code: z.string(), url: z.string().optional() }),
-  execute: async ({ code, url }) => livePageOp('eval', { code, url }),
+  execute: async (input) => {
+    const { code, url } = ((input ?? {}) as { code?: string, url?: string })
+    return livePageOp('eval', { code, url })
+  },
 })
 
 export const poolOpenTool = createTool({
   id: 'pool-open',
   description: 'Open a URL in the optional Playwright Chrome pool (headed, persistent profile). Requires Playwright pool enabled in Settings.',
   inputSchema: z.object({ url: z.string() }),
-  execute: async ({ url }) => poolOpen(url),
+  execute: async (input) => {
+    const url = typeof ((input ?? {}) as { url?: unknown }).url === 'string'
+      ? ((input ?? {}) as { url: string }).url
+      : ''
+    return poolOpen(url)
+  },
 })
 
 const CHECK_TIMEOUT_MS = 120_000

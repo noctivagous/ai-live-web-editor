@@ -105,6 +105,21 @@ describe('capturePageSnapshot', () => {
     assert.equal(String(full.text).includes('truncated at'), false)
   })
 
+  it('a missing scopeSelector names the selector and the way out', () => {
+    const body = El('body', { id: 'root' })
+    const document = {
+      body,
+      title: 'Page',
+      location: { href: 'http://localhost:5173/' },
+      querySelector: () => null,
+      documentElement: body,
+    }
+    const snap = load()({ scopeSelector: '#missing' }, document)
+    assert.equal(snap.ok, false)
+    assert.match(String(snap.error), /#missing/)
+    assert.match(String(snap.error), /scopeSelector/)
+  })
+
   it('verbose includes generic nodes', () => {
     const body = El('body', { id: 'root' })
     append(body, El('div', { id: 'box', textContent: 'generic' }))

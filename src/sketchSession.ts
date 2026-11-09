@@ -86,13 +86,15 @@ export function snapshotPublic(state: SketchState) {
 }
 
 export const SKETCH_TURN_PREAMBLE =
-  'Live sketch mode is ON. Disk writes (str-replace, write-real-file) are blocked. '
+  'Live sketch mode is ON. Disk writes (str-replace, write-real-file) are blocked — grep, read-real-file, and every other file tool is unavailable in this mode. '
+  + 'Call tools by their exact name only — never add prefixes, namespaces, or colons. '
   + 'Use take-snapshot / inspect-dom / layout-snapshot, then patch-dom with small sequential ops '
   + '(text, style, class, attr, insert, move, remove; html only if needed). '
+  + 'take-snapshot takes an object ({} for the whole page), never null. '
   + 'insert: html with one root element and position before|after|prepend|append. '
   + 'move: target selector and position. One visual change per patch-dom call. '
   + 'After tools, write one short sentence of what the page should now show. '
-  + 'If this turn is not about the live page, do not call write tools.'
+  + 'If this turn is not about the live page, do not call write tools — say it needs Files instead.'
 
 export function withSketchPreamble(messages: unknown): unknown {
   const list = Array.isArray(messages) ? messages : []

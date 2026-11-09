@@ -21,6 +21,7 @@ describe('workflowRoute', () => {
   it('classifies page, files, mixed, unknown', () => {
     assert.equal(classifyTurn('make the h1 blue'), 'page')
     assert.equal(classifyTurn('inspect the heading on the page'), 'page')
+    assert.equal(classifyTurn('make a theme that is classic dark pro'), 'page')
     assert.equal(classifyTurn('add a test for applyStrReplace in fsEdit.test.ts'), 'files')
     assert.equal(classifyTurn('scaffold a new file for the provider list'), 'files')
     assert.equal(classifyTurn('change the heading in App.jsx'), 'mixed')
@@ -43,6 +44,11 @@ describe('workflowRoute', () => {
     assert.equal(mixed.switched, false)
     assert.equal(mixed.mode, 'sketch')
     assert.equal(mixed.intent, 'mixed')
+
+    const theme = routeChatTurn('sketch', [{ role: 'user', content: 'make a theme that is classic dark pro' }])
+    assert.equal(theme.switched, false)
+    assert.equal(theme.mode, 'sketch')
+    assert.equal(theme.intent, 'page')
 
     const stay = routeChatTurn('files', [{ role: 'user', content: 'make the h1 blue' }])
     assert.equal(stay.switched, false)

@@ -241,6 +241,17 @@ describe('read / str-replace / grep path forms', () => {
       assert.match(String(bad.error), /escapes the project root/)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
+
+  it('treats a null-ish grep path as the whole project, never "Not found: null"', async () => {
+    const root = tmpProject()
+    try {
+      for (const badPath of [null, undefined, '', '   ', 'null', 'undefined']) {
+        const r = await run(grepTool, { pattern: 'div', path: badPath })
+        assert.equal(r.count, 1, `path ${JSON.stringify(badPath)} should search the project root`)
+        assert.equal(r.error, undefined)
+      }
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
 })
 
 describe('str-replace line facts (failure report)', () => {

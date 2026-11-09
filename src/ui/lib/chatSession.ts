@@ -326,12 +326,24 @@ function clipHistoryTurn(text: string): string {
   return text.length > HISTORY_TURN_CHAR_CAP ? text.slice(0, HISTORY_TURN_CHAR_CAP) + '…' : text
 }
 
+/**
+ * A null-ish active path ("null", "undefined", blank) means no file is
+ * open — and the model copies a literal `Current file: null` into the
+ * next tool call's path. Omit the suffix instead of naming nothing.
+ */
+function currentFileSuffix(activePath: unknown): string {
+  if (typeof activePath !== 'string') return ''
+  const trimmed = activePath.trim().toLowerCase()
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return ''
+  return ` Current file: ${activePath}`
+}
+
 export function historyForAgent(log: LogItem[], userText: string, activePath: string) {
   const turns = log.filter((m) => m.role === 'user' || m.role === 'ai').slice(-12)
   const messages = turns.map((m) => ({
     role: m.role === 'ai' ? 'assistant' : 'user',
     content: clipHistoryTurn((m as { text: string }).text),
   }))
-  messages.push({ role: 'user', content: `${userText} Current file: ${activePath}` })
+  messages.push({ role: 'user', content: `${userText}${currentFileSuffix(activePath)}` })
   return messages
 }

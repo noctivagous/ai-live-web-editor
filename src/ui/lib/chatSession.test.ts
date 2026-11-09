@@ -80,6 +80,17 @@ describe('chatSession', () => {
     ])
   })
 
+  it('omits Current file when no file is active (never "Current file: null")', () => {
+    const log: LogItem[] = [{ role: 'user', text: 'hi' }]
+    for (const bad of [null, undefined, '', '   ', 'null', 'undefined']) {
+      const messages = historyForAgent(log, 'again', bad as unknown as string)
+      assert.deepEqual(messages, [
+        { role: 'user', content: 'hi' },
+        { role: 'user', content: 'again' },
+      ])
+    }
+  })
+
   it('caps each prior turn in the agent payload (§2 history re-check)', () => {
     const big = 'x'.repeat(8000)
     const log: LogItem[] = [

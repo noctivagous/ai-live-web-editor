@@ -159,27 +159,43 @@ export const readRealFileTool = createTool({
   }
 })
 
+/**
+ * A null-ish search path (JSON null, blank, or the literal strings
+ * "null"/"undefined" the model copies out of a `Current file: null`
+ * line) means the whole project — never a file literally named that.
+ */
+function grepStartPath(p: unknown): string | undefined {
+  if (p == null) return undefined
+  if (typeof p !== 'string') return undefined
+  const trimmed = p.trim().toLowerCase()
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return undefined
+  return p
+}
+
 export const grepTool = createTool({
   id: 'grep',
-  description: 'Regex search in the project. Returns path:line hits. Skip node_modules. Use before ranged read.',
+  description: 'Regex search in the project. Returns path:line hits. Skip node_modules. Use before ranged read. Omit path to search the whole project — never pass null or the string "null".',
   inputSchema: z.object({
     pattern: z.string(),
     path: z.string().optional(),
     caseInsensitive: z.boolean().optional(),
     maxHits: z.number().int().positive().optional(),
   }),
-  execute: async ({ pattern, path: p, caseInsensitive, maxHits }) => {
+  execute: async (input) => {
+    const { pattern, path: p, caseInsensitive, maxHits } = ((input ?? {}) as { pattern?: unknown, path?: unknown, caseInsensitive?: boolean, maxHits?: number })
+    if (typeof pattern !== 'string' || !pattern) return { error: 'pattern must be a non-empty string' }
     const re = compileGrep(pattern, caseInsensitive)
     if ('error' in re) return { error: 'invalid pattern: ' + re.error }
     const cap = Math.min(maxHits || GREP_MAX_HITS, 200)
     const root = getFsRoot()
+    const at = grepStartPath(p)
     let start = root
-    if (p) {
-      const r = toolPath(p)
-      if (r.ok === false) return { error: r.error, path: p }
+    if (at) {
+      const r = toolPath(at)
+      if (r.ok === false) return { error: r.error, path: at }
       start = r.full
     }
-    if (!fs.existsSync(start)) return { error: 'Not found: ' + (p || '/') }
+    if (!fs.existsSync(start)) return { error: 'Not found: ' + (at || '/') }
     const files = fs.statSync(start).isDirectory() ? walkFiles(start) : [start]
     const hits: GrepHit[] = []
     let truncated = false

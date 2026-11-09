@@ -38,6 +38,8 @@ export const FILE_LAYOUT_TOOLS = [
   'page-sections',
   'run-in-page',
   'pool-open',
+  'runtime-state-scan',
+  'runtime-state-set',
 ] as const
 
 /** Workbench code programs — dense/minified/generated file work. */
@@ -137,6 +139,8 @@ export const FILE_ACTIVE_TOOLS = [
   'page-sections',
   'run-in-page',
   'pool-open',
+  'runtime-state-scan',
+  'runtime-state-set',
   'run-project-check',
   'resolve-source',
   'find-component',
@@ -202,6 +206,8 @@ export const SKETCH_ACTIVE_TOOLS = [
   'pool-open',
   'get-console',
   'get-network-failures',
+  'runtime-state-scan',
+  'runtime-state-set',
 ] as const
 
 export function activeToolsForMode(mode: SketchMode): string[] {

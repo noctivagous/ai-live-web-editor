@@ -330,7 +330,7 @@ export const inspectDOMTool = createTool({
 export const takeSnapshotTool = createTool({
   id: 'take-snapshot',
   description:
-    'Accessibility-style text snapshot of the live page (roles, names, CSS selectors) — the selector harvest for patch-dom, and the accessibility view. For page STRUCTURE use page-sections first (cheaper, semantic); snapshot when you need per-element selectors or accessible names, and scope it with scopeSelector when you only need one region. Use the selector on each line with patch-dom. verbose includes generic nodes. Pass url for the Playwright pool.',
+    'Accessibility-style text snapshot of the live page (roles, names, CSS selectors) — the selector harvest for patch-dom, and the accessibility view. For page STRUCTURE use page-sections first (cheaper, semantic); snapshot when you need per-element selectors or accessible names, and scope it with scopeSelector when you only need one region. Use the selector on each line with patch-dom. verbose includes generic nodes. Snapshot sees DOM text only: canvas/WebGL-painted content never appears here — when the target text is absent, the content may be painted or in page runtime state (runtime-state-scan covers the stores). Pass url for the Playwright pool.',
   inputSchema: z.object({
     verbose: z.boolean().optional().describe('Include generic nodes, not only landmarks/controls/headings'),
     scopeSelector: z.string().optional().describe('Only snapshot under this selector'),
@@ -341,7 +341,7 @@ export const takeSnapshotTool = createTool({
 
 export const patchDOMTool = createTool({
   id: 'patch-dom',
-  description: 'Patch a live element. Ops: text, style, class, attr, html, insert, move, remove. insert needs html + position (before|after|prepend|append). move needs target + position. Recorded in Live sketch. Pass url for the Playwright pool.',
+  description: 'Patch a live element. Ops: text, style, class, attr, html, insert, move, remove. insert needs html + position (before|after|prepend|append). move needs target + position. Cannot change canvas-painted pixels: painted content lives in page runtime state (runtime-state-scan finds it, runtime-state-set changes it). Recorded in Live sketch. Pass url for the Playwright pool.',
   inputSchema: z.object({
     selector: z.string(),
     op: z.enum(['html', 'text', 'style', 'attr', 'class', 'remove', 'insert', 'move']).optional(),

@@ -1,0 +1,252 @@
+{
+  "version": 1,
+  "title": "lumen",
+  "createdAt": 1794254906479,
+  "updatedAt": 1794254937042,
+  "sync": {
+    "commit": "e54bbc2520f0078e617677180cd0f4398361eec0",
+    "at": 1794254937042
+  },
+  "nodes": [
+    {
+      "name": "Inbox & Email",
+      "kind": "region",
+      "status": "building",
+      "id": "fmw9p1mdi1"
+    },
+    {
+      "name": "Today & Scheduling",
+      "kind": "region",
+      "status": "building",
+      "id": "fmw9p1okj2"
+    },
+    {
+      "name": "People & Relationships",
+      "kind": "region",
+      "status": "building",
+      "id": "fmw9p1ol73"
+    },
+    {
+      "name": "App Shell & Design System",
+      "kind": "region",
+      "status": "building",
+      "id": "fmw9p1olu4"
+    },
+    {
+      "name": "Email triage workspace",
+      "kind": "screen",
+      "status": "building",
+      "parent": "fmw9p1mdi1",
+      "id": "fmw9p1t8d5"
+    },
+    {
+      "name": "Smart compose thread",
+      "kind": "feature",
+      "status": "building",
+      "parent": "fmw9p1mdi1",
+      "id": "fmw9p1t906"
+    },
+    {
+      "name": "Thread summarization hook",
+      "kind": "feature",
+      "status": "planned",
+      "parent": "fmw9p1mdi1",
+      "note": "Stub only: useState(null), never populated by UI — summarization engine not implemented",
+      "id": "fmw9p1t9m7"
+    },
+    {
+      "name": "Email data store",
+      "kind": "data",
+      "status": "done",
+      "parent": "fmw9p1mdi1",
+      "id": "fmw9p1ta78"
+    },
+    {
+      "name": "Inbox zero stat + sparkline",
+      "kind": "component",
+      "status": "done",
+      "parent": "fmw9p1mdi1",
+      "id": "fmw9p1tas9"
+    },
+    {
+      "name": "Today schedule view",
+      "kind": "screen",
+      "status": "building",
+      "parent": "fmw9p1okj2",
+      "id": "fmw9p1vi7a"
+    },
+    {
+      "name": "Calendar add + RSVP flow",
+      "kind": "feature",
+      "status": "building",
+      "parent": "fmw9p1okj2",
+      "id": "fmw9p1viyb"
+    },
+    {
+      "name": "Events data store",
+      "kind": "data",
+      "status": "done",
+      "parent": "fmw9p1okj2",
+      "id": "fmw9p1vjlc"
+    },
+    {
+      "name": "Calendar density stats",
+      "kind": "component",
+      "status": "done",
+      "parent": "fmw9p1okj2",
+      "id": "fmw9p1vk6d"
+    },
+    {
+      "name": "People relationship view",
+      "kind": "screen",
+      "status": "building",
+      "parent": "fmw9p1ol73",
+      "id": "fmw9p1xlse"
+    },
+    {
+      "name": "Meeting notes composer",
+      "kind": "feature",
+      "status": "building",
+      "parent": "fmw9p1ol73",
+      "id": "fmw9p1xmnf"
+    },
+    {
+      "name": "People data store",
+      "kind": "data",
+      "status": "done",
+      "parent": "fmw9p1ol73",
+      "id": "fmw9p1xnfg"
+    },
+    {
+      "name": "Network strength stat + sparkline",
+      "kind": "component",
+      "status": "done",
+      "parent": "fmw9p1ol73",
+      "id": "fmw9p1xo5h"
+    },
+    {
+      "name": "Overview dashboard shell",
+      "kind": "screen",
+      "status": "building",
+      "parent": "fmw9p1olu4",
+      "id": "fmw9p1xoyi"
+    },
+    {
+      "name": "View switcher setting",
+      "kind": "setting",
+      "status": "done",
+      "parent": "fmw9p1olu4",
+      "note": "activeView state: overview | inbox | today | people, pill navigation",
+      "id": "fmw9p20lhj"
+    },
+    {
+      "name": "Theme setting",
+      "kind": "setting",
+      "status": "done",
+      "parent": "fmw9p1olu4",
+      "note": "dark/light toggle + system, CSS custom props in App.jsx ICONS block only — no theme file",
+      "id": "fmw9p20m3k"
+    },
+    {
+      "name": "shadcn Button component",
+      "kind": "component",
+      "status": "done",
+      "parent": "fmw9p1olu4",
+      "component": "Button",
+      "id": "fmw9p20mpl"
+    },
+    {
+      "name": "Inline SVG icon set",
+      "kind": "component",
+      "status": "done",
+      "parent": "fmw9p1olu4",
+      "note": "ICONS map (~30 icons) in App.jsx lines 10–400",
+      "id": "fmw9p20nbm"
+    },
+    {
+      "name": "React SPA entry bootstrap",
+      "kind": "service",
+      "status": "done",
+      "parent": "fmw9p1olu4",
+      "note": "main.jsx createRoot renders App; index.html three-section document shell",
+      "id": "fmw9p20nwn"
+    }
+  ],
+  "edges": [
+    {
+      "from": "fmw9p1ta78",
+      "to": "fmw9p1t8d5",
+      "type": "data-flows"
+    },
+    {
+      "from": "fmw9p1vjlc",
+      "to": "fmw9p1vi7a",
+      "type": "data-flows"
+    },
+    {
+      "from": "fmw9p1xnfg",
+      "to": "fmw9p1xlse",
+      "type": "data-flows"
+    },
+    {
+      "from": "fmw9p1t906",
+      "to": "fmw9p1ta78",
+      "type": "depends-on"
+    },
+    {
+      "from": "fmw9p1viyb",
+      "to": "fmw9p1vjlc",
+      "type": "depends-on"
+    },
+    {
+      "from": "fmw9p1xmnf",
+      "to": "fmw9p1xnfg",
+      "type": "depends-on"
+    },
+    {
+      "from": "fmw9p1ta78",
+      "to": "fmw9p1xoyi",
+      "type": "data-flows"
+    },
+    {
+      "from": "fmw9p1vjlc",
+      "to": "fmw9p1xoyi",
+      "type": "data-flows"
+    },
+    {
+      "from": "fmw9p1xnfg",
+      "to": "fmw9p1xoyi",
+      "type": "data-flows"
+    },
+    {
+      "from": "fmw9p20lhj",
+      "to": "fmw9p1xoyi",
+      "type": "configures"
+    },
+    {
+      "from": "fmw9p20m3k",
+      "to": "fmw9p1xoyi",
+      "type": "configures"
+    },
+    {
+      "from": "fmw9p1t8d5",
+      "to": "fmw9p1xoyi",
+      "type": "renders"
+    },
+    {
+      "from": "fmw9p1vi7a",
+      "to": "fmw9p1xoyi",
+      "type": "renders"
+    },
+    {
+      "from": "fmw9p1xlse",
+      "to": "fmw9p1xoyi",
+      "type": "renders"
+    },
+    {
+      "from": "fmw9p20mpl",
+      "to": "fmw9p1xoyi",
+      "type": "derived-from"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ const THEMES = [
   { id: 'lumen', name: 'Lumen', swatch: '#c45c26' },
   { id: 'aurora', name: 'Aurora', swatch: '#3ee0c6' },
   { id: 'field', name: 'Field', swatch: '#3f7d4e' },
+  { id: 'slate', name: 'Slate', swatch: '#6b7280' },
 ]
 
 const NAV = [

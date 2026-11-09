@@ -95,6 +95,12 @@ describe('fileToolsForTurn', () => {
     }
   })
 
+  it('offers read-symbol on every Files turn', () => {
+    assert.ok(FILE_CORE_TOOLS.includes('read-symbol'))
+    assert.ok(fileToolsForTurn({ userText: 'fix the typo' }).includes('read-symbol'))
+    assert.equal(FILE_CODE_TOOLS.includes('read-symbol' as typeof FILE_CODE_TOOLS[number]), false)
+  })
+
   it('adds research tools only when a backend exists AND the ask needs the web', () => {
     const ask = 'check the latest docs for the stripe api'
     for (const t of FILE_RESEARCH_TOOLS) {

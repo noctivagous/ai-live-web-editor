@@ -281,44 +281,95 @@ function dietForTool(toolName: string | undefined, value: unknown): { value: Rec
 export interface TrimStats { trimmed: number, savedChars: number, dieted?: number }
 export interface TrimResult<T> { prompt: T, stats: TrimStats, changed: boolean }
 
+function lastUserIndex(prompt: LooseMessage[]): number {
+  let idx = -1
+  prompt.forEach((msg, i) => { if (msg.role === 'user') idx = i })
+  return idx
+}
+
+function lastToolCallIndex(prompt: LooseMessage[], afterIdx: number): number {
+  let idx = -1
+  prompt.forEach((msg, i) => {
+    if (i < afterIdx) return
+    if (msg.role !== 'assistant' || !Array.isArray(msg.content)) return
+    if ((msg.content as LoosePart[]).some(p => p.type === 'tool-call')) idx = i
+  })
+  return idx
+}
+
+function foldPartOutput(p: LoosePart, thresholdChars: number, stats: TrimStats): LoosePart {
+  if (p.type !== 'tool-result' || !p.output) return p
+  const text = resultText(p.output)
+  if (text.length <= thresholdChars) return p
+  const summary = summarizeToolResult(p.toolName || 'tool', p.output, text)
+  stats.trimmed++
+  stats.savedChars += text.length - summary.length
+  return { ...p, output: { type: 'text', value: summary } }
+}
+
+function foldPartsInContent(content: unknown, thresholdChars: number, stats: TrimStats): { content: unknown, touched: boolean } {
+  if (Array.isArray(content)) {
+    const parts = content as LoosePart[]
+    if (!parts.some(p => (p.type === 'tool-result' && p.output) || p.type === 'tool-invocation')) {
+      return { content, touched: false }
+    }
+    let touched = false
+    const next = parts.map(p => {
+      if (p.type === 'tool-result' && p.output) {
+        const folded = foldPartOutput(p, thresholdChars, stats)
+        if (folded !== p) touched = true
+        return folded
+      }
+      if (p.type === 'tool-invocation') {
+        const inv = (p.toolInvocation && typeof p.toolInvocation === 'object') ? p.toolInvocation as LoosePart : p
+        const result = inv.result
+        if (result == null) return p
+        const name = String(inv.toolName || p.toolName || 'tool')
+        const output = { type: 'json' as const, value: result }
+        const text = resultText(output)
+        if (text.length <= thresholdChars) return p
+        const summary = summarizeToolResult(name, output, text)
+        stats.trimmed++
+        stats.savedChars += text.length - summary.length
+        touched = true
+        return { ...p, toolInvocation: { ...inv, result: { folded: true, summary } } }
+      }
+      return p
+    })
+    return { content: next, touched }
+  }
+  if (content && typeof content === 'object' && Array.isArray((content as { parts?: unknown }).parts)) {
+    const rec = content as { parts: unknown }
+    const inner = foldPartsInContent(rec.parts, thresholdChars, stats)
+    if (!inner.touched) return { content, touched: false }
+    return { content: { ...rec, parts: inner.content }, touched: true }
+  }
+  return { content, touched: false }
+}
+
 /**
  * Fold bulky tool results in a LanguageModelV2-shaped prompt.
- * Freshness rule: results answering the most recent tool calls
- * (everything after the last assistant message carrying tool-call
- * parts) stay in full; older results over the threshold fold.
+ * Freshness: the current turn starts at the last user message. Tool
+ * results from earlier turns always fold (recalled snapshots must not
+ * stay full). Inside this turn, only results answering the newest
+ * tool-call block stay in full; older in-turn results over the
+ * threshold fold.
  */
 export function trimPrompt<T extends LooseMessage[]>(prompt: T, thresholdChars: number = TRIM_THRESHOLD_CHARS): TrimResult<T> {
-  let lastCallIdx = -1
-  prompt.forEach((msg, i) => {
-    if (msg.role !== 'assistant' || !Array.isArray(msg.content)) return
-    if ((msg.content as LoosePart[]).some(p => p.type === 'tool-call')) lastCallIdx = i
-  })
+  const lastUserIdx = lastUserIndex(prompt)
+  const lastCallIdx = lastToolCallIndex(prompt, lastUserIdx < 0 ? 0 : lastUserIdx)
   const stats: TrimStats = { trimmed: 0, savedChars: 0 }
-  if (lastCallIdx < 0) return { prompt, stats, changed: false }
+  const shouldFold = (i: number) =>
+    (lastUserIdx >= 0 && i < lastUserIdx) || (lastCallIdx >= 0 && i < lastCallIdx)
 
   const next = prompt.map((msg, i) => {
-    if (i >= lastCallIdx || !Array.isArray(msg.content)) return msg
-    const parts = msg.content as LoosePart[]
-    if (!parts.some(p => p.type === 'tool-result' && p.output)) return msg
-    let touched = false
-    const newParts = parts.map(p => {
-      if (p.type !== 'tool-result' || !p.output) return p
-      const text = resultText(p.output)
-      if (text.length <= thresholdChars) return p
-      const summary = summarizeToolResult(p.toolName || 'tool', p.output, text)
-      stats.trimmed++
-      stats.savedChars += text.length - summary.length
-      touched = true
-      return { ...p, output: { type: 'text', value: summary } }
-    })
-    return touched ? { ...msg, content: newParts } : msg
+    if (!shouldFold(i) || msg.content == null) return msg
+    const folded = foldPartsInContent(msg.content, thresholdChars, stats)
+    return folded.touched ? { ...msg, content: folded.content } : msg
   })
 
-  // Fresh zone (results answering the newest calls): no folding —
-  // but a fresh result with a uniform array still goes out in diet
-  // form (layout elements, grep hits, catalog summaries).
   const dieted = next.map((msg, i) => {
-    if (i <= lastCallIdx || !Array.isArray(msg.content)) return msg
+    if (!(lastCallIdx >= 0 && i > lastCallIdx) || !Array.isArray(msg.content)) return msg
     const parts = msg.content as LoosePart[]
     if (!parts.some(p => p.type === 'tool-result' && p.output)) return msg
     let touched = false
@@ -337,6 +388,18 @@ export function trimPrompt<T extends LooseMessage[]>(prompt: T, thresholdChars: 
     return touched ? { ...msg, content: newParts } : msg
   })
   return { prompt: dieted as T, stats, changed: stats.trimmed > 0 || (stats.dieted || 0) > 0 }
+}
+
+/** Fold every bulky tool dump in a stored thread message (no fresh zone). */
+export function compactStoredMessage<T extends { content?: unknown }>(message: T, thresholdChars: number = TRIM_THRESHOLD_CHARS): T {
+  if (message.content == null) return message
+  let content = message.content
+  if (typeof content === 'string') {
+    try { content = JSON.parse(content) as unknown } catch { return message }
+  }
+  const stats: TrimStats = { trimmed: 0, savedChars: 0 }
+  const folded = foldPartsInContent(content, thresholdChars, stats)
+  return folded.touched ? { ...message, content: folded.content } : message
 }
 
 /**

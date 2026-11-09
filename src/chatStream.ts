@@ -669,17 +669,22 @@ export async function pipeAgentChatStream(
       dbg.noteTools(turnTools, { hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, hasUserFlowGraph: turnHasUserFlowGraph, searchAvailable })
     }
     if (mode !== 'files') dbg.noteTools(turnTools, {})
-    const result = await agent.stream(payload as never, {
-      maxSteps: CHAT_MAX_STEPS,
-      abortSignal,
-      activeTools: turnTools,
-      memory: memoryOption,
-      ...(mcpTurn?.toolNames.length ? { toolsets: mcpTurn.toolsets } : {}),
-    })
+    const { runChatTurnScope, flushLocatesToWorkingMemory } = await import('./locateTurn.js')
     let model: string | undefined
     const toolTrace: string[] = []
     let stepCap = emptyStepCapState()
-    await streamChunks(result.fullStream)
+    const result = await runChatTurnScope(async () => {
+      const stream = await agent.stream(payload as never, {
+        maxSteps: CHAT_MAX_STEPS,
+        abortSignal,
+        activeTools: turnTools,
+        memory: memoryOption,
+        ...(mcpTurn?.toolNames.length ? { toolsets: mcpTurn.toolsets } : {}),
+      })
+      await streamChunks(stream.fullStream)
+      await flushLocatesToWorkingMemory()
+      return stream
+    })
     // MCP clients live exactly as long as the main stream — the
     // verify-gate follow-up below deliberately runs without them.
     await closeMcp()

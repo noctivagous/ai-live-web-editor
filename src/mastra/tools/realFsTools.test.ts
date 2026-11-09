@@ -26,6 +26,7 @@ function loggedRows(): Record<string, unknown>[] {
   return fs.readFileSync(file, 'utf-8').trim().split('\n').map(l => JSON.parse(l) as Record<string, unknown>)
 }
 import { deleteFileTool, grepTool, LIST_FILES_CAP, listRealFilesTool, makeDirTool, readRealFileTool, renameFileTool, strReplaceTool, writeRealFileTool } from './realFsTools.js'
+import { runChatTurnScope } from '../../locateTurn.js'
 
 /**
  * The file tools' execute() paths, exercised directly (basics audit
@@ -200,7 +201,7 @@ describe('read / str-replace / grep path forms', () => {
   it('reads and edits via relative paths, returning the canonical path', async () => {
     const root = tmpProject()
     try {
-      const read = await run(readRealFileTool, { path: 'src/App.jsx' })
+      const read = await runChatTurnScope(() => run(readRealFileTool, { path: 'src/App.jsx' }))
       assert.equal(read.path, '/src/App.jsx')
       assert.match(String(read.content ?? read.text ?? ''), /hi/)
       const edit = await run(strReplaceTool, { path: './src/App.jsx', old_string: 'hi', new_string: 'hello' })
@@ -214,7 +215,7 @@ describe('read / str-replace / grep path forms', () => {
     const root = tmpProject()
     try {
       fs.writeFileSync(path.join(root, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]))
-      const r = await run(readRealFileTool, { path: '/logo.png' })
+      const r = await runChatTurnScope(() => run(readRealFileTool, { path: '/logo.png' }))
       assert.match(String(r.error), /Binary file: \/logo\.png/)
       assert.equal(r.content, undefined)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
@@ -223,11 +224,11 @@ describe('read / str-replace / grep path forms', () => {
   it('returns readable error values for missing and escaping paths', async () => {
     const root = tmpProject()
     try {
-      const missing = await run(readRealFileTool, { path: 'nope.txt' })
+      const missing = await runChatTurnScope(() => run(readRealFileTool, { path: 'nope.txt' }))
       assert.equal(missing.error, 'Not found: /nope.txt')
       const escape = await run(readRealFileTool, { path: '../secret.txt' })
       assert.match(String(escape.error), /escapes the project root/)
-      const dirRead = await run(readRealFileTool, { path: '/src' })
+      const dirRead = await runChatTurnScope(() => run(readRealFileTool, { path: '/src' }))
       assert.match(String(dirRead.error), /Is a directory/)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
@@ -250,6 +251,27 @@ describe('read / str-replace / grep path forms', () => {
         assert.equal(r.count, 1, `path ${JSON.stringify(badPath)} should search the project root`)
         assert.equal(r.error, undefined)
       }
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('read-real-file overlapping ranges', () => {
+  it('refuses a second read contained in the first this turn', async () => {
+    const root = tmpProject()
+    try {
+      fs.writeFileSync(path.join(root, 'src', 'App.jsx'), Array.from({ length: 40 }, (_, i) => `line${i + 1}`).join('\n') + '\n')
+      await runChatTurnScope(async () => {
+        const first = await run(readRealFileTool, { path: '/src/App.jsx', offset: 1, limit: 30 })
+        assert.equal(first.alreadyRead, undefined)
+        assert.ok(String(first.content).includes('line1'))
+        const again = await run(readRealFileTool, { path: '/src/App.jsx', offset: 10, limit: 10 })
+        assert.equal(again.alreadyRead, true)
+        assert.equal(again.content, undefined)
+        assert.deepEqual(again.covering, [1, 30])
+        const later = await run(readRealFileTool, { path: '/src/App.jsx', offset: 31, limit: 5 })
+        assert.equal(later.alreadyRead, undefined)
+        assert.ok(String(later.content).includes('line31'))
+      })
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

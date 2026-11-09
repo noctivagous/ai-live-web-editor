@@ -61,6 +61,7 @@ export function sliceLines(content: string, offset?: number, limit?: number): {
   endLine: number
   totalLines: number
   truncated: boolean
+  charTruncated: boolean
 } {
   const lines = content.split('\n')
   const totalLines = lines.length
@@ -69,9 +70,11 @@ export function sliceLines(content: string, offset?: number, limit?: number): {
   const slice = lines.slice(startLine - 1, startLine - 1 + take)
   let text = slice.join('\n')
   let truncated = startLine > 1 || startLine - 1 + slice.length < totalLines
+  let charTruncated = false
   if (text.length > READ_CHAR_CAP) {
     text = text.slice(0, READ_CHAR_CAP)
     truncated = true
+    charTruncated = true
   }
   return {
     content: text,
@@ -79,6 +82,7 @@ export function sliceLines(content: string, offset?: number, limit?: number): {
     endLine: startLine + slice.length - 1,
     totalLines,
     truncated,
+    charTruncated,
   }
 }
 

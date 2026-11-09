@@ -96,6 +96,44 @@
       --shadow: 0 1px 2px rgba(26, 36, 24, 0.06), 0 8px 24px rgba(26, 36, 24, 0.05);
     }
 
+    [data-theme="slate"] {
+      color-scheme: light;
+      --bg: #e9ebee;
+      --ink: #1e2329;
+      --muted: #626b76;
+      --line: #d4d8de;
+      --sidebar: #23282f;
+      --sidebar-ink: #f1f3f5;
+      --sidebar-muted: #9aa3ae;
+      --sidebar-active: #343c45;
+      --sidebar-active-ink: #ffffff;
+      --sidebar-idle: #c3c9d1;
+      --accent: #4b5563;
+      --on-accent: #ffffff;
+      --card: #f4f5f7;
+      --topbar: #eef0f3;
+      --input-bg: #ffffff;
+      --pill-bg: #e0e4e9;
+      --pill-ink: #374151;
+      --avatar-bg: #d4d8de;
+      --avatar-ink: #1e2329;
+      --placeholder: #dde1e6;
+      --btn-bg: #1e2329;
+      --btn-ink: #ffffff;
+      --switcher-bg: #f4f5f7;
+      --warn: #6b5a2e;
+      --warn-bg: #efe9d8;
+      --shadow: 0 1px 2px rgba(30, 35, 41, 0.08), 0 8px 24px rgba(30, 35, 41, 0.06);
+    }
+
+    /* Slate density: compact */
+    [data-theme="slate"] aside { padding: 8px !important; }
+    [data-theme="slate"] header { padding: 10px 14px !important; }
+    [data-theme="slate"] main { padding: 10px 14px 14px !important; gap: 10px !important; }
+    [data-theme="slate"] section { gap: 10px !important; }
+    [data-theme="slate"] article { padding: 10px 12px !important; border-radius: 10px !important; }
+    [data-theme="slate"] button { border-radius: 8px !important; }
+
     * { box-sizing: border-box; }
     html, body, #root { height: 100%; margin: 0; }
     body {

@@ -25,6 +25,7 @@ export const FILE_CORE_TOOLS = [
   'run-project-check',
   'resolve-source',
   'codebase-map',
+  'read-symbol',
   'read-skill',
   'run-skill-checks',
   'get-console',
@@ -45,7 +46,6 @@ export const FILE_LAYOUT_TOOLS = [
 /** Workbench code programs — dense/minified/generated file work. */
 export const FILE_CODE_TOOLS = [
   'unpack-code',
-  'read-symbol',
 ] as const
 
 /** Component catalog + templates. */

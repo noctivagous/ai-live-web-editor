@@ -514,11 +514,16 @@ app.post('/api/chat', async (req, res) => {
         if (mcpTurn.toolNames.length) tools = [...tools, ...mcpTurn.toolNames]
       } catch { mcpTurn = null }
     }
-    const result = await agent.generate(prepared.payload as never, {
-      maxSteps: 12,
-      activeTools: tools,
-      memory: prepared.memory,
-      ...(mcpTurn?.toolNames.length ? { toolsets: mcpTurn.toolsets } : {}),
+    const { runChatTurnScope, flushLocatesToWorkingMemory } = await import('./locateTurn.js')
+    const result = await runChatTurnScope(async () => {
+      const out = await agent.generate(prepared.payload as never, {
+        maxSteps: 12,
+        activeTools: tools,
+        memory: prepared.memory,
+        ...(mcpTurn?.toolNames.length ? { toolsets: mcpTurn.toolsets } : {}),
+      })
+      await flushLocatesToWorkingMemory()
+      return out
     }).finally(async () => { await mcpTurn?.close().catch(() => { /* best-effort */ }) })
     res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
   } catch (e: any) {

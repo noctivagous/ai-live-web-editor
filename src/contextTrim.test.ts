@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { DIET_MIN_CHARS, dietFindComponentResult, dietGrepResult, dietLayoutResult, ToolResultTrimProcessor, trimPrompt, TRIM_THRESHOLD_CHARS } from './contextTrim.js'
+import { compactStoredMessage, DIET_MIN_CHARS, dietFindComponentResult, dietGrepResult, dietLayoutResult, ToolResultTrimProcessor, trimPrompt, TRIM_THRESHOLD_CHARS } from './contextTrim.js'
 import { saveAgentSettings, setAgentSettingsPath } from './agentSettings.js'
 
 type Part = Record<string, unknown>
@@ -90,6 +90,20 @@ describe('trimPrompt (§2 in-turn trimming)', () => {
     assert.ok(snap.length <= 700)
   })
 
+  it('folds prior-turn dumps on the first call of a new turn', () => {
+    const prompt: Msg[] = [
+      { role: 'user', content: [{ type: 'text', text: 'first' }] },
+      call('a', 'read-real-file'),
+      readResult('a'),
+      { role: 'assistant', content: [{ type: 'text', text: 'done' }] },
+      { role: 'user', content: [{ type: 'text', text: 'now add slate' }] },
+    ]
+    const { prompt: next, changed, stats } = trimPrompt(prompt)
+    assert.equal(changed, true)
+    assert.equal(stats.trimmed, 1)
+    assert.ok(!partText(next[2]).includes('DEEP_MARKER_LINE'))
+  })
+
   it('leaves small results and prompts without tool calls untouched', () => {
     const small: Msg[] = [
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
@@ -100,6 +114,28 @@ describe('trimPrompt (§2 in-turn trimming)', () => {
     ]
     assert.equal(trimPrompt(small).changed, false)
     assert.equal(trimPrompt([{ role: 'user', content: [{ type: 'text', text: 'hi' }] }]).changed, false)
+  })
+
+  it('compactStoredMessage folds tool-invocation results with no fresh zone', () => {
+    const msg = {
+      role: 'assistant',
+      content: {
+        format: 'v2',
+        parts: [{
+          type: 'tool-invocation',
+          toolInvocation: {
+            toolName: 'read-real-file',
+            state: 'result',
+            result: { path: '/src/Widget.jsx', content: BIG_FILE_BODY, startLine: 1, endLine: 62, totalLines: 62 },
+          },
+        }],
+      },
+    }
+    const next = compactStoredMessage(msg)
+    const inv = (next.content as { parts: { toolInvocation: { result: { folded?: boolean, summary?: string } } }[] }).parts[0].toolInvocation
+    assert.equal(inv.result.folded, true)
+    assert.ok(String(inv.result.summary).includes('read-real-file'))
+    assert.ok(!JSON.stringify(inv.result).includes('DEEP_MARKER_LINE'))
   })
 
   it('also folds tool-result parts carried inside an assistant message', () => {

@@ -6,6 +6,7 @@ import path from 'path'
 import { getFsRoot } from '../../launcher.js'
 import { livePageOp, poolOpen } from '../../liveTarget.js'
 import { applyStrReplace, compileGrep, countLines, GREP_MAX_HITS, grepText, isPlaceholderWrite, lineRangeOf, matchWindows, nearestWindow, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
+import { coveringRead, recordLocate, recordRead } from '../../locateTurn.js'
 import { logToolCall, type ToolCallEntry } from '../../serverLog.js'
 import { sketchWriteGuard } from '../../sketchSession.js'
 import { selfWriteGuard } from '../../selfMode.js'
@@ -135,7 +136,7 @@ export const listRealFilesTool = createTool({
 
 export const readRealFileTool = createTool({
   id: 'read-real-file',
-  description: 'Read a source file. Paths may be /src/x, src/x, or ./src/x; results return the canonical /… path. Prefer offset+limit (1-based lines) for existing files instead of the whole file.',
+  description: 'Read a source file. Paths may be /src/x, src/x, or ./src/x; results return the canonical /… path. Prefer offset+limit (1-based lines) for existing files instead of the whole file. Do not re-read a range this turn already returned — that call comes back as alreadyRead. Prefer grep window or read-symbol when you only need one symbol.',
   inputSchema: z.object({
     path: z.string(),
     offset: z.number().int().positive().optional(),
@@ -155,7 +156,21 @@ export const readRealFileTool = createTool({
     }
     const raw = buf.toString('utf-8')
     const slice = sliceLines(raw, offset, limit)
-    return { path: r.rel, ...slice }
+    const cover = coveringRead(r.rel, slice.startLine, slice.endLine)
+    if (cover) {
+      return {
+        path: r.rel,
+        startLine: slice.startLine,
+        endLine: slice.endLine,
+        totalLines: slice.totalLines,
+        alreadyRead: true,
+        covering: [cover.start, cover.end],
+        hint: `Lines ${slice.startLine}–${slice.endLine} were already returned this turn (covering ${cover.start}–${cover.end}). Use that result. Do not re-read this range.`,
+      }
+    }
+    recordRead(r.rel, slice.startLine, slice.endLine, slice.charTruncated)
+    const { charTruncated: _c, ...rest } = slice
+    return { path: r.rel, ...rest }
   }
 })
 
@@ -209,6 +224,12 @@ export const grepTool = createTool({
         break
       }
     }
+    if (hits.length && at && fs.existsSync(start) && fs.statSync(start).isFile()) {
+      recordLocate(hits[0].path, hits[0].line, hits[0].line)
+    } else if (hits.length) {
+      const first = hits[0]
+      recordLocate(first.path, first.line, first.line)
+    }
     return { hits, count: hits.length, truncated }
   }
 })
@@ -250,6 +271,7 @@ export const strReplaceTool = createTool({
     }
     fs.writeFileSync(r.full, result.content, 'utf-8')
     const range = lineRangeOf(result.content, new_string)
+    if (range) recordLocate(r.rel, range[0], range[1])
     return {
       ok: true,
       path: r.rel,

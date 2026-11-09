@@ -5,6 +5,7 @@ import path from 'node:path'
 import { getFsRoot } from '../../launcher.js'
 import { resolveProjectPath } from '../../projectPath.js'
 import { extractSymbol, loaderForPath, primaryName, unpackSource, type UnpackOutput } from '../../workbench/unpack.js'
+import { recordLocate } from '../../locateTurn.js'
 
 /** Bundles can be big; past this the section map stops being a shortcut. */
 const MAX_UNPACK_CHARS = 2_500_000
@@ -113,6 +114,7 @@ export const readSymbolTool = createTool({
         available,
       }
     }
+    recordLocate(loaded.rel)
     return {
       ok: true,
       path: loaded.rel,

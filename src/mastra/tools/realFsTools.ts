@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { getFsRoot } from '../../launcher.js'
 import { livePageOp, poolOpen } from '../../liveTarget.js'
-import { applyStrReplace, compileGrep, countLines, GREP_MAX_HITS, grepText, isPlaceholderWrite, lineRangeOf, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
+import { applyStrReplace, compileGrep, countLines, GREP_MAX_HITS, grepText, isPlaceholderWrite, lineRangeOf, matchWindows, nearestWindow, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
 import { logToolCall, type ToolCallEntry } from '../../serverLog.js'
 import { sketchWriteGuard } from '../../sketchSession.js'
 import { selfWriteGuard } from '../../selfMode.js'
@@ -174,7 +174,7 @@ function grepStartPath(p: unknown): string | undefined {
 
 export const grepTool = createTool({
   id: 'grep',
-  description: 'Regex search in the project. Returns path:line hits. Skip node_modules. Use before ranged read. Omit path to search the whole project — never pass null or the string "null".',
+  description: 'Regex search in the project. Each hit includes line plus window: the exact source lines around the match (windowStart–windowEnd). Copy window, or a unique slice of it, as str-replace old_string — do not read-real-file that range unless you need lines outside the window. Pass path when the file is already known, including Current file. Omit path to search the whole project — never pass null or the string "null". Skip node_modules.',
   inputSchema: z.object({
     pattern: z.string(),
     path: z.string().optional(),
@@ -215,7 +215,7 @@ export const grepTool = createTool({
 
 export const strReplaceTool = createTool({
   id: 'str-replace',
-  description: 'Exact unique string replace in an existing file. Fails closed if old_string is missing or not unique. Never writes on miss. Prefer this over write-real-file for edits.',
+  description: 'Exact unique string replace in an existing file. Fails closed if old_string is missing or not unique. Never writes on miss. A miss returns window (exact nearby source) or windows (one per match) — copy the next old_string from that and do not re-read the file. Prefer this over write-real-file for edits.',
   inputSchema: z.object({
     path: z.string(),
     old_string: z.string(),
@@ -235,7 +235,19 @@ export const strReplaceTool = createTool({
     const result = applyStrReplace(before, old_string, new_string, replace_all === true)
     // Line facts ride the result so a failure report can say what the
     // file actually looked like (e.g. a miss on a 124-line file).
-    if (result.ok === false) return { ok: false, error: result.error, path: r.rel, matches: result.matches, fileLines: countLines(before) }
+    if (result.ok === false) {
+      const base = { ok: false, error: result.error, path: r.rel, matches: result.matches, fileLines: countLines(before) }
+      if (result.matches === 0) {
+        const near = nearestWindow(before, old_string)
+        return near
+          ? { ...base, ...near, hint: 'window is exact file source around the closest line. Copy from it as the next old_string. Do not re-read this file.' }
+          : base
+      }
+      const windows = matchWindows(before, old_string)
+      return windows.length
+        ? { ...base, windows, hint: 'Each window is exact file source around one match. Widen old_string from one window, or set replace_all. Do not re-read this file.' }
+        : base
+    }
     fs.writeFileSync(r.full, result.content, 'utf-8')
     const range = lineRangeOf(result.content, new_string)
     return {

@@ -322,6 +322,23 @@ describe('grep + find-component payload diet (fresh results)', () => {
     assert.equal(after.includes('"path"'), false, 'per-hit JSON keys are gone')
   })
 
+  it('keeps a grep window as exact source through the diet', () => {
+    const hits = Array.from({ length: 8 }, (_, i) => ({
+      path: 'src/App.tsx',
+      line: 10 + i,
+      text: `  const value${i} = computeSomething(argumentOne, argumentTwo)`,
+      window: `function keep() {\n  const value${i} = computeSomething(argumentOne, argumentTwo)\n}`,
+      windowStart: 9 + i,
+      windowEnd: 11 + i,
+    }))
+    const out = dietGrepResult({ hits, count: hits.length, truncated: false })
+    assert.ok(out)
+    const text = String(out.value.hits)
+    assert.ok(text.includes('exact-window 9-11'))
+    assert.ok(text.includes('function keep() {\n  const value0 = computeSomething(argumentOne, argumentTwo)\n}'))
+    assert.ok(text.includes('end-window'))
+  })
+
   it('an older grep result folds generically instead of dieting', () => {
     const prompt: Msg[] = [
       { role: 'user', content: [{ type: 'text', text: 'find it' }] },

@@ -263,6 +263,22 @@ describe('str-replace line facts (failure report)', () => {
       assert.match(String(miss.error), /old_string not found/)
       assert.equal(miss.matches, 0)
       assert.equal(miss.fileLines, 3)
+      assert.equal(miss.window, undefined)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('a near miss returns exact file lines so the next edit needs no read', async () => {
+    const root = tmpProject()
+    try {
+      fs.writeFileSync(path.join(root, 'src', 'App.jsx'), 'function Header() {\n  return <h1>Hello</h1>\n}\n')
+      const miss = await run(strReplaceTool, {
+        path: '/src/App.jsx',
+        old_string: '  return <h1>Hello there</h1>',
+        new_string: '  return <h1>Hi</h1>',
+      })
+      assert.equal(miss.ok, false)
+      assert.match(String(miss.window), /return <h1>Hello<\/h1>/)
+      assert.equal(fs.readFileSync(path.join(root, 'src', 'App.jsx'), 'utf-8'), 'function Header() {\n  return <h1>Hello</h1>\n}\n')
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 

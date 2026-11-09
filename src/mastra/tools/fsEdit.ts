@@ -82,17 +82,80 @@ export function sliceLines(content: string, offset?: number, limit?: number): {
   }
 }
 
-export type GrepHit = { path: string, line: number, text: string }
+/** Lines of exact source kept on each side of a grep hit. */
+export const GREP_WINDOW_RADIUS = 2
+
+export type SourceWindow = { window: string, windowStart: number, windowEnd: number }
+
+/** Exact file lines around a 1-based line. No prefixes — copyable as old_string. */
+export function lineWindow(lines: string[], line1: number, radius: number): SourceWindow {
+  const start = Math.max(1, line1 - radius)
+  const end = Math.min(lines.length, line1 + radius)
+  return {
+    window: lines.slice(start - 1, end).join('\n'),
+    windowStart: start,
+    windowEnd: end,
+  }
+}
+
+export type GrepHit = { path: string, line: number, text: string } & SourceWindow
 
 export function grepText(content: string, relPath: string, re: RegExp, cap: number, hits: GrepHit[]): boolean {
   const lines = content.split('\n')
   for (let i = 0; i < lines.length; i++) {
     re.lastIndex = 0
     if (!re.test(lines[i])) continue
-    hits.push({ path: relPath, line: i + 1, text: lines[i].slice(0, 240) })
+    hits.push({ path: relPath, line: i + 1, text: lines[i].slice(0, 240), ...lineWindow(lines, i + 1, GREP_WINDOW_RADIUS) })
     if (hits.length >= cap) return true
   }
   return false
+}
+
+/** Exact file lines around each occurrence of needle, capped. */
+export function matchWindows(content: string, needle: string, limit = 3, radius = 3): SourceWindow[] {
+  if (!needle) return []
+  const lines = content.split('\n')
+  const out: SourceWindow[] = []
+  let from = 0
+  while (out.length < limit) {
+    const idx = content.indexOf(needle, from)
+    if (idx < 0) break
+    out.push(lineWindow(lines, countLines(content.slice(0, idx)) + 1, radius))
+    from = idx + needle.length
+  }
+  return out
+}
+
+/**
+ * old_string missed the file. Find a line from it that does exist
+ * (trimmed, so an indentation miss still lands) and return the exact
+ * file lines around that spot.
+ */
+function lineNearScore(fileLine: string, candidate: string): number {
+  if (fileLine.includes(candidate)) return 1000 + candidate.length
+  const tokens = candidate.split(/[^A-Za-z0-9_]+/).filter(t => t.length >= 4)
+  let hit = 0
+  for (const t of tokens) if (fileLine.includes(t)) hit++
+  if (!tokens.length || hit === 0) return 0
+  return hit * 10 + Math.min(candidate.length, 80)
+}
+
+export function nearestWindow(content: string, oldStr: string, radius = 4): SourceWindow | null {
+  const lines = content.split('\n')
+  const candidates = oldStr.split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length >= 8)
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 12)
+  let best: { line: number, score: number } | null = null
+  for (const cand of candidates) {
+    for (let i = 0; i < lines.length; i++) {
+      const score = lineNearScore(lines[i], cand)
+      if (score > 0 && (!best || score > best.score)) best = { line: i + 1, score }
+    }
+  }
+  if (!best) return null
+  return lineWindow(lines, best.line, radius)
 }
 
 export function compileGrep(pattern: string, caseInsensitive?: boolean): RegExp | { error: string } {

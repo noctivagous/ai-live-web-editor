@@ -206,7 +206,7 @@ export function dietLayoutResult(value: unknown): { value: Record<string, unknow
   return savedChars > 0 ? { value: dieted, savedChars } : null
 }
 
-const GREP_ROW_LEGEND = '[hits as rows · file path once per file, then "line text" per hit]'
+const GREP_ROW_LEGEND = '[hits as rows · file path once per file, then "line text" per hit · lines between exact-window and end-window are exact source (whitespace preserved) — copy those as str-replace old_string]'
 
 /**
  * Serialize a grep result's hits as rows grouped by file (hits
@@ -229,6 +229,13 @@ export function dietGrepResult(value: unknown): { value: Record<string, unknown>
     const line = typeof hit.line === 'number' ? hit.line : 0
     const text = typeof hit.text === 'string' ? hit.text.replace(/\s+/g, ' ').trim() : ''
     lines.push(`  ${line} ${text}`)
+    if (typeof hit.window === 'string' && hit.window) {
+      const start = typeof hit.windowStart === 'number' ? hit.windowStart : line
+      const end = typeof hit.windowEnd === 'number' ? hit.windowEnd : line
+      lines.push(`exact-window ${start}-${end}`)
+      lines.push(hit.window)
+      lines.push('end-window')
+    }
   }
   const dieted = { ...obj, hits: lines.join('\n') }
   const savedChars = JSON.stringify(obj).length - JSON.stringify(dieted).length

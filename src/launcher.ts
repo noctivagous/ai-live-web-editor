@@ -368,7 +368,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     headers: {
-      'Content-Security-Policy': "frame-ancestors http://localhost:4112 http://127.0.0.1:4112",
+      'Content-Security-Policy': "frame-ancestors 'self' http://localhost:4112 http://127.0.0.1:4112",
     },
   },
   devtools: {

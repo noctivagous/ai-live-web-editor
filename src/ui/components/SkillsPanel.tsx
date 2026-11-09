@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, BookOpen, ChevronDown, Pencil, Plus, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BookOpen, ChevronDown, CirclePlay, Pencil, Plus, X } from 'lucide-react'
 import {
-  createSkill, fetchSkillsState, firesWhen, toggleSkill, updateSkill,
-  type SkillEntry, type SkillFieldsInput, type SkillsState,
+  createSkill, criterionHow, fetchSkillsState, firesWhen, runSkillChecks, toggleSkill, updateSkill,
+  type CriterionResult, type SkillEntry, type SkillFieldsInput, type SkillsState,
 } from '../lib/skills'
 import { Markdown } from './Markdown'
 
@@ -135,6 +135,22 @@ function SkillForm({ form, setForm, creating, categories, error, busy, onSave, o
   )
 }
 
+function VerdictChip({ result }: { result: CriterionResult }) {
+  const text = result.verdict === 'pass' ? 'Pass' : result.verdict === 'fail' ? 'Fail' : "Couldn't check"
+  return (
+    <span className={`skills-verdict ${result.verdict}`}>
+      {text}{result.score !== undefined ? ` · ${result.score.toFixed(2)}` : ''}
+    </span>
+  )
+}
+
+function runSummary(run: { results: CriterionResult[] }): string {
+  const pass = run.results.filter(r => r.verdict === 'pass').length
+  const fail = run.results.filter(r => r.verdict === 'fail').length
+  const rest = run.results.length - pass - fail
+  return `${pass} of ${run.results.length} checks pass${fail ? ` · ${fail} fail` : ''}${rest ? ` · ${rest} couldn't check` : ''}`
+}
+
 export function SkillsPanel() {
   const [state, setState] = useState<SkillsState | null>(null)
   const [open, setOpen] = useState(false)
@@ -145,6 +161,8 @@ export function SkillsPanel() {
   const [form, setForm] = useState<FormState>(emptyForm())
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
 
   const refresh = async () => {
@@ -197,6 +215,18 @@ export function SkillsPanel() {
       setFormError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const doRunChecks = async (skill: SkillEntry) => {
+    setChecking(true)
+    setCheckError('')
+    try {
+      apply(await runSkillChecks(skill.name))
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setChecking(false)
     }
   }
 
@@ -290,7 +320,44 @@ export function SkillsPanel() {
               {sel.files.length > 0 && (
                 <>
                   <div className="skills-label">Also carries</div>
-                  <p className="skills-note">{sel.files.join(' · ')} — scripts run without their text entering the request.</p>
+                  <p className="skills-note">{sel.files.join(' · ')} — files bundled with the skill. Scripts among them run without their text entering the request; a verify.json declares the checks below.</p>
+                </>
+              )}
+              {(sel.criteria.length > 0 || sel.criteriaError) && (
+                <>
+                  <div className="skills-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    Checks — what "done" means for this skill
+                    <span style={{ flex: 1 }} />
+                    <button type="button" className="deck-btn" disabled={checking} onClick={() => void doRunChecks(sel)}>
+                      <CirclePlay size={12} /> {checking ? 'Checking…' : 'Run checks'}
+                    </button>
+                  </div>
+                  <p className="skills-note">
+                    Declared in the skill's verify.json. The editor's own tooling judges each one against the live project — pass, fail, or couldn't-check, with the evidence. Nothing is skipped silently. Run them any time, not only after work: the verdicts name the size and element at fault, so the same checks double as a way to investigate a reported problem.
+                    {sel.lastRun && <> Last run {new Date(sel.lastRun.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}: {runSummary(sel.lastRun)}.</>}
+                  </p>
+                  {sel.criteriaError && <p className="skills-warn">verify.json has problems: {sel.criteriaError}</p>}
+                  {checkError && <p className="skills-form-error">{checkError}</p>}
+                  <div className="skills-checks">
+                    {sel.criteria.map(c => {
+                      const result = sel.lastRun?.results.find(r => r.id === c.id)
+                      return (
+                        <div key={c.id} className="skills-check-row">
+                          <div className="skills-check-main">
+                            <span className="skills-check-say">{c.say}</span>
+                            <span className="skills-check-how">{criterionHow(c)}</span>
+                            {result && <span className="skills-check-evidence">{result.evidence}</span>}
+                            {result?.details && result.details.length > 1 && (
+                              <span className="skills-check-evidence">{result.details.join(' · ')}</span>
+                            )}
+                          </div>
+                          {result
+                            ? <VerdictChip result={result} />
+                            : <span className="skills-verdict none">Not run yet</span>}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </>
               )}
             </div>
@@ -331,6 +398,12 @@ export function SkillsPanel() {
                             : 'Off — not in the index, never loads.'}
                         </span>
                         {s.overBodyBudget && <span className="skills-warn">Body over the 5,000-token guide size</span>}
+                        {s.criteria.length > 0 && (
+                          <span className="skills-row-meta">
+                            Carries {s.criteria.length} check{s.criteria.length === 1 ? '' : 's'}
+                            {s.lastRun ? ` · last run: ${runSummary(s.lastRun)}` : ' · not run yet'}
+                          </span>
+                        )}
                       </button>
                       <span className="skills-row-side">
                         <span className="skills-row-cost">body {s.bodyTokens.toLocaleString()} tok<br />index {s.enabled ? s.indexTokens : 0} tok</span>
@@ -402,6 +475,17 @@ const SKILLS_CSS = `
 .skills-input { width:100%; box-sizing:border-box; background:var(--bg, #fff); color:inherit; border:1px solid var(--border, #c9c6bd); border-radius:7px; padding:7px 9px; font:inherit; font-size:calc(12.5px * var(--ui-scale, 1)); line-height:1.5; }
 .skills-input.mono { font-family:ui-monospace, monospace; font-size:calc(12px * var(--ui-scale, 1)); }
 .skills-form-error { color:var(--amber); font-weight:600; font-size:calc(12.5px * var(--ui-scale, 1)); margin:6px 0 0; }
+.skills-checks { display:grid; gap:6px; margin-top:6px; }
+.skills-check-row { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border, #c9c6bd); border-radius:8px; padding:8px 10px; background:var(--surface, rgba(0,0,0,.03)); }
+.skills-check-main { flex:1; display:grid; gap:2px; min-width:0; }
+.skills-check-say { font-weight:600; font-size:calc(12.5px * var(--ui-scale, 1)); line-height:1.45; }
+.skills-check-how { color:var(--muted); font-size:calc(11.5px * var(--ui-scale, 1)); }
+.skills-check-evidence { font-size:calc(11.5px * var(--ui-scale, 1)); line-height:1.5; }
+.skills-verdict { flex:none; font-weight:700; font-size:calc(11px * var(--ui-scale, 1)); border-radius:8px; padding:2px 8px; border:1px solid var(--border-strong, #9a968c); }
+.skills-verdict.pass { background:#2e7d32; border-color:#2e7d32; color:#fff; }
+.skills-verdict.fail { background:#b3261e; border-color:#b3261e; color:#fff; }
+.skills-verdict.couldnt-check { background:var(--amber); border-color:var(--amber); color:#111; }
+.skills-verdict.none { color:var(--muted); font-weight:400; }
 .skills-form-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
 .skills-save { font-weight:700; }
 `

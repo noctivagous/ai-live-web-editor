@@ -20,6 +20,19 @@ describe('skills state (the panel read model)', () => {
     }
   })
 
+  it('carries declared criteria only where a skill declares them', () => {
+    const st = skillsState()
+    const layouts = st.skills.find(s => s.name === 'making-layouts')
+    assert.ok(layouts)
+    assert.deepEqual(layouts.criteria.map(c => c.id), ['no-spill', 'quiet-console', 'touch-targets', 'aligned-feel'])
+    assert.equal(layouts.criteriaError, undefined)
+    assert.ok(layouts.files.includes('verify.json'), 'verify.json shows in the bundled files')
+    assert.ok('lastRun' in layouts)
+    for (const s of st.skills) {
+      if (s.name !== 'making-layouts') assert.deepEqual(s.criteria, [], `${s.name} declares no criteria`)
+    }
+  })
+
   it('totals are the sum of the parts, and the budgets are the engine constants', () => {
     const st = skillsState()
     assert.equal(st.indexTokens, st.skills.reduce((n, s) => n + s.indexTokens, 0))

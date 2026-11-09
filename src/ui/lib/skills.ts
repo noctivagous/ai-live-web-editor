@@ -4,6 +4,31 @@
  * Read-only in this slice: toggles/editing arrive later.
  */
 
+export interface SkillCriterion {
+  id: string
+  say: string
+  check: 'layout' | 'console' | 'project-check' | 'file' | 'heuristic'
+  expect?: string
+  axis?: 'x' | 'y'
+  px?: number
+  at?: string[]
+  orientation?: 'portrait' | 'landscape' | 'both'
+  path?: string
+  text?: string
+  measure?: string
+  pass?: string
+}
+
+export interface CriterionResult {
+  id: string
+  say: string
+  check: string
+  verdict: 'pass' | 'fail' | 'couldnt-check'
+  evidence: string
+  score?: number
+  details?: string[]
+}
+
 export interface SkillEntry {
   name: string
   description: string
@@ -17,6 +42,9 @@ export interface SkillEntry {
   indexTokens: number
   files: string[]
   enabled: boolean
+  criteria: SkillCriterion[]
+  criteriaError?: string
+  lastRun: { at: number, results: CriterionResult[] } | null
 }
 
 export interface SkillFieldsInput {
@@ -64,6 +92,27 @@ export function updateSkill(fields: SkillFieldsInput): Promise<SkillsState> {
 
 export function createSkill(fields: SkillFieldsInput): Promise<SkillsState> {
   return postSkills('/api/skills/create', fields)
+}
+
+export function runSkillChecks(name: string): Promise<SkillsState> {
+  return postSkills('/api/skills/check', { name })
+}
+
+/** What a criterion actually inspects, in plain words. */
+export function criterionHow(c: SkillCriterion): string {
+  const scope = [
+    c.at?.length ? `at ${c.at.join(', ')}` : 'at every device target',
+    c.orientation && c.orientation !== 'both' ? `${c.orientation} only` : 'both orientations',
+  ]
+  switch (c.check) {
+    case 'layout':
+      if (c.expect === 'min-touch-target') return `Layout · interactive elements at least ${c.px ?? 44}px, ${scope[0]}, ${scope[1]}`
+      return `Layout · ${c.expect?.replace('no-', 'no ')}${c.axis ? ` (${c.axis} axis)` : ''}, ${scope[0]}, ${scope[1]}`
+    case 'console': return 'Console · no errors while the page runs'
+    case 'project-check': return "Project · the project's own build check passes"
+    case 'file': return `File · ${c.path} ${c.expect === 'exists' ? 'exists' : `${c.expect === 'contains' ? 'contains' : 'does not contain'} "${(c.text ?? '').slice(0, 40)}"`}`
+    case 'heuristic': return `Feel, measured · ${c.measure} scores ${c.pass}, ${scope[0]}, ${scope[1]}`
+  }
 }
 
 /** "Fires when" for one skill, in plain words. */

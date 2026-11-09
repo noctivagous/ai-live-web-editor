@@ -53,6 +53,37 @@ explicitly with the `read-skill` tool.
 - **Plain second-person task language.** No narration about the
   editor or the skill system itself; write what to do.
 
+## Result-verify criteria (optional verify.json)
+
+A skill may carry a `verify.json` declaring what "done" looks
+like as criteria the editor's own tooling can judge — run with
+the `run-skill-checks` tool, or from the Skills panel. Each
+criterion pairs a plain-words claim (`say`) with a check:
+
+- `layout` — `no-overflow` / `no-overlap` / `no-clipping` /
+  `min-touch-target` (with `px`), judged from layout snapshots
+  at the project's device targets in both orientations
+  (`at` narrows targets, `orientation` narrows direction).
+- `console` — `no-errors` while the page runs.
+- `project-check` — the project's own build check passes.
+- `file` — `exists` / `contains` / `not-contains` for a path
+  relative to the project root, with `text` for the latter two.
+- `heuristic` — a soft quality as a named `measure`
+  (`visual-weight-evenness`, `alignment-consistency`,
+  `spacing-rhythm`, `whitespace-share`) plus a `pass` threshold
+  like `">= 0.7"`. The verdict reports the score and its inputs.
+
+Every criterion returns pass, fail, or couldn't-check with
+evidence — never a silent skip. Criteria are claims about the
+result, so write only ones the skill's work should actually
+satisfy; a bad criterion manufactures false confidence.
+
+The same checks double as investigation tests: run a skill's
+criteria against a project with a reported problem and the
+verdicts localise it — which size, which element, which error —
+before anything is changed. Run them before a change as well
+and they become the baseline the change is judged against.
+
 ## What a skill is not
 
 Not a system-prompt dumping ground (that is what the tiers

@@ -17,7 +17,7 @@ import {
   featureAddNodeTool, featureBuildNodeTool, featureEditNodeTool, featureInstallPackTool, featureLinkTool, featureLintTool, featureQueryTool, featureReconcileTool, featureRemoveNodeTool, featureSetParamTool, featureSetStatusTool, featureUninstallPackTool, featureUnlinkTool,
 } from '../tools/featureTools.js'
 import { toolResultTrimProcessor } from '../../contextTrim.js'
-import { readSkillTool } from '../tools/skillTools.js'
+import { readSkillTool, runSkillChecksTool } from '../tools/skillTools.js'
 import { readSymbolTool, unpackCodeTool } from '../tools/codeTools.js'
 import { spreadsheetAddRowTool, spreadsheetFindTool, spreadsheetInspectTool, spreadsheetSetCellTool } from '../tools/spreadsheetTools.js'
 import { dataAddTool, dataFindTool, dataGetTool, dataInspectTool, dataRemoveTool, dataSetTool } from '../tools/dataTools.js'
@@ -132,6 +132,7 @@ export const editorAgent = new Agent({
     'install-catalog-component': installCatalogComponentTool,
     'place-template': placeTemplateTool,
     'read-skill': readSkillTool,
+    'run-skill-checks': runSkillChecksTool,
     'web-search': webSearchTool,
     'fetch-page': fetchPageTool,
     'research': researchTool,

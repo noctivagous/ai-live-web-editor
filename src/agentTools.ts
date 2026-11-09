@@ -26,6 +26,7 @@ export const FILE_CORE_TOOLS = [
   'resolve-source',
   'codebase-map',
   'read-skill',
+  'run-skill-checks',
   'get-console',
   'get-network-failures',
 ] as const
@@ -146,6 +147,7 @@ export const FILE_ACTIVE_TOOLS = [
   'install-catalog-component',
   'place-template',
   'read-skill',
+  'run-skill-checks',
   'web-search',
   'fetch-page',
   'research',

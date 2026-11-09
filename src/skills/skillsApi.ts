@@ -24,6 +24,9 @@ import {
   SKILL_INJECTION_TOKEN_BUDGET, SKILLS_DIR, type Skill,
 } from './skills.js'
 import { disabledSkillNames, setSkillEnabled } from './skillSettings.js'
+import { loadSkillCriteria, type Criterion } from './criteria.js'
+import { lastSkillCheckRun, type SkillCheckRun } from './skillChecks.js'
+import { runCriteriaForSkill } from './criteriaGather.js'
 
 export interface SkillStateEntry {
   name: string
@@ -41,6 +44,12 @@ export interface SkillStateEntry {
   files: string[]
   /** Off = out of the index, matching and read-skill entirely. */
   enabled: boolean
+  /** Result-verify criteria declared in the skill's verify.json. */
+  criteria: Criterion[]
+  /** Validation problems in verify.json, when any. */
+  criteriaError?: string
+  /** The last recorded criteria run, when one exists. */
+  lastRun: SkillCheckRun | null
 }
 
 /** Files bundled with a skill, as relative paths, SKILL.md excluded. */
@@ -62,20 +71,26 @@ function bundledFiles(skill: Skill): string[] {
 
 export function skillsState(skills: Skill[] = loadSkills()) {
   const disabled = disabledSkillNames()
-  const entries: SkillStateEntry[] = skills.map(s => ({
-    name: s.name,
-    description: s.description,
-    category: s.category,
-    triggers: s.triggers,
-    types: s.types,
-    dependsOn: s.dependsOn,
-    body: s.body,
-    bodyTokens: s.bodyTokens,
-    overBodyBudget: s.overBudget,
-    indexTokens: skillIndexTokens(s),
-    files: bundledFiles(s),
-    enabled: !disabled.has(s.name),
-  }))
+  const entries: SkillStateEntry[] = skills.map(s => {
+    const declared = loadSkillCriteria(s.name)
+    return {
+      name: s.name,
+      description: s.description,
+      category: s.category,
+      triggers: s.triggers,
+      types: s.types,
+      dependsOn: s.dependsOn,
+      body: s.body,
+      bodyTokens: s.bodyTokens,
+      overBodyBudget: s.overBudget,
+      indexTokens: skillIndexTokens(s),
+      files: bundledFiles(s),
+      enabled: !disabled.has(s.name),
+      criteria: declared.criteria,
+      criteriaError: declared.errors.length ? declared.errors.join(' ') : undefined,
+      lastRun: lastSkillCheckRun(s.name),
+    }
+  })
   return {
     ok: true as const,
     skills: entries,
@@ -168,6 +183,18 @@ export function mountSkillsApi(app: Express) {
     const fields = readFields(body, name)
     if ('error' in fields) return res.status(400).json({ ok: false, error: fields.error })
     writeSkillFile(fields)
+    res.json(skillsState())
+  })
+
+  app.post('/api/skills/check', async (req, res) => {
+    const { name } = (req.body ?? {}) as { name?: unknown }
+    if (typeof name !== 'string' || !loadSkills().some(s => s.name === name)) {
+      return res.status(404).json({ ok: false, error: `No skill named ${String(name)}` })
+    }
+    const outcome = await runCriteriaForSkill(name)
+    if (!outcome) {
+      return res.status(400).json({ ok: false, error: `${name} carries no checks — add a verify.json to declare what done looks like.` })
+    }
     res.json(skillsState())
   })
 

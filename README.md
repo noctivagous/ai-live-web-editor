@@ -40,6 +40,8 @@ OPENAI_MODEL=grok-4.7
 
 **On 5173** the live app still has the plugin overlay (floating chat + annotate). Same files, same `.env`.
 
+**The plugin, without the manual step:** when you open a project whose `vite.config` doesn't register the editor plugin yet, the editor adds it for you — a marked block in the config (look for `// ai-live-editor: begin plugin`), then restarts that project's Vite as usual. The notice above the Preview shows what changed; **Remove plugin** in that notice takes the lines back out, and the editor won't add them again unless you re-enable it there. If a config's shape is one the editor can't edit safely, it doesn't guess — the notice shows the exact lines to paste instead. A folder with no `package.json` needs no config at all: the editor serves it with its own Vite, plugin included.
+
 ## Path 2 — an existing Vite app
 
 Install this package into that app and register the plugin. The agent writes **that app’s** files. No copy into this repo.
@@ -75,12 +77,13 @@ aiLiveEditor({
 2. Finish the wizard (paste a key, pick a model, Save).
 3. Edit files in Monaco or ask Chat to change them.
 4. Use the project dropdown to switch apps. **New project** creates `projects/<name>/` (seed + `npm install`) and selects it. Vite on 5173 restarts for that folder.
-5. Annotate on the live page (5173 or the preview iframe when same-origin).
+5. Annotate on the live page — directly on 5173, or with the Preview's **Annotate** button; the annotate toolbar runs inside the preview iframe too.
 
 ## What it is
 
 - **4112 launcher** — `src/server.ts`: UI, FS API, config, Mastra chat, project switcher, Vite child
 - **Vite plugin** `aiLiveEditor` — overlays + `/api` on the app origin (`src/vite-plugin/aiLiveEditor.ts`)
+- **Two servers, one surface** — 4112 is the editor: the agent, the filesystem, the UI, the chat, project switching, dev-server restarts, saved state. 5173 is the project's own Vite — its framework, its plugins, its `npm run dev` flags, its HMR — started exactly as the project defines it; the editor never serves the app itself. You work with the app framed in the Preview pane: one surface, two processes. The plugin is how the two talk (it injects the page bridge and source stamps into the app), and the Preview header's **Bridged** chip shows whether that connection is live. The other channel is the **Playwright pool**: the editor's own Chromium, which needs no plugin in the project and sees browser-level signals (console, network). It is off by default; turn it on in Settings. Live editing and annotations ride the plugin setup and are on by default.
 - **Mastra `editorAgent`** — files (`list` / `read` / `write`) plus live-page `inspect-dom` / `patch-dom` / `eval-js` on the Vite app via a same-origin page bridge. Optional **Playwright pool** (Settings, `npm run dev:pool`, or `PLAYWRIGHT_POOL=1`) for other URLs and `layout-snapshot`.
 - **Chat memory** — conversations persist server-side (Mastra Memory on a LibSQL store at `.ai-live/mastra.db`, one thread per project root, with a per-thread working set of goal / files touched / decisions / open questions). The agent recalls earlier turns even from a fresh browser; `AI_LIVE_STORAGE` moves the database file. Settings → Privacy & Data → Clear saved chat sessions clears both the device copy and the server threads.
 - **OpenAI-compatible keys** — `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`

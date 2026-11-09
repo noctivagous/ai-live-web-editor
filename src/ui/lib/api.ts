@@ -129,6 +129,54 @@ export async function getConfig() {
   return r.json() as Promise<LauncherConfig>
 }
 
+/* ── Plugin auto-ensure (bridge guarantee) ────────────────────── */
+
+export type PluginEnsureStateName = 'registered' | 'added' | 'missing-declined' | 'cannot' | 'not-vite' | 'standalone'
+
+export interface PluginEnsureInfo {
+  state: PluginEnsureStateName
+  configFile?: string
+  detail?: string
+  /** The exact lines to add by hand when the auto-edit can't. */
+  snippet?: string
+}
+
+export async function getPluginEnsure(): Promise<PluginEnsureInfo | null> {
+  try {
+    const r = await fetch(`${API}/api/plugin-ensure`)
+    const data = await r.json() as { ok: boolean, ensure?: PluginEnsureInfo }
+    return data.ensure ?? null
+  } catch { return null }
+}
+
+async function postPluginEnsure(path: 'remove' | 'enable'): Promise<{ ok: boolean, ensure?: PluginEnsureInfo, detail?: string }> {
+  const r = await fetch(`${API}/api/plugin-ensure/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  return r.json() as Promise<{ ok: boolean, ensure?: PluginEnsureInfo, detail?: string }>
+}
+
+export function postPluginEnsureRemove() { return postPluginEnsure('remove') }
+export function postPluginEnsureEnable() { return postPluginEnsure('enable') }
+
+export interface PageStatusInfo {
+  /** Live page-bridge clients the launcher's status route can see,
+   * or null when it could not produce a count (nothing answered its
+   * relay to the page's own bridge registry). Null means "no page
+   * connected" to callers — never an error worth surfacing. */
+  clients: number | null
+}
+
+/** Bridge status from the LAUNCHER origin only. The route answers
+ * from the launcher's own registry when it has clients and otherwise
+ * relays the page server's count server-side; either way the UI
+ * never talks to the page's origin for this. */
+export async function getPageStatus(): Promise<PageStatusInfo> {
+  try {
+    const r = await fetch(`${API}/api/page/status`)
+    const data = await r.json() as { ok?: boolean, clients?: unknown }
+    return { clients: data.ok !== false && typeof data.clients === 'number' ? data.clients : null }
+  } catch { return { clients: null } }
+}
+
 /* ── Setup wizard (Open slice C) ─────────────────────────────── */
 
 export type ProjectTemplateId = 'seed-app' | 'blank-page' | 'article' | 'pricing'

@@ -304,32 +304,88 @@ function showOverlayError(wrap, message, retry) {
   el.querySelector('[data-msg]').textContent = message
 }
 
+/**
+ * Fetch the annotate overlay's source. Same origin first: the plugin
+ * serves /live-edit/overlay.js on the page's own Vite server, so
+ * annotations do not depend on the launcher (:4112) being reachable
+ * from this page. The configured launcher URL is the fallback (it is
+ * also where the overlay will POST its submissions).
+ */
+async function fetchOverlaySource() {
+  const bases = ['']
+  const launcher = String(LAUNCHER_URL || '').replace(/\/$/, '')
+  if (launcher) bases.push(launcher)
+  let lastErr = null
+  for (const base of bases) {
+    try {
+      const r = await fetch(base + '/live-edit/overlay.js', { cache: 'no-store' })
+      if (!r.ok) throw new Error('overlay ' + r.status)
+      return await r.text()
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr || new Error('overlay fetch failed')
+}
+
+let annotateInstallInFlight = false
+
 async function installAnnotateToolbar() {
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
-  const host = document.getElementById('ai-live-chat-host')
-  const wrap = host?.shadowRoot?.querySelector('.win')
   if (!(window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed)) {
+    // One install at a time: mountChatOverlay, the frame bootstrap
+    // below and the error chip's Retry can all call here; the
+    // overlay's own installed guard settles any race that remains.
+    if (annotateInstallInFlight) return
+    annotateInstallInFlight = true
     try {
-      const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js', { cache: 'no-store' }).then((r) => {
-        if (!r.ok) throw new Error('overlay ' + r.status)
-        return r.text()
-      })
+      const src = await fetchOverlaySource()
       const script = document.createElement('script')
       script.textContent = src
       document.documentElement.appendChild(script)
+      if (!(window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed)) {
+        // A 200 that wasn't the overlay (an SPA fallback page, say):
+        // treat it as a failed install, not a silent success.
+        throw new Error('overlay did not install')
+      }
     } catch (err) {
       console.warn('[ai-live-editor] annotate overlay failed', err)
       // Loud, not silent: the toolbar is how users discover Annotate.
+      // The error chip lives in the chat window, so only the top
+      // frame can show it; in a frame the failure stays a console
+      // warning and the editor notices the overlay never answers.
+      const host = document.getElementById('ai-live-chat-host')
+      const wrap = host?.shadowRoot?.querySelector('.win')
       if (wrap) {
         const where = LAUNCHER_URL || location.origin
         showOverlayError(wrap, `Annotate unavailable (${where}) — is the launcher running?`, installAnnotateToolbar)
       }
       return
+    } finally {
+      annotateInstallInFlight = false
     }
   }
+  // Park the toolbar beside the chat window — only in the document
+  // that hosts that window. In a frame there is no chat window, and
+  // the toolbar keeps the overlay's default position.
+  if (!document.getElementById('ai-live-chat-host')) return
   const api = window.__AI_LIVE_EDIT__
   const width = (window.__AI_LIVE_CHAT__ && window.__AI_LIVE_CHAT__.width) || DEFAULT_WIDTH
   if (api && typeof api.setToolbarOffset === 'function') api.setToolbarOffset(width + 32)
+}
+
+/**
+ * The annotate starter. The floating chat window (mountChatOverlay)
+ * stays top-frame only, but the annotate toolbar must exist wherever
+ * the app is framed — above all inside the editor's preview iframe,
+ * where this client is the only carrier that can start it. Runs in
+ * every frame the plugin serves; installAnnotateToolbar is guarded
+ * and idempotent, so a page where several carriers fire still gets
+ * exactly one toolbar.
+ */
+export function bootstrapAnnotateToolbar() {
+  if (location.pathname === '/chat-embed' || location.pathname.startsWith('/chat-embed/') || location.pathname === '/pool') return
+  void installAnnotateToolbar()
 }
 
 export default function setupRenderer(ctx) {
@@ -344,3 +400,4 @@ export default function setupRenderer(ctx) {
 }
 
 mountChatOverlay()
+bootstrapAnnotateToolbar()

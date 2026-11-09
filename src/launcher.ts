@@ -3,6 +3,7 @@ import path from 'path'
 import { execSync, spawn, type ChildProcess } from 'child_process'
 import { fileURLToPath } from 'url'
 import { classifyProject, type ProjectSetup } from './projectDetect.js'
+import { ensureProjectPlugin, findViteConfig, writeStandalonePluginConfig } from './pluginEnsure.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const WORKSPACE_ROOT = path.resolve(__dirname, '../projects')
@@ -110,7 +111,20 @@ export function startVite() {
       console.log('[vite] skip, standalone vite not installed at', viteBin)
       return
     }
-    const standalone = spawn(process.execPath, [viteBin, '--port', '5173', '--host'], {
+    // Bridge guarantee (plugin auto-ensure): the editor owns this
+    // launch, so the plugin rides inline via a generated config in
+    // the editor's own .ai-live — nothing is written into the folder.
+    // A folder carrying its own vite.config keeps it: that config is
+    // loaded instead of the generated one, as before.
+    let configArgs: string[] = []
+    if (!findViteConfig(root)) {
+      try {
+        configArgs = ['--config', writeStandalonePluginConfig()]
+      } catch (e) {
+        console.warn('[vite] standalone plugin config failed; serving without the plugin', e)
+      }
+    }
+    const standalone = spawn(process.execPath, [viteBin, '--port', '5173', '--host', ...configArgs], {
       cwd: root,
       stdio: 'inherit',
       env: process.env,
@@ -178,6 +192,18 @@ export function selectProject(id: string): ProjectInfo {
   const found = listProjects().find((p) => p.id === id)
   if (!found) throw new Error(`No folder named "${id}" in the workspace`)
   setFsRoot(found.root)
+  // Bridge guarantee (plugin auto-ensure, slice 1): detect the
+  // editor plugin's registration and add it (visibly, revertably)
+  // when missing — BEFORE the dev server starts, so the fresh spawn
+  // loads the ensured config. Ensure never throws and never blocks
+  // the open; its outcome is state the UI surfaces.
+  try {
+    const ensured = ensureProjectPlugin(found.root)
+    if (ensured.state === 'added') console.log('[plugin-ensure] plugin added to', ensured.configFile ?? 'vite config', 'in', found.root)
+    else if (ensured.state === 'cannot') console.warn('[plugin-ensure] could not ensure the plugin in', found.root, ensured.detail ?? '')
+  } catch (e) {
+    console.warn('[plugin-ensure] failed for', found.root, e)
+  }
   void adoptProjectDevice(found.root)
   void adoptProjectAppkit(found.root)
   void adoptPreviewSeed(found.root)
@@ -400,6 +426,8 @@ export function ensureWorkspace() {
    * merely opened — selectProject never does this, and the Open-slice
    * rule is classify, don't seed. */
   setFsRoot(dest)
+  // Plugin auto-ensure on the boot open too (same rule as selectProject).
+  try { ensureProjectPlugin(dest) } catch (e) { console.warn('[plugin-ensure] failed for', dest, e) }
   void adoptProjectDevice(dest)
   void adoptProjectAppkit(dest)
   writeActiveId(id)

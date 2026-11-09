@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Expand, Maximize2, Monitor, MousePointerClick, SendHorizontal, Smartphone, StickyNote, Tablet, Trash2, X } from 'lucide-react'
-import { fetchOverlaySource, getProjectConfig, getWorkflow, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type ProjectSetupInfo } from '../lib/api'
+import { fetchOverlaySource, getPageStatus, getPluginEnsure, getProjectConfig, getWorkflow, postPluginEnsureEnable, postPluginEnsureRemove, postProjectConfig, postWorkflow, readFile, staticPreviewUrl, submitLiveEdit, type DeviceTarget, type PageNote, type PluginEnsureInfo, type ProjectSetupInfo } from '../lib/api'
 import { pollUntilUp } from '../lib/previewProbe'
+import { parseAnnotationDigest, type AnnotationDigest } from '../lib/annotationSync'
+import { annotateUnavailableReason, digestToAnnotateMenu } from '../lib/previewAnnotate'
+import { deriveBridgeChip } from '../lib/bridgeChip'
 import { publishWorkflowChanged, subscribeWorkflow } from '../lib/workflowSync'
 import { describeRenderer, isScriptFile, looksLikeComponent, rendererFor } from '../lib/previewRender'
 import { Markdown } from './Markdown'
@@ -91,6 +94,74 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
     return () => window.removeEventListener(UI_PREFS_CHANGED_EVENT, onPrefs)
   }, [])
   const setShowFormatToolbar = (next: boolean) => { setShowFormatToolbarState(next); saveUiPrefs({ formatToolbar: next }) }
+  // Plugin auto-ensure (bridge guarantee): the launcher adds the
+  // editor's plugin line to the project's vite config when missing.
+  // The notice is the visible half of that edit — what changed, and
+  // the way back. Dismissing hides it for the session only.
+  const [ensure, setEnsure] = useState<PluginEnsureInfo | null>(null)
+  const [ensureDismissed, setEnsureDismissed] = useState(false)
+  const [ensureBusy, setEnsureBusy] = useState(false)
+  const [ensureCopied, setEnsureCopied] = useState(false)
+  async function refreshEnsure() {
+    setEnsure(await getPluginEnsure())
+  }
+  useEffect(() => {
+    setEnsureDismissed(false)
+    setEnsureCopied(false)
+    void refreshEnsure()
+  }, [setup])
+  async function removeEnsurePlugin() {
+    setEnsureBusy(true)
+    try {
+      const data = await postPluginEnsureRemove()
+      if (data.ensure) setEnsure(data.ensure)
+      setKey(k => k + 1)
+    } finally { setEnsureBusy(false) }
+  }
+  async function enableEnsurePlugin() {
+    setEnsureBusy(true)
+    try {
+      const data = await postPluginEnsureEnable()
+      if (data.ensure) setEnsure(data.ensure)
+      setKey(k => k + 1)
+    } finally { setEnsureBusy(false) }
+  }
+  async function copyEnsureSnippet() {
+    if (!ensure?.snippet) return
+    try {
+      await navigator.clipboard.writeText(ensure.snippet)
+      setEnsureCopied(true)
+      setTimeout(() => setEnsureCopied(false), 2000)
+    } catch { /* clipboard unavailable */ }
+  }
+  const showEnsureNotice = !collapsed && ensure !== null && !ensureDismissed
+    && (ensure.state === 'added' || ensure.state === 'cannot' || ensure.state === 'missing-declined')
+  // Bridge chip (bridge guarantee, slice 3): is the live page
+  // actually connected? Fed only by launcher-origin data — the
+  // ensure state above plus the launcher's page-status count —
+  // polled on the pane's usual 5s cadence. The page's own server is
+  // never asked: when it is down or unbridged is exactly when the
+  // chip has to say so.
+  const [pageClients, setPageClients] = useState<number | null>(null)
+  const noticeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (collapsed) return
+    let live = true
+    const tick = async () => {
+      const [ens, st] = await Promise.all([getPluginEnsure(), getPageStatus()])
+      if (!live) return
+      if (ens) setEnsure(ens)
+      setPageClients(st.clients)
+    }
+    void tick()
+    const t = setInterval(() => { void tick() }, 5000)
+    return () => { live = false; clearInterval(t) }
+  }, [collapsed, setup])
+  const bridgeChip = deriveBridgeChip(ensure, pageClients)
+  function focusEnsureNotice() {
+    setEnsureDismissed(false)
+    setTimeout(() => { noticeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, 60)
+  }
   const liveUrl = hmrUrl || DEFAULT_HMR
   const [url, setUrl] = useState(liveUrl)
   const [key, setKey] = useState(0)
@@ -277,6 +348,56 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   const [menuAnns, setMenuAnns] = useState<(PageNote & { id?: string })[]>([])
   const [menuPageNotes, setMenuPageNotes] = useState('')
 
+  // ── Driving the overlay in the LIVE page ───────────────────────
+  // The live iframe is cross-origin: the overlay there can't be read
+  // or called directly. It does understand postMessage commands
+  // (the same 'ai-live-chat-cmd' channel the chat uses) and answers
+  // 'ai-live-chat-hello' with its annotation digest — the channel
+  // annotationSync is built on. These helpers are that bridge.
+  function postFrameCommand(cmd: string) {
+    try { frameRef.current?.contentWindow?.postMessage({ ns: 'ai-live-chat-cmd', cmd }, '*') } catch { /* unloaded frame */ }
+  }
+
+  /** Ask the in-frame overlay for its digest; resolves null when no
+   * overlay answers within the beat (page not bridged, still loading). */
+  function requestFrameDigest(timeoutMs = 2000): Promise<AnnotationDigest | null> {
+    return new Promise((resolve) => {
+      const win = frameRef.current?.contentWindow
+      if (!win) { resolve(null); return }
+      let settled = false
+      let retry: ReturnType<typeof setInterval> | undefined
+      let deadline: ReturnType<typeof setTimeout> | undefined
+      const finish = (digest: AnnotationDigest | null) => {
+        if (settled) return
+        settled = true
+        window.removeEventListener('message', onMsg)
+        if (retry) clearInterval(retry)
+        if (deadline) clearTimeout(deadline)
+        resolve(digest)
+      }
+      const onMsg = (ev: MessageEvent) => {
+        if (ev.source !== win) return
+        const parsed = parseAnnotationDigest(ev.data)
+        if (parsed) finish(parsed)
+      }
+      const ask = () => { try { win.postMessage({ ns: 'ai-live-chat-hello' }, '*') } catch { /* frame gone */ } }
+      window.addEventListener('message', onMsg)
+      ask()
+      retry = setInterval(ask, 400)
+      deadline = setTimeout(() => finish(null), timeoutMs)
+    })
+  }
+
+  function applyDigestToMenu(digest: AnnotationDigest) {
+    const menu = digestToAnnotateMenu(digest)
+    setMenuAnns(menu.anns)
+    // Display text only: the digest abbreviates the page notes. The
+    // full text stays in the page, and submitting there delegates
+    // to the overlay itself (see submitNotes).
+    setMenuPageNotes(menu.pageNoteAbbr)
+    setNoteCount(menu.count)
+  }
+
   function readAnnotState(): { anns: (PageNote & { id?: string })[], pageNotes: string } {
     try {
       const api = overlayApi(frameRef.current)
@@ -288,6 +409,10 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   }
 
   function refreshAnnotMenu() {
+    if (onHmr) {
+      void requestFrameDigest(1200).then((digest) => { if (digest) applyDigestToMenu(digest) })
+      return
+    }
     const { anns, pageNotes } = readAnnotState()
     setMenuAnns(anns)
     setMenuPageNotes(pageNotes)
@@ -296,9 +421,23 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
 
   // Poll the in-page note count while annotate mode is on; when the
   // annotate menu is open, refresh its snapshot too so picks made in
-  // the page land in the list without reopening the menu.
+  // the page land in the list without reopening the menu. Static
+  // preview reads the overlay directly; the live page is asked for
+  // its digest instead (same data, cross-origin channel).
   useEffect(() => {
     if (!annotating && !annotateMenuOpen) return
+    if (onHmr) {
+      let live = true
+      const tick = async () => {
+        const digest = await requestFrameDigest(1200)
+        if (!live || !digest) return
+        if (annotateMenuOpen) applyDigestToMenu(digest)
+        else setNoteCount(digest.annotations.length)
+      }
+      void tick()
+      const t = setInterval(() => { void tick() }, 1500)
+      return () => { live = false; clearInterval(t) }
+    }
     const t = setInterval(() => {
       try {
         if (annotateMenuOpen) { refreshAnnotMenu(); return }
@@ -313,11 +452,28 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
 
   async function toggleAnnotate() {
     if (annotating) {
-      try { overlayApi(frameRef.current)?.disableSelectMode?.() } catch {}
+      if (onHmr) postFrameCommand('unpick')
+      else { try { overlayApi(frameRef.current)?.disableSelectMode?.() } catch {} }
       setAnnotating(false)
       return
     }
-    if (onHmr) return // cross-origin: cannot inject into :5173
+    if (onHmr) {
+      // Live page: the plugin's annotate starter has already put the
+      // overlay in the frame. Drive it by postMessage, and only call
+      // annotate mode on once the overlay answers — otherwise say
+      // why, using the plugin-ensure state, instead of doing nothing.
+      postFrameCommand('pick')
+      const digest = await requestFrameDigest()
+      if (!digest) {
+        const fresh = await getPluginEnsure()
+        if (fresh) setEnsure(fresh)
+        onResult(`Annotate is not available: ${annotateUnavailableReason(fresh ?? ensure, hmr)}`)
+        return
+      }
+      setNoteCount(digest.annotations.length)
+      setAnnotating(true)
+      return
+    }
     const ok = await ensureOverlay(frameRef.current)
     if (!ok) {
       onResult('Annotate mode failed: could not inject the overlay into the preview. Reload and try Static preview.')
@@ -333,6 +489,23 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   }
 
   async function submitNotes() {
+    if (onHmr) {
+      // The annotations live in the page, unreadable from here. The
+      // overlay's own submit posts them to /api/live-edit/submit —
+      // the same request its toolbar Submit button makes.
+      const digest = await requestFrameDigest(1200)
+      const hasNotes = digest ? digest.annotations.length > 0 || digest.pageNote.present : noteCount > 0
+      if (!hasNotes) {
+        onResult('No notes yet. Click Annotate, click a page element, add a note, then Submit.')
+        return
+      }
+      postFrameCommand('submit')
+      onResult("Notes sent from the preview page — the result shows in the page's Annotate toolbar.")
+      setTimeout(() => {
+        void requestFrameDigest(1200).then((d) => { if (d) setNoteCount(d.annotations.length) })
+      }, 1500)
+      return
+    }
     const api = overlayApi(frameRef.current)
     if (!api) {
       onResult('Nothing to submit: annotate mode is not active in the preview.')
@@ -379,6 +552,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   // pane's Annotate chips use): postMessage works same-origin here, and
   // the overlay applies save + re-render itself.
   async function toggleNotesPanel() {
+    if (onHmr) { postFrameCommand('notes'); return }
     try {
       if (!overlayApi(frameRef.current)) {
         const ok = await ensureOverlay(frameRef.current)
@@ -392,6 +566,9 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   }
 
   function removeAnnotation(idx: number) {
+    // No postMessage verb removes a single annotation; on the live
+    // page the note's own tag in the page is the way to delete it.
+    if (onHmr) return
     try {
       const api = overlayApi(frameRef.current)
       const anns = api?.exportAnnotations?.() ?? []
@@ -402,11 +579,13 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
   }
 
   function clearAnnotationsMenu() {
+    if (onHmr) return // the page's Annotate toolbar owns clearing there
     try { overlayApi(frameRef.current)?.clearAnnotations?.() } catch { /* cross-origin or unloaded */ }
     refreshAnnotMenu()
   }
 
   function clearPageNotesMenu() {
+    if (onHmr) return // the page's notes panel owns clearing there
     try { overlayApi(frameRef.current)?.setPageNotes?.('') } catch { /* cross-origin or unloaded */ }
     refreshAnnotMenu()
   }
@@ -457,6 +636,16 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
             {checking ? 'checking…' : hmr === 'up' ? ':5173 up' : hmr === 'down' ? ':5173 unreachable' : ':5173?'}
           </span>
         ))}
+        {onHmr && !noSetup && bridgeChip.state === 'plugin-missing' && (
+          <button type="button" className={`pill ${bridgeChip.tone}`} data-testid="bridge-chip" title={bridgeChip.tooltip} onClick={focusEnsureNotice} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>
+            <span className="dot" />{bridgeChip.label}
+          </button>
+        )}
+        {onHmr && !noSetup && bridgeChip.state !== 'none' && bridgeChip.state !== 'plugin-missing' && (
+          <span className={`pill ${bridgeChip.tone}`} data-testid="bridge-chip" title={bridgeChip.tooltip}>
+            <span className="dot" />{bridgeChip.label}
+          </span>
+        )}
         {annotating && (
           <span className="pill good" title="Page annotations collected">
             <span className="dot" />{noteCount} note{noteCount === 1 ? '' : 's'}
@@ -501,8 +690,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
               className="deck-btn"
               style={annotating ? { ...smallBtn, borderColor: 'rgba(34,197,94,.5)', color: 'var(--green-text)', borderTopRightRadius: 0, borderBottomRightRadius: 0 } : { ...smallBtn, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
               onClick={() => void toggleAnnotate()}
-              title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
-              disabled={onHmr}
+              title={onHmr ? 'Annotate the live page: click page elements in the preview to attach notes for the AI' : 'Toggle annotate mode: click page elements to attach notes for the AI'}
             >
               {annotating ? 'Annotating…' : 'Annotate'}
             </button>
@@ -511,10 +699,9 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
               className="deck-btn"
               style={{ ...smallBtn, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid var(--border-soft)', padding: '2px 5px' }}
               onClick={() => (annotateMenuOpen ? setAnnotateMenuOpen(false) : openAnnotMenu())}
-              title={onHmr ? 'On the live Vite app, annotate on the page itself with the Live editing toolbar (bottom right, next to the chat window)' : 'Annotation menu — pick, notes, submit, and the current annotations'}
+              title="Annotation menu — pick, page notes, submit, and the current annotations"
               aria-haspopup="menu"
               aria-expanded={annotateMenuOpen}
-              disabled={onHmr}
             >
               <ChevronDown size={12} />
             </button>
@@ -549,7 +736,7 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
                       <div key={a.id || `${a.selector}-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'var(--card)', border: '1px solid var(--border-soft)', borderRadius: 8, padding: '6px 8px' }}>
                         <span className="mono" title={a.selector} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '45%', flexShrink: 0 }}>{a.selector}</span>
                         <span title={a.text} style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-soft)', fontSize: 'calc(11.5px * var(--ui-scale, 1))' }}>{a.text || '—'}</span>
-                        <button type="button" className="deck-btn" style={{ padding: '0 6px' }} onClick={() => removeAnnotation(i)} title={`Remove the note on ${a.selector}`}><X size={12} /></button>
+                        {!onHmr && <button type="button" className="deck-btn" style={{ padding: '0 6px' }} onClick={() => removeAnnotation(i)} title={`Remove the note on ${a.selector}`}><X size={12} /></button>}
                       </div>
                     ))}
                   </div>
@@ -557,8 +744,8 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
                   <div style={{ fontSize: 'calc(11.5px * var(--ui-scale, 1))', color: 'var(--text-soft)', marginBottom: 6 }}>No annotations yet — Pick an element on the page.</div>
                 )}
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" className="deck-btn" style={smallBtn} disabled={!menuAnns.length} onClick={clearAnnotationsMenu} title="Delete all element annotations"><Trash2 size={12} />Clear annotations</button>
-                  <button type="button" className="deck-btn" style={smallBtn} disabled={!menuPageNotes} onClick={clearPageNotesMenu} title="Delete the page notes">Clear page notes</button>
+                  <button type="button" className="deck-btn" style={smallBtn} disabled={onHmr || !menuAnns.length} onClick={clearAnnotationsMenu} title={onHmr ? "Clear annotations from the page's Annotate toolbar" : 'Delete all element annotations'}><Trash2 size={12} />Clear annotations</button>
+                  <button type="button" className="deck-btn" style={smallBtn} disabled={onHmr || !menuPageNotes} onClick={clearPageNotesMenu} title={onHmr ? "Clear page notes from the page's notes panel" : 'Delete the page notes'}>Clear page notes</button>
                 </div>
               </div>
             )}
@@ -570,6 +757,38 @@ export function Preview({ hmrUrl = DEFAULT_HMR, onChanged, onResult, collapsed, 
           )}
         </span>
       </div>
+      {showEnsureNotice && ensure && (
+        <div
+          ref={noticeRef}
+          data-testid="plugin-ensure-notice"
+          style={{ padding: '6px 10px', fontSize: 'calc(11.5px * var(--ui-scale, 1))', lineHeight: 1.5, color: 'var(--text)', background: 'var(--panel-2, var(--panel))', borderBottom: '1px solid var(--border-soft)', display: 'flex', gap: 8, alignItems: 'flex-start', flexShrink: 0 }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {ensure.state === 'added' && (
+              <>Live plugin added to <span className="mono">{ensure.configFile ?? 'vite.config'}</span> — the editor put its plugin line in this config so the page can connect live. The added lines are marked in the file.</>
+            )}
+            {ensure.state === 'cannot' && (
+              <>
+                <div>The editor could not add its live plugin to <span className="mono">{ensure.configFile ?? 'the vite config'}</span> automatically{ensure.detail ? <> — {ensure.detail}</> : null}. To connect this page live, add:</div>
+                {ensure.snippet && <pre className="mono" style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 'calc(10.5px * var(--ui-scale, 1))' }}>{ensure.snippet}</pre>}
+              </>
+            )}
+            {ensure.state === 'missing-declined' && (
+              <>The editor&rsquo;s live plugin is off for this project, so the page cannot connect live.</>
+            )}
+          </div>
+          {ensure.state === 'added' && (
+            <button type="button" className="deck-btn" style={smallBtn} disabled={ensureBusy} onClick={() => void removeEnsurePlugin()} title="Remove the plugin lines the editor added and don't add them again">Remove plugin</button>
+          )}
+          {ensure.state === 'cannot' && ensure.snippet && (
+            <button type="button" className="deck-btn" style={smallBtn} onClick={() => void copyEnsureSnippet()} title="Copy the plugin lines">{ensureCopied ? 'Copied' : 'Copy'}</button>
+          )}
+          {ensure.state === 'missing-declined' && (
+            <button type="button" className="deck-btn" style={smallBtn} disabled={ensureBusy} onClick={() => void enableEnsurePlugin()} title="Add the plugin line to the vite config again">Re-enable</button>
+          )}
+          <button type="button" className="deck-btn" style={smallBtn} onClick={() => setEnsureDismissed(true)} title="Hide this notice for now"><X size={12} /></button>
+        </div>
+      )}
       {!collapsed && showFormatToolbar && !noSetup && (mark || frameMode) && renderer !== 'markdown' && renderer !== 'richtext' && renderer !== 'image' && (
         <FormatToolbar
           renderer={renderer ?? 'page'}

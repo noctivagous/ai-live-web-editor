@@ -4,13 +4,32 @@
  */
 const LAUNCHER_URL = __LAUNCHER_URL__
 
+/**
+ * Fetch the overlay source. Same origin first — the plugin serves
+ * /live-edit/overlay.js on the page's own Vite server — with the
+ * configured launcher URL as fallback. Mirrors chat-overlay.js.
+ */
+async function fetchOverlaySource() {
+  const bases = ['']
+  const launcher = String(LAUNCHER_URL || '').replace(/\/$/, '')
+  if (launcher) bases.push(launcher)
+  let lastErr = null
+  for (const base of bases) {
+    try {
+      const r = await fetch(base + '/live-edit/overlay.js', { cache: 'no-store' })
+      if (!r.ok) throw new Error('overlay fetch failed: ' + r.status)
+      return await r.text()
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr || new Error('overlay fetch failed')
+}
+
 async function ensureOverlay() {
   window.__AI_LIVE_LAUNCHER__ = LAUNCHER_URL || location.origin
   if (window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed) return window.__AI_LIVE_EDIT__
-  const src = await fetch((LAUNCHER_URL || '') + '/live-edit/overlay.js', { cache: 'no-store' }).then((r) => {
-    if (!r.ok) throw new Error('overlay fetch failed: ' + r.status)
-    return r.text()
-  })
+  const src = await fetchOverlaySource()
   const script = document.createElement('script')
   script.textContent = src
   document.documentElement.appendChild(script)

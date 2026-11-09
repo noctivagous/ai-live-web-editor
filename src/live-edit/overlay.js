@@ -151,6 +151,7 @@
     var api = window.__AI_LIVE_EDIT__;
     if (!api) return;
     if (data.cmd === 'pick') api.enableSelectMode();
+    else if (data.cmd === 'unpick') api.disableSelectMode();
     else if (data.cmd === 'highlight' && typeof data.selector === 'string' && data.selector) {
       if (!state.selectMode && !state.moveArmed) {
         state.hoveredSelector = data.selector;

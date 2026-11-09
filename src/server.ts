@@ -7,7 +7,8 @@ import { fileURLToPath } from 'url'
 import { currentModelId, hasAiKey, liveTarget, loadDotEnv, openaiApiKey, openaiBaseUrl, openaiModelName, playwrightPoolEnabled, publicProvider, saveAiConfig, setPlaywrightPool, uiServing } from './env.js'
 import { pipeAgentChatStream } from './chatStream.js'
 import { listProviderModels } from './providers.js'
-import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, SELF_PROJECT_ID, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
+import { createProject, deleteSyncFiles, EDITOR_ROOT, ensureWorkspace, getFsRoot, listProjects, listProjectFiles, readActiveId, selectProject, SELF_PROJECT_ID, startVite, validProjectId, writeImportFiles, WORKSPACE_ROOT } from './launcher.js'
+import { mountPluginEnsureApi } from './pluginEnsureApi.js'
 import { applyPageTemplate, applySeedApp, convertTextToPage, TEMPLATE_IDS, type PageTemplateId, type TemplateId } from './setupWizard.js'
 import { writeProjectConfig } from './projectConfig.js'
 import { projectPathOrThrow } from './projectPath.js'
@@ -81,6 +82,7 @@ mountResearchApi(app)
 mountPlanApi(app)
 mountFeatureApi(app)
 mountUserFlowApi(app)
+mountPluginEnsureApi(app, { restart: () => startVite() })
 mountMcpApi(app)
 mountSkillsApi(app)
 mountMemoryApi(app)

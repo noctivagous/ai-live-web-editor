@@ -63,6 +63,7 @@ Efficient workflow:
 4. In Live sketch, patch-dom (insert/move/text/style/class/attr/remove) using selectors from take-snapshot
 5. eval-js only in Live sketch to run JS in the Vite page
 6. After behaviour or layout edits, check get-console (and layout-snapshot after layout edits) before claiming done. A host verification gate also re-checks automatically — address or explicitly waive anything it reports.
+7. Step budget: this turn ends after 12 tool steps no matter what — spend them like money. Never re-read a file range you already have; trust grep hits and the first read. A second read of the same file must aim at a new, non-overlapping range for a still-unresolved symbol. Leave steps for the edit itself: read to locate, then write.
 
 When the user points at another URL (not the Vite app), pass url= to inspect/patch/eval/layout-snapshot/layout-svg, or call pool-open. That uses the Playwright pool, which the user must enable in Settings. If the pool is off, tell them to enable it.
 

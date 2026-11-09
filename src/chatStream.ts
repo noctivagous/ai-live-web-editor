@@ -351,6 +351,52 @@ export function sumTurnUsage(a: TurnUsage | null, b: TurnUsage | null): TurnUsag
   return out
 }
 
+export interface StepCapState {
+  stepStarts: number
+  /** Last step-finish reason ('stop' | 'tool-calls' | …), null when unseen. */
+  lastReason: string | null
+  /** Whether the last finished step dispatched tool calls. */
+  lastHadTools: boolean
+}
+
+export function emptyStepCapState(): StepCapState {
+  return { stepStarts: 0, lastReason: null, lastHadTools: false }
+}
+
+/** Fold one fullStream chunk into the step-cap state (no UI effect). */
+export function trackStepCap(state: StepCapState, chunk: unknown): StepCapState {
+  if (!chunk || typeof chunk !== 'object') return state
+  const c = chunk as { type?: string; payload?: unknown }
+  if (c.type === 'step-start') return { ...state, stepStarts: state.stepStarts + 1 }
+  if (c.type !== 'step-finish') return state
+  const p = asRecord(c.payload ?? chunk)
+  const stepResult = asRecord(p.stepResult)
+  const reason = typeof stepResult.reason === 'string' ? stepResult.reason : null
+  const output = asRecord(p.output)
+  const hadTools = Array.isArray(output.toolCalls) && output.toolCalls.length > 0
+  return { ...state, lastReason: reason, lastHadTools: hadTools }
+}
+
+/**
+ * Did this turn stop because it ran out of steps rather than finishing?
+ * A clean finish ('stop') is never flagged, even at the cap; an unseen
+ * reason only flags when the last step dispatched tools.
+ */
+export function hitStepCap(state: StepCapState, maxSteps: number): boolean {
+  if (!Number.isFinite(maxSteps) || maxSteps <= 0) return false
+  if (state.stepStarts < maxSteps) return false
+  if (state.lastReason === 'stop') return false
+  if (state.lastReason === 'tool-calls' || state.lastReason === 'length') return true
+  return state.lastHadTools
+}
+
+/** Tool-step budget for one streamed chat turn (mirrors maxSteps below). */
+export const CHAT_MAX_STEPS = 12
+
+/** Host-voiced note appended when a turn dies at the step cap mid-work. */
+export const STEP_CAP_NOTE =
+  '\n\n*Note: this turn stopped at the 12-step tool budget with work still in flight — say “continue” to pick it back up.*'
+
 export function mapMastraChunk(chunk: unknown): ChatStreamEvent | null {
   if (!chunk || typeof chunk !== 'object') return null
   const c = chunk as { type?: string; payload?: unknown }
@@ -570,6 +616,7 @@ export async function pipeAgentChatStream(
     const streamChunks = async (stream: AsyncIterable<unknown>) => {
       for await (const chunk of stream) {
         if (req?.aborted || abortSignal.aborted) break
+        stepCap = trackStepCap(stepCap, chunk)
         const c = chunk as { type?: string; payload?: unknown } | null
         if (c && typeof c === 'object' && (c.type === 'start' || c.type === 'step-start')) {
           const p = asRecord(c.payload ?? chunk)
@@ -623,7 +670,7 @@ export async function pipeAgentChatStream(
     }
     if (mode !== 'files') dbg.noteTools(turnTools, {})
     const result = await agent.stream(payload as never, {
-      maxSteps: 12,
+      maxSteps: CHAT_MAX_STEPS,
       abortSignal,
       activeTools: turnTools,
       memory: memoryOption,
@@ -631,10 +678,16 @@ export async function pipeAgentChatStream(
     })
     let model: string | undefined
     const toolTrace: string[] = []
+    let stepCap = emptyStepCapState()
     await streamChunks(result.fullStream)
     // MCP clients live exactly as long as the main stream — the
     // verify-gate follow-up below deliberately runs without them.
     await closeMcp()
+    // Step-cap honesty: a turn that dies at the budget mid-work must not
+    // read as a finished final report — say so and how to resume.
+    if (!req?.aborted && !abortSignal.aborted && hitStepCap(stepCap, CHAT_MAX_STEPS)) {
+      send({ type: 'text-delta', text: STEP_CAP_NOTE })
+    }
     // The verify-gate follow-up stream, kept so its usage joins the turn's.
     let followResult: unknown = null
     // P0-b host gate: Files turns that wrote files get re-checked here.

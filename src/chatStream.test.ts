@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { abortSignalFromReq, beginChatSse, describeUpstreamError, isAbortError, mapMastraChunk, previewPartialArgs, sumTurnUsage, summarizeArgs, summarizeResult, toTurnUsage } from './chatStream.js'
+import { abortSignalFromReq, beginChatSse, describeUpstreamError, emptyStepCapState, hitStepCap, isAbortError, mapMastraChunk, previewPartialArgs, sumTurnUsage, summarizeArgs, summarizeResult, toTurnUsage, trackStepCap } from './chatStream.js'
 
 describe('mapMastraChunk', () => {
   it('maps Mastra payload.text text-delta', () => {
@@ -156,6 +156,28 @@ describe('summarize', () => {
     assert.equal(summarizeResult({ hits: [{ path: '/a', line: 1, text: 'x' }], count: 1 }), '1 hits')
     assert.equal(summarizeResult({ path: '/a', matches: 1, snippet: '1| x' }), '/a · 1 match')
     assert.equal(summarizeResult({ path: '/a', startLine: 10, endLine: 20, content: 'x'.repeat(8) }), '/a · 8 chars · L10–20')
+  })
+})
+
+describe('hitStepCap', () => {
+  it('flags only cap-exhaustion with work still in flight', () => {
+    assert.equal(hitStepCap({ stepStarts: 12, lastReason: 'tool-calls', lastHadTools: true }, 12), true)
+    assert.equal(hitStepCap({ stepStarts: 12, lastReason: 'length', lastHadTools: false }, 12), true)
+    assert.equal(hitStepCap({ stepStarts: 12, lastReason: 'stop', lastHadTools: false }, 12), false)
+    assert.equal(hitStepCap({ stepStarts: 11, lastReason: 'tool-calls', lastHadTools: true }, 12), false)
+    assert.equal(hitStepCap({ stepStarts: 12, lastReason: null, lastHadTools: true }, 12), true)
+    assert.equal(hitStepCap({ stepStarts: 12, lastReason: null, lastHadTools: false }, 12), false)
+    assert.equal(hitStepCap({ stepStarts: 12, lastReason: 'stop', lastHadTools: false }, 0), false)
+  })
+
+  it('folds step-start/step-finish chunks into cap state', () => {
+    let s = emptyStepCapState()
+    s = trackStepCap(s, { type: 'text-delta', payload: { text: 'hi' } })
+    assert.equal(s.stepStarts, 0)
+    s = trackStepCap(s, { type: 'step-start', payload: {} })
+    s = trackStepCap(s, { type: 'step-finish', payload: { stepResult: { reason: 'tool-calls' }, output: { toolCalls: [{ id: '1' }] } } })
+    assert.equal(s.stepStarts, 1)
+    assert.equal(hitStepCap(s, 1), true)
   })
 })
 

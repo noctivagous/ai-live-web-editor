@@ -42,6 +42,7 @@ import {
 import { SetupWizard } from './components/SetupWizard'
 import { PlanOverlay } from './components/PlanOverlay'
 import { GraphOverlay } from './components/GraphOverlay'
+import { McpManager } from './components/McpManager'
 import { OpenTabs } from './components/OpenTabs'
 import { loadPinnedTabs, savePinnedTabs } from './lib/openTabs'
 import { VDivider, HDivider } from './components/PaneDivider'
@@ -1230,7 +1231,7 @@ export default function App() {
    * segment, except in classic-only header mode where the same node
    * renders in the classic strip's trailing slot. */
   function renderAiSelects() {
-    return activeConn ? (
+    const selects = activeConn ? (
       <>
         <select
           className={`pill mono ${keyTone}`}
@@ -1276,6 +1277,15 @@ export default function App() {
           <option key={m} value={m}>{m}</option>
         ))}
       </select>
+    )
+    // The MCP button rides with the AI selects in every header
+    // mode — immediately right of the model chosen, per the MCP
+    // manager design.
+    return (
+      <>
+        {selects}
+        <McpManager />
+      </>
     )
   }
 

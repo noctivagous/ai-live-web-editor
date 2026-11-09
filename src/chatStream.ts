@@ -444,6 +444,7 @@ export async function pipeAgentChatStream(
   res: ChatSseResponse,
   req?: ChatStreamReq,
   workflow?: unknown,
+  opts?: { mcp?: boolean },
 ) {
   const { parseSketchMode, setSketchMode, getSketchMode, SKETCH_TURN_PREAMBLE } = await import('./sketchSession.js')
   const {
@@ -506,6 +507,16 @@ export async function pipeAgentChatStream(
     rawSend(obj)
   }
   const abortSignal = abortSignalFromReq(req)
+  // This turn's MCP toolsets (opt-in via opts.mcp — the HTTP chat
+  // routes pass it; direct callers like the benchmark runner do
+  // not, so benchmark turns never see the user's MCP servers).
+  // Closed when the main stream ends, and on the error paths.
+  let mcpTurn: import('./mcp/mcpClient.js').McpTurnToolsets | null = null
+  const closeMcp = async () => {
+    const turn = mcpTurn
+    mcpTurn = null
+    if (turn) await turn.close().catch(() => { /* best-effort */ })
+  }
   if (routed.switched) send({ type: 'workflow', mode: routed.mode, reason: routed.reason })
   send({ type: 'status', text: mode === 'sketch' ? 'live sketch…' : routed.switched ? 'switched to Files…' : 'starting…' })
   try {
@@ -564,6 +575,17 @@ export async function pipeAgentChatStream(
         searchAvailable = getSearchBackend() !== 'off'
       } catch { /* research tools stay off */ }
       turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
+      // MCP: connect this turn's servers and offer their enabled
+      // tools alongside the built-ins. The names must join
+      // activeTools — Mastra merges toolset tools into the same
+      // dictionary its activeTools filter prunes by name.
+      if (opts?.mcp) {
+        try {
+          const { getMcpToolsetsForTurn } = await import('./mcp/mcpClient.js')
+          mcpTurn = await getMcpToolsetsForTurn()
+          if (mcpTurn.toolNames.length) turnTools = [...turnTools, ...mcpTurn.toolNames]
+        } catch { mcpTurn = null }
+      }
       dbg.noteTools(turnTools, { hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
     }
     if (mode !== 'files') dbg.noteTools(turnTools, {})
@@ -572,10 +594,14 @@ export async function pipeAgentChatStream(
       abortSignal,
       activeTools: turnTools,
       memory: memoryOption,
+      ...(mcpTurn?.toolNames.length ? { toolsets: mcpTurn.toolsets } : {}),
     })
     let model: string | undefined
     const toolTrace: string[] = []
     await streamChunks(result.fullStream)
+    // MCP clients live exactly as long as the main stream — the
+    // verify-gate follow-up below deliberately runs without them.
+    await closeMcp()
     // The verify-gate follow-up stream, kept so its usage joins the turn's.
     let followResult: unknown = null
     // P0-b host gate: Files turns that wrote files get re-checked here.
@@ -693,6 +719,7 @@ export async function pipeAgentChatStream(
     res.end()
     dbg.finish({ aborted: Boolean(req?.aborted || abortSignal.aborted) })
   } catch (e: unknown) {
+    await closeMcp()
     if (req?.aborted || abortSignal.aborted || isAbortError(e)) {
       try { send({ type: 'done' }) } catch { /* closed */ }
       try { res.end() } catch { /* closed */ }

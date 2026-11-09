@@ -17,6 +17,7 @@ import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountFeatureApi } from './features/featureApi.js'
+import { mountMcpApi } from './mcp/mcpApi.js'
 import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
@@ -74,6 +75,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 mountResearchApi(app)
 mountPlanApi(app)
 mountFeatureApi(app)
+mountMcpApi(app)
 mountMemoryApi(app)
   mountCodebaseMapApi(app)
   mountCatalogApi(app)
@@ -231,11 +233,23 @@ mountMemoryApi(app)
       // Same thread memory as the streamed route (chatMemory.ts).
       const { prepareMemoryTurn } = await import('./mastra/chatMemory.js')
       const prepared = await prepareMemoryTurn(briefed)
+      // MCP tools for this turn — the same rule as the streamed
+      // route: Files mode only, the enabled servers' enabled
+      // tools, connected for this turn and closed when it ends.
+      let mcpTurn: import('./mcp/mcpClient.js').McpTurnToolsets | null = null
+      if (mode === 'files') {
+        try {
+          const { getMcpToolsetsForTurn } = await import('./mcp/mcpClient.js')
+          mcpTurn = await getMcpToolsetsForTurn()
+          if (mcpTurn.toolNames.length) tools = [...tools, ...mcpTurn.toolNames]
+        } catch { mcpTurn = null }
+      }
       const result = await agent.generate(prepared.payload as never, {
         maxSteps: 12,
         activeTools: tools,
         memory: prepared.memory,
-      })
+        ...(mcpTurn?.toolNames.length ? { toolsets: mcpTurn.toolsets } : {}),
+      }).finally(async () => { await mcpTurn?.close().catch(() => { /* best-effort */ }) })
       res.json({ ok: true, text: result.text, toolCalls: result.toolCalls })
     } catch (e: any) {
       console.error(e)
@@ -247,7 +261,7 @@ mountMemoryApi(app)
   })
 
   app.post('/api/chat/stream', async (req, res) => {
-    await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow)
+    await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow, { mcp: true })
   })
 
   app.post('/api/live-edit/submit', async (req, res) => {

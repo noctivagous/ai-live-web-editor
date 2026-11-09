@@ -21,7 +21,10 @@ export type GraphPlanResult =
   | { ok: false, error: string }
 
 const BUILT = (n: FeatureNode) => n.status === 'done' || n.status === 'verified'
-const WORKABLE = (n: FeatureNode) => n.kind !== 'region' && n.status !== 'dropped'
+/** Suggested nodes are unreviewed proposals: like dropped nodes
+ * they never become plan tasks — accept one first (it turns
+ * 'planned'), then plan from it. */
+const WORKABLE = (n: FeatureNode) => n.kind !== 'region' && n.status !== 'dropped' && n.status !== 'suggested'
 
 /** The selection plus its unbuilt prerequisites, in build order. */
 export function workListFor(graph: FeatureGraph, selected: FeatureNode[]): { work: FeatureNode[], skippedBuilt: number } {

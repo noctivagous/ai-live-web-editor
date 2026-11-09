@@ -21,6 +21,10 @@ export interface DiagramNode {
   kind: string
   status: string
   parent?: string
+  /** Optional extra tag rendered on the card beside the status
+   * (e.g. "flow blocked" — a cross-graph fact the status slot
+   * cannot carry). Callers set it; the diagram just shows it. */
+  tag?: string
 }
 
 export interface DiagramEdge {

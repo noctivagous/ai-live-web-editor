@@ -587,6 +587,7 @@ export async function pipeAgentChatStream(
     // triggers) instead of all 28 schemas; Sketch keeps its fixed set.
     let turnHasActivePlan = false
     let turnHasFeatureGraph = false
+    let turnHasUserFlowGraph = false
     let turnTools = activeToolsForMode(mode)
     if (mode === 'files') {
       try {
@@ -597,12 +598,16 @@ export async function pipeAgentChatStream(
         const { getFeatureGraph } = await import('./features/features.js')
         turnHasFeatureGraph = Boolean(getFeatureGraph())
       } catch { /* feature tools stay text-triggered only */ }
+      try {
+        const { getUserFlowGraph } = await import('./userflows/userflows.js')
+        turnHasUserFlowGraph = Boolean(getUserFlowGraph())
+      } catch { /* user flow tools stay text-triggered only */ }
       let searchAvailable = false
       try {
         const { getSearchBackend } = await import('./searchSession.js')
         searchAvailable = getSearchBackend() !== 'off'
       } catch { /* research tools stay off */ }
-      turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
+      turnTools = fileToolsForTurn({ userText: latestUserText(messages), hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, hasUserFlowGraph: turnHasUserFlowGraph, searchAvailable })
       // MCP: connect this turn's servers and offer their enabled
       // tools alongside the built-ins. The names must join
       // activeTools — Mastra merges toolset tools into the same
@@ -614,7 +619,7 @@ export async function pipeAgentChatStream(
           if (mcpTurn.toolNames.length) turnTools = [...turnTools, ...mcpTurn.toolNames]
         } catch { mcpTurn = null }
       }
-      dbg.noteTools(turnTools, { hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, searchAvailable })
+      dbg.noteTools(turnTools, { hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, hasUserFlowGraph: turnHasUserFlowGraph, searchAvailable })
     }
     if (mode !== 'files') dbg.noteTools(turnTools, {})
     const result = await agent.stream(payload as never, {
@@ -676,7 +681,7 @@ export async function pipeAgentChatStream(
           // prompt/reply must not be persisted into the user's thread.
           // The gate prompt names the layout tools, so its own text
           // triggers the layout group; research stays off for a verify pass.
-          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph }),
+          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, hasUserFlowGraph: turnHasUserFlowGraph }),
         })
         followResult = follow
         await streamChunks(follow.fullStream)

@@ -13,6 +13,9 @@ import {
   featureAddNodeTool, featureBuildNodeTool, featureEditNodeTool, featureInstallPackTool, featureLinkTool, featureLintTool, featureQueryTool, featureReconcileTool, featureRemoveNodeTool, featureSetParamTool, featureSetStatusTool, featureUninstallPackTool, featureUnlinkTool,
 } from './featureTools.js'
 import {
+  userflowAddStepTool, userflowDeriveSuggestionsTool, userflowLinkTool, userflowQueryTool, userflowSetVerificationTool,
+} from './userflowTools.js'
+import {
   planAddQuestionTool, planFinishTool, planFromGraphTool, planRemoveQuestionTool,
   planReviseQuestionTool, planUpdateTaskTool,
 } from './planTools.js'
@@ -593,6 +596,137 @@ describe('feature graph tools execute()', () => {
       assert.equal(overview.ok, true)
       assert.equal((overview.regions as unknown[]).length, 1)
       assert.ok(fs.existsSync(path.join(root, 'ai-features/graph.md')), 'rendered outline written beside the canonical json')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+/**
+ * User flow graph tools: add-step bootstraps the graph (and the
+ * journey, when the name is new), links validate on both sides of
+ * the exercises join, verification records and clears blocks, and
+ * queries read the same store back.
+ */
+describe('user flow graph tools execute()', () => {
+  it('queries and verification on a graph-less project return the no-graph error value', async () => {
+    const root = tmpProject({})
+    try {
+      const q = await run(userflowQueryTool, { mode: 'overview' })
+      assert.equal(q.ok, false)
+      assert.match(String(q.error), /No user flow graph/)
+      const v = await run(userflowSetVerificationTool, { id: 's-x', state: 'ok' })
+      assert.equal(v.ok, false)
+      assert.match(String(v.error), /No user flow graph/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('builds a flow end to end: bootstrap, links both ways, verification, coverage', async () => {
+    const root = tmpProject({})
+    try {
+      // A feature to exercise — coverage reads the two graphs together.
+      const feature = await run(featureAddNodeTool, { name: 'Payments', kind: 'service' })
+      assert.equal(feature.ok, true)
+      const paymentsId = (feature.node as { id: string }).id
+
+      const cart = await run(userflowAddStepTool, { journey: 'Checkout', name: 'Cart page', type: 'screen' })
+      assert.equal(cart.ok, true)
+      assert.equal((cart.journey as { created?: boolean }).created, true, 'a new journey name starts the journey')
+      assert.ok(fs.existsSync(path.join(root, 'ai-user-flows/graph.json')), 'first add bootstraps the graph')
+      const cartId = (cart.step as { id: string }).id
+
+      const pay = await run(userflowAddStepTool, { journey: 'Checkout', name: 'Pay with card', type: 'action' })
+      assert.equal(pay.ok, true)
+      assert.equal((pay.journey as { created?: boolean }).created, undefined, 'the same journey name reuses the journey')
+      const payId = (pay.step as { id: string }).id
+
+      const linked = await run(userflowLinkTool, { from: cartId, to: payId, type: 'navigates-to' })
+      assert.equal(linked.ok, true)
+      const dup = await run(userflowLinkTool, { from: cartId, to: payId, type: 'navigates-to' })
+      assert.equal(dup.ok, false)
+      const badLink = await run(userflowLinkTool, { from: cartId, to: 's-missing', type: 'navigates-to' })
+      assert.equal(badLink.ok, false)
+
+      const badExercises = await run(userflowLinkTool, { from: payId, to: 'f-missing', type: 'exercises' })
+      assert.equal(badExercises.ok, false)
+      assert.match(String(badExercises.error), /No node with id/)
+      const exercised = await run(userflowLinkTool, { from: payId, to: paymentsId, type: 'exercises' })
+      assert.equal(exercised.ok, true)
+
+      const blocked = await run(userflowSetVerificationTool, {
+        id: payId, state: 'blocked', blockKind: 'missing-affordance',
+        evidence: 'No pay button on the cart page', runId: 'dogfood-1',
+      })
+      assert.equal(blocked.ok, true)
+      assert.equal((blocked.step as { block?: { kind: string } }).block?.kind, 'missing-affordance')
+      const badStep = await run(userflowSetVerificationTool, { id: 's-missing', state: 'ok' })
+      assert.equal(badStep.ok, false)
+
+      const coverage = await run(userflowQueryTool, { mode: 'coverage' })
+      assert.equal(coverage.ok, true)
+      assert.deepEqual(coverage.neverExercised, [])
+      assert.deepEqual((coverage.stepsWithoutFeatures as Array<{ id: string }>).map(s => s.id), [cartId])
+      assert.deepEqual(
+        (coverage.blockedFeatures as Array<{ feature: { id: string } }>).map(b => b.feature.id),
+        [paymentsId],
+        'the blocked pay step implicates the feature it exercises',
+      )
+
+      const cleared = await run(userflowSetVerificationTool, { id: payId, state: 'ok' })
+      assert.equal(cleared.ok, true)
+      assert.equal((cleared.step as { block?: unknown }).block, undefined, 'verifying ok clears the block')
+
+      const overview = await run(userflowQueryTool, { mode: 'overview' })
+      assert.equal(overview.ok, true)
+      assert.equal((overview.counts as { steps: number, ok: number }).steps, 2)
+      assert.equal((overview.counts as { steps: number, ok: number }).ok, 1)
+      assert.ok(fs.existsSync(path.join(root, 'ai-user-flows/graph.md')), 'rendered outline written beside the canonical json')
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('derive-suggestions reflects the flow records into the feature graph, idempotently', async () => {
+    const root = tmpProject({})
+    try {
+      const noFlow = await run(userflowDeriveSuggestionsTool, {})
+      assert.equal(noFlow.ok, false)
+      assert.match(String(noFlow.error), /No user flow graph/)
+
+      const feature = await run(featureAddNodeTool, { name: 'Payments', kind: 'service' })
+      const paymentsId = (feature.node as { id: string }).id
+      const cart = await run(userflowAddStepTool, { journey: 'Checkout', name: 'Cart page', type: 'screen' })
+      const cartId = (cart.step as { id: string }).id
+      const pay = await run(userflowAddStepTool, { journey: 'Checkout', name: 'Pay with card', type: 'action' })
+      const payId = (pay.step as { id: string }).id
+      await run(userflowLinkTool, { from: payId, to: paymentsId, type: 'exercises' })
+      await run(userflowSetVerificationTool, {
+        id: payId, state: 'blocked', blockKind: 'missing-affordance',
+        evidence: 'No pay button on the cart page', runId: 'dogfood-1',
+      })
+
+      const derived = await run(userflowDeriveSuggestionsTool, {})
+      assert.equal(derived.ok, true)
+      assert.equal(derived.created, 2, 'a fix for the blocked step + coverage for the feature-less cart step')
+      assert.deepEqual(
+        [...(derived.createdNames as string[])].sort(),
+        ['Add feature for Cart page', 'Fix Pay with card (missing-affordance)'],
+      )
+      assert.equal(derived.live, 2)
+      const graphJson = JSON.parse(fs.readFileSync(path.join(root, 'ai-features/graph.json'), 'utf-8')) as {
+        nodes: { name: string, status: string, suggestion?: { stepId: string } }[],
+      }
+      const fix = graphJson.nodes.find(n => n.suggestion?.stepId === payId)
+      assert.equal(fix?.status, 'suggested')
+      assert.ok(graphJson.nodes.some(n => n.name === 'Suggested by dogfooding' && n.status !== 'suggested'))
+
+      const again = await run(userflowDeriveSuggestionsTool, {})
+      assert.equal(again.created, 0, 'idempotent — no duplicates')
+      assert.equal(again.alreadyLive, 2)
+
+      // The step verifies ok on a later run: the fix is withdrawn,
+      // the coverage suggestion (cart still exercises nothing) stays.
+      await run(userflowSetVerificationTool, { id: payId, state: 'ok' })
+      const afterOk = await run(userflowDeriveSuggestionsTool, {})
+      assert.equal(afterOk.withdrawn, 1)
+      assert.equal(afterOk.live, 1)
+      assert.ok(cartId)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

@@ -28,7 +28,7 @@ import { execFileSync } from 'node:child_process'
 import { getFsRoot } from '../launcher.js'
 
 export type FeatureStatus =
-  | 'proposed' | 'planned' | 'building' | 'done' | 'verified' | 'blocked' | 'dropped'
+  | 'proposed' | 'planned' | 'building' | 'done' | 'verified' | 'blocked' | 'dropped' | 'suggested'
 
 export type FeatureNodeKind =
   | 'region' | 'feature' | 'screen' | 'component' | 'setting' | 'data' | 'service'
@@ -44,11 +44,58 @@ export interface FeatureParam {
   default?: string
 }
 
+/**
+ * Where a suggested node came from: a dogfood reflection over the
+ * user flow graph (src/features/suggestions.ts). Machine-readable
+ * on purpose — derivation dedupes and dismissal memory key off it.
+ * Kept on the node after acceptance: provenance is history, not
+ * state. `blockKind` is the flow graph's BlockKind as a plain
+ * string — this store never imports the flow store (the flow
+ * store imports this one).
+ */
+export interface SuggestionProvenance {
+  source: 'dogfood'
+  /** 'fix' — the step is blocked / in error; 'coverage' — the
+   * step exercises no feature. */
+  kind: 'fix' | 'coverage'
+  stepId: string
+  stepName: string
+  /** Fix suggestions only: the step's verification state. */
+  state?: 'blocked' | 'error'
+  /** Fix suggestions only, when a block was recorded. */
+  blockKind?: string
+  evidence?: string
+  runId?: string
+  /** ISO timestamp of the derivation that created the node. */
+  at: string
+}
+
+/**
+ * A suggestion the user reviewed and dismissed, remembered on the
+ * graph so derivation never offers the same key again. The key is
+ * the suggestion's identity (`fix:<stepId>:<blockKind>` or
+ * `coverage:<stepId>`): the same step blocking with a DIFFERENT
+ * kind is a new key and may suggest again.
+ */
+export interface DismissedSuggestion {
+  key: string
+  kind: 'fix' | 'coverage'
+  stepId: string
+  stepName: string
+  blockKind?: string
+  name: string
+  /** ISO timestamp of the dismissal. */
+  at: string
+}
+
 export interface FeatureNode {
   id: string
   name: string
   kind: FeatureNodeKind
   status: FeatureStatus
+  /** Dogfood provenance — present on nodes derivation created
+   * (status 'suggested' while awaiting review; kept after). */
+  suggestion?: SuggestionProvenance
   /** Containing region/feature node id; absent = top level. */
   parent?: string
   /** Catalog tier 1 binding: a component tag (e.g. "Button"). */
@@ -109,10 +156,14 @@ export interface FeatureGraph {
   nodes: FeatureNode[]
   edges: FeatureEdge[]
   pendingLinks?: PendingLink[]
+  /** Dogfood suggestions the user dismissed — derivation skips
+   * these keys permanently. Absent on graphs saved before
+   * suggestions existed. */
+  dismissedSuggestions?: DismissedSuggestion[]
 }
 
 export const FEATURE_STATUSES: FeatureStatus[] = [
-  'proposed', 'planned', 'building', 'done', 'verified', 'blocked', 'dropped',
+  'proposed', 'planned', 'building', 'done', 'verified', 'blocked', 'dropped', 'suggested',
 ]
 export const FEATURE_NODE_KINDS: FeatureNodeKind[] = [
   'region', 'feature', 'screen', 'component', 'setting', 'data', 'service',
@@ -208,6 +259,7 @@ export function getFeatureGraph(root?: string): FeatureGraph | null {
       nodes: raw.nodes,
       edges: raw.edges,
       ...(Array.isArray(raw.pendingLinks) ? { pendingLinks: raw.pendingLinks } : {}),
+      ...(Array.isArray(raw.dismissedSuggestions) ? { dismissedSuggestions: raw.dismissedSuggestions } : {}),
     }
   } catch {
     return null
@@ -513,7 +565,12 @@ export function subtree(graph: FeatureGraph, id: string): FeatureNode[] {
   return out
 }
 
-const COUNTED = (n: FeatureNode) => n.kind !== 'region' && n.status !== 'dropped'
+/** Counted toward % built: real work only. Regions are containers,
+ * dropped nodes are cut, and suggested nodes are unreviewed
+ * proposals — a suggestion counts toward NOTHING (numerator or
+ * denominator, region or graph) until it is accepted, when it
+ * becomes 'planned' and counts like any other planned node. */
+const COUNTED = (n: FeatureNode) => n.kind !== 'region' && n.status !== 'dropped' && n.status !== 'suggested'
 const BUILT = (n: FeatureNode) => n.status === 'done' || n.status === 'verified'
 
 export interface Rollup { total: number, built: number, blocked: number, pct: number }
@@ -543,6 +600,8 @@ export function graphRollup(graph: FeatureGraph): { overall: Rollup, regions: Ar
 export interface NodeSummary {
   id: string, name: string, kind: FeatureNodeKind, status: FeatureStatus,
   parent?: string, component?: string, template?: string, pack?: string,
+  /** Dogfood provenance, on nodes derivation created. */
+  suggestion?: SuggestionProvenance,
   /** Setting nodes only: the schema with the current effective value. */
   params?: Array<{ name: string, type: FeatureParam['type'], value?: string, options?: string[] }>,
 }
@@ -554,6 +613,7 @@ export function nodeSummary(node: FeatureNode): NodeSummary {
     ...(node.component ? { component: node.component } : {}),
     ...(node.template ? { template: node.template } : {}),
     ...(node.pack ? { pack: node.pack } : {}),
+    ...(node.suggestion ? { suggestion: node.suggestion } : {}),
     ...(node.params?.length ? {
       params: node.params.map(p => ({
         name: p.name, type: p.type,
@@ -608,9 +668,11 @@ export function prerequisites(graph: FeatureGraph, id: string): FeatureNode[] {
 export function featureGraphSummary(graph: FeatureGraph): string {
   const { overall, regions } = graphRollup(graph)
   const regionText = regions.map(r => `${r.node.name} ${r.rollup.pct}%`).join(' · ')
+  const awaiting = graph.nodes.filter(n => n.status === 'suggested' && n.suggestion).length
   return (
     `FEATURE GRAPH "${graph.title}" — ${overall.total} features, ${overall.pct}% built` +
     (overall.blocked ? `, ${overall.blocked} blocked` : '') +
+    (awaiting ? `, ${awaiting} suggested by dogfooding awaiting review` : '') +
     (regionText ? ` (${regionText})` : '') +
     (graph.pendingLinks?.length
       ? `. ${graph.pendingLinks.length} pack link${graph.pendingLinks.length === 1 ? '' : 's'} still pending — they wire themselves when a node matching their name appears (feature-query mode "pending" lists them)`
@@ -624,7 +686,7 @@ export function featureGraphSummary(graph: FeatureGraph): string {
 /* ── Rendered view ──────────────────────────────────────────── */
 
 const STATUS_MARK: Record<FeatureStatus, string> = {
-  proposed: '○', planned: '◔', building: '◑', done: '●', verified: '✓', blocked: '✕', dropped: '—',
+  proposed: '○', planned: '◔', building: '◑', done: '●', verified: '✓', blocked: '✕', dropped: '—', suggested: '✦',
 }
 
 export function renderFeatureMarkdown(graph: FeatureGraph): string {

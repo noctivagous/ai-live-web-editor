@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, Circle, CircleDot, Clock, Loader2, Maximize2, Minimize2, Minus, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Check, Circle, CircleDot, Clock, Lightbulb, Loader2, Maximize2, Minimize2, Minus, Play, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import {
-  addFeatureNode, editFeatureNode, getFeatureCurrency, getFeatureLint, getFeatureReconcile, getFeatures, linkFeatures,
+  acceptFeatureSuggestion, addFeatureNode, deriveFeatureSuggestions, dismissFeatureSuggestion, editFeatureNode, getFeatureCurrency, getFeatureLint, getFeatureReconcile, getFeatures, linkFeatures,
   planFromGraph, removeFeatureNode, setFeatureNodeStatus, setFeatureParam, unlinkFeatures,
-  type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphCurrency, type GraphProblemItem,
+  type DriftItem, type FeatureEdgeItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureNodeStatus, type FeatureParamItem, type FeatureRollup, type GraphCurrency, type GraphProblemItem, type UserFlowGraphItem, type UserFlowStepItem,
 } from '../lib/api'
-import { formatGraphCurrency, launchGraphUpdate } from '../lib/graphUpdate'
+import { formatGraphCurrency, launchDogfoodRun, launchGraphUpdate, takeGraphTabRequest, type GraphPaneTab } from '../lib/graphUpdate'
+import { SUGGESTED_REGION_NAME, flowBlockedByFeature, suggestionProvenanceLine, suggestionTargetRegion } from '../lib/userFlowDiagram'
+import { UserFlowPane } from './UserFlowPane'
 import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
 import type { GraphView } from '../lib/layoutRoute'
 import { GraphDiagram } from './GraphDiagram'
@@ -37,7 +39,7 @@ import { GraphDiagram } from './GraphDiagram'
  * streams into whichever view is open.
  */
 
-const STATUSES: FeatureNodeStatus[] = ['proposed', 'planned', 'building', 'done', 'verified', 'blocked', 'dropped']
+const STATUSES: FeatureNodeStatus[] = ['proposed', 'planned', 'building', 'done', 'verified', 'blocked', 'dropped', 'suggested']
 
 const STATUS_COLOR: Record<FeatureNodeStatus, string> = {
   proposed: 'var(--text-muted, #8a8a8c)',
@@ -47,6 +49,7 @@ const STATUS_COLOR: Record<FeatureNodeStatus, string> = {
   verified: 'var(--green)',
   blocked: 'var(--red)',
   dropped: 'var(--text-muted, #8a8a8c)',
+  suggested: 'var(--violet, #a371f7)',
 }
 
 const STATUS_MARK: Record<FeatureNodeStatus, ReactNode> = {
@@ -57,6 +60,7 @@ const STATUS_MARK: Record<FeatureNodeStatus, ReactNode> = {
   verified: <Check size={12} aria-hidden />,
   blocked: <X size={12} aria-hidden />,
   dropped: <Minus size={12} aria-hidden />,
+  suggested: <Lightbulb size={12} aria-hidden />,
 }
 
 interface Connection { label: string, node: FeatureNodeItem, edge: FeatureEdgeItem }
@@ -75,7 +79,11 @@ function diffGraphs(prev: FeatureGraphItem, next: FeatureGraphItem): { feed: str
   const nameOf = (id: string) => nextById.get(id)?.name ?? prevById.get(id)?.name ?? id
   for (const n of next.nodes) {
     const p = prevById.get(n.id)
-    if (!p) { flash[n.id] = 'added'; feed.push(`Node added — ${n.name} (${n.kind})`) }
+    if (!p && n.status === 'suggested' && n.suggestion) {
+      flash[n.id] = 'added'
+      feed.push(`Suggestion added — ${n.name} (from step "${n.suggestion.stepName}")`)
+    }
+    else if (!p) { flash[n.id] = 'added'; feed.push(`Node added — ${n.name} (${n.kind})`) }
     else if (p.status !== n.status) { flash[n.id] = 'changed'; feed.push(`Status — ${n.name}: ${p.status} → ${n.status}`) }
     else if (p.name !== n.name) { flash[n.id] = 'changed'; feed.push(`Renamed — ${p.name} → ${n.name}`) }
     else if ((p.parent ?? '') !== (n.parent ?? '')) { flash[n.id] = 'changed'; feed.push(`Moved — ${n.name} → ${n.parent ? nameOf(n.parent) : 'top level'}`) }
@@ -101,6 +109,35 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
   view?: GraphView
   style?: React.CSSProperties
 }) {
+  // The pane holds TWO graphs — the feature graph (the body
+  // below) and the user flow graph (UserFlowPane). Both stay
+  // mounted; the switch only toggles which body is visible, so
+  // each graph keeps its own selection, scroll and mode when
+  // the user switches away and back. A /graph-update launch
+  // records which tab it wants (lib/graphUpdate) — taken here
+  // on mount and on the open event.
+  const [which, setWhich] = useState<GraphPaneTab>(() => takeGraphTabRequest() ?? 'feature')
+  const flowReloadRef = useRef<(() => void) | null>(null)
+  // Whether the flow graph has anything in it — the header's
+  // Update button shows only then, mirroring the feature side
+  // (the flow empty state carries its own Build button).
+  const [flowHas, setFlowHas] = useState(false)
+  // The flow graph itself, reported up by UserFlowPane's loads:
+  // the Features view reads it for the "flow blocked" badges and
+  // the suggestion cards' accept targets — derived client-side
+  // from the two graphs, never a status change.
+  const [flowGraph, setFlowGraph] = useState<UserFlowGraphItem | null>(null)
+  // Per-suggestion accept-target choices (region id, '' = top
+  // level); absent = the derived target on the card.
+  const [sugTargets, setSugTargets] = useState<Record<string, string>>({})
+  useEffect(() => {
+    const onOpen = () => {
+      const tab = takeGraphTabRequest()
+      if (tab) setWhich(tab)
+    }
+    window.addEventListener('ai-live:graph-open', onOpen)
+    return () => window.removeEventListener('ai-live:graph-open', onOpen)
+  }, [])
   const [graph, setGraph] = useState<FeatureGraphItem | null>(null)
   const [problems, setProblems] = useState<GraphProblemItem[]>([])
   const [drift, setDrift] = useState<DriftItem[]>([])
@@ -189,6 +226,9 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
 
   const byId = new Map((graph?.nodes ?? []).map(n => [n.id, n]))
   const selected = selectedId ? byId.get(selectedId) ?? null : null
+  // feature id → blocked/error flow steps exercising it.
+  const flowBlocked = graph && flowGraph ? flowBlockedByFeature(flowGraph, graph) : new Map<string, UserFlowStepItem[]>()
+  const isSuggestedRegion = (n: FeatureNodeItem) => n.kind === 'region' && n.name === SUGGESTED_REGION_NAME
   const childrenOf = (parent?: string) => (graph?.nodes ?? []).filter(n => (n.parent ?? undefined) === parent)
   const regions = childrenOf(undefined).filter(n => n.kind === 'region')
   const topLevel = childrenOf(undefined).filter(n => n.kind !== 'region')
@@ -288,6 +328,44 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
     await load(true)
   }
 
+  async function deriveSuggestions() {
+    setBusy('derive')
+    setNotice('')
+    const r = await deriveFeatureSuggestions()
+    setBusy('')
+    if (!r.ok) { setError(r.error || 'Deriving suggestions failed'); return }
+    const created = r.created?.length ?? 0
+    const withdrawn = r.withdrawn?.length ?? 0
+    setNotice(
+      `Suggestions derived from the user flow graph — ${created} created, ${withdrawn} withdrawn` +
+      `${r.skippedDismissed ? `, ${r.skippedDismissed} dismissed before and not re-offered` : ''}.`,
+    )
+    await load(true)
+  }
+
+  async function acceptSuggestion(node: FeatureNodeItem) {
+    if (!graph) return
+    const target = suggestionTargetRegion(graph, flowGraph, node)
+    const chosen = sugTargets[node.id]
+    const regionId = chosen === undefined ? target.regionId : (chosen === '' ? null : chosen)
+    setBusy(node.id)
+    const r = await acceptFeatureSuggestion(node.id, regionId)
+    setBusy('')
+    if (!r.ok) { setError(r.error || 'Accept failed'); return }
+    setNotice(`"${node.name}" accepted — planned${r.node?.parent ? ` in ${byId.get(r.node.parent)?.name ?? 'its region'}` : ' at top level'}.`)
+    await load(true)
+  }
+
+  async function dismissSuggestion(node: FeatureNodeItem) {
+    setBusy(node.id)
+    const r = await dismissFeatureSuggestion(node.id)
+    setBusy('')
+    if (!r.ok) { setError(r.error || 'Dismiss failed'); return }
+    setNotice(`"${node.name}" dismissed — it will not be suggested again.`)
+    if (selectedId === node.id) setSelectedId(null)
+    await load(true)
+  }
+
   async function changeStatus(node: FeatureNodeItem, status: FeatureNodeStatus) {
     setBusy(node.id)
     const r = await setFeatureNodeStatus(node.id, status)
@@ -382,23 +460,83 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
     </div>
   ) : null
 
-  const renderNode = (node: FeatureNodeItem, depth: number): React.ReactNode => (
-    <div key={node.id}>
-      <button
-        type="button"
-        className={`graph-node${selectedId === node.id ? ' sel' : ''}${flash[node.id] ? ` flash-${flash[node.id]}` : ''}`}
-        style={{ paddingLeft: 8 + depth * 16 }}
-        onClick={() => setSelectedId(node.id)}
-      >
-        <span className="graph-mark" style={{ color: STATUS_COLOR[node.status] }}>{STATUS_MARK[node.status]}</span>
-        <span className="graph-node-name">{node.name}</span>
-        <span className="graph-chip">{node.kind}</span>
-        {node.pack && <span className="graph-chip pack">{node.pack}</span>}
-        {node.status === 'blocked' && <span className="graph-blocked">blocked</span>}
-      </button>
-      {childrenOf(node.id).map(child => renderNode(child, depth + 1))}
-    </div>
-  )
+  /** A live dogfood suggestion renders as a review card, not a
+   * plain row: provenance line, the accept target (derived from
+   * the step's exercises, changeable), Accept and Dismiss. */
+  const renderSuggestionCard = (node: FeatureNodeItem): React.ReactNode => {
+    if (!graph) return null
+    const target = suggestionTargetRegion(graph, flowGraph, node)
+    const chosen = sugTargets[node.id] ?? (target.regionId ?? '')
+    const targetName = chosen === '' ? 'Top level' : (byId.get(chosen)?.name ?? target.regionName)
+    const regions = (graph.nodes ?? []).filter(n => n.kind === 'region' && !isSuggestedRegion(n))
+    return (
+      <div key={node.id} className={`graph-suggestion${selectedId === node.id ? ' sel' : ''}${flash[node.id] ? ` flash-${flash[node.id]}` : ''}`}>
+        <button type="button" className="graph-suggestion-name" onClick={() => setSelectedId(node.id)}>
+          <span className="graph-mark" style={{ color: STATUS_COLOR.suggested }}>{STATUS_MARK.suggested}</span>
+          <span className="graph-node-name">{node.name}</span>
+          <span className="graph-chip">suggested</span>
+        </button>
+        <div className="graph-suggestion-prov">{suggestionProvenanceLine(node)}</div>
+        {node.suggestion?.evidence && (
+          <div className="graph-suggestion-evidence" title={node.suggestion.evidence}>
+            {node.suggestion.evidence.length > 110 ? `${node.suggestion.evidence.slice(0, 110)}…` : node.suggestion.evidence}
+          </div>
+        )}
+        <div className="graph-suggestion-actions">
+          <span className="graph-suggestion-target">Accept into
+            <select
+              className="deck-select"
+              value={chosen}
+              disabled={busy === node.id}
+              onChange={e => setSugTargets(t => ({ ...t, [node.id]: e.target.value }))}
+              title={target.derived ? 'Derived from the region of the first feature this step exercises' : 'No region is derived from the step — the first region is the default'}
+            >
+              <option value="">Top level</option>
+              {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </span>
+          <button
+            type="button" className="deck-btn graph-build-btn" disabled={busy === node.id}
+            title={`Accept — becomes a planned node in ${targetName}`}
+            onClick={() => void acceptSuggestion(node)}
+          >Accept</button>
+          <button
+            type="button" className="deck-btn" disabled={busy === node.id}
+            title="Dismiss — removes the suggestion and remembers the dismissal, so it is not suggested again"
+            onClick={() => void dismissSuggestion(node)}
+          >Dismiss</button>
+        </div>
+      </div>
+    )
+  }
+
+  const renderNode = (node: FeatureNodeItem, depth: number): React.ReactNode => {
+    if (node.status === 'suggested' && node.suggestion) return renderSuggestionCard(node)
+    const blockedSteps = flowBlocked.get(node.id)
+    return (
+      <div key={node.id}>
+        <button
+          type="button"
+          className={`graph-node${selectedId === node.id ? ' sel' : ''}${flash[node.id] ? ` flash-${flash[node.id]}` : ''}`}
+          style={{ paddingLeft: 8 + depth * 16 }}
+          onClick={() => setSelectedId(node.id)}
+        >
+          <span className="graph-mark" style={{ color: STATUS_COLOR[node.status] }}>{STATUS_MARK[node.status]}</span>
+          <span className="graph-node-name">{node.name}</span>
+          <span className="graph-chip">{node.kind}</span>
+          {node.pack && <span className="graph-chip pack">{node.pack}</span>}
+          {node.status === 'blocked' && <span className="graph-blocked">blocked</span>}
+          {blockedSteps && blockedSteps.length > 0 && (
+            <span
+              className="graph-blocked"
+              title={`Exercised by ${blockedSteps.map(s => `"${s.name}" (${s.verification.state})`).join(', ')} — a user flow step that uses this feature is blocked`}
+            >flow blocked</span>
+          )}
+        </button>
+        {childrenOf(node.id).map(child => renderNode(child, depth + 1))}
+      </div>
+    )
+  }
 
   const renderInspector = () => (
           <aside className="graph-rail">
@@ -461,6 +599,29 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
                   </div>
                 )}
                 {selected.note && <div className="graph-insp-note">{selected.note}</div>}
+                {selected.suggestion && (
+                  <div className="graph-insp-block">
+                    <div className="graph-insp-label">Suggested by dogfooding</div>
+                    <div className="graph-insp-line">{suggestionProvenanceLine(selected)}</div>
+                    {selected.suggestion.evidence && <div className="graph-insp-note">{selected.suggestion.evidence}</div>}
+                    {selected.status === 'suggested' && (
+                      <div className="graph-insp-line">Review it on its card in the {SUGGESTED_REGION_NAME} region — Accept makes it a planned node; Dismiss removes it for good.</div>
+                    )}
+                  </div>
+                )}
+                {(flowBlocked.get(selected.id)?.length ?? 0) > 0 && (
+                  <div className="graph-insp-block">
+                    <div className="graph-insp-label">Flow blocked</div>
+                    {(flowBlocked.get(selected.id) ?? []).map(s => (
+                      <div key={s.id} className="graph-insp-line">
+                        <span style={{ color: 'var(--red-text)', fontWeight: 600 }}>{s.verification.state}</span>
+                        {` — "${s.name}"`}
+                        {s.verification.block ? ` · ${s.verification.block.kind}` : ''}
+                      </div>
+                    ))}
+                    <div className="graph-insp-line">A user flow step that exercises this feature did not drive clean. The feature's own status is unchanged.</div>
+                  </div>
+                )}
                 <div className="graph-insp-block">
                   <div className="graph-insp-label">Connections</div>
                   {connections(selected).map((c, i) => (
@@ -586,8 +747,21 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
     <div className="graph-overlay" role="dialog" aria-label="Feature graph" style={style}>
       <style>{GRAPH_CSS}</style>
       <div className="graph-head">
-        <span className="graph-title">Feature graph</span>
-        {graph && <span className="graph-subtitle">{graph.title}</span>}
+        <span className="graph-view-switch" role="group" aria-label="Which graph">
+          <button
+            type="button"
+            className={which === 'feature' ? 'on' : ''}
+            onClick={() => setWhich('feature')}
+            title="The feature graph — the app as built"
+          >Feature graph</button>
+          <button
+            type="button"
+            className={which === 'userflow' ? 'on' : ''}
+            onClick={() => setWhich('userflow')}
+            title="The user flow graph — the app as used: journeys, steps, and how each step behaved when driven"
+          >User Flow</button>
+        </span>
+        {which === 'feature' && graph && <span className="graph-subtitle">{graph.title}</span>}
         {onOpenReport && onOpenDiagram && (
           <span className="graph-view-switch" role="group" aria-label="Graph view">
             <button
@@ -620,23 +794,23 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
             >Canvas</button>
           </span>
         )}
-        {rollup && (
+        {which === 'feature' && rollup && (
           <span className="graph-overall">
             {bar(rollup.overall)}
             <span>{rollup.overall.pct}% built · {rollup.overall.built}/{rollup.overall.total}{rollup.overall.blocked ? ` · ${rollup.overall.blocked} blocked` : ''}</span>
           </span>
         )}
-        {problems.length > 0 && (
+        {which === 'feature' && problems.length > 0 && (
           <span className="graph-lint-badge" title="Structural problems in graph.json — see the overview panel">
             ⚠ {problems.length} graph problem{problems.length === 1 ? '' : 's'}
           </span>
         )}
-        {graph && currency && (() => {
+        {which === 'feature' && graph && currency && (() => {
           const c = formatGraphCurrency(currency.sync, currency.head, currency.behind)
           return <span className={`graph-currency ${c.tone}`} title={c.title}>{c.text}</span>
         })()}
         <span className="graph-head-spacer" />
-        {graph && graph.nodes.length > 0 && (
+        {which === 'feature' && graph && graph.nodes.length > 0 && (
           <button
             type="button"
             className="deck-btn"
@@ -644,6 +818,37 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
             title="Launches /graph-update feature — the agent reconciles the graph with the codebase, and each change lands here as it happens"
           >
             <Sparkles size={13} />Update graph
+          </button>
+        )}
+        {which === 'feature' && graph && graph.nodes.length > 0 && flowHas && (
+          <button
+            type="button"
+            className="deck-btn"
+            disabled={busy === 'derive'}
+            onClick={() => void deriveSuggestions()}
+            title="Derive suggestions from the user flow graph — a fix suggestion for each blocked or error step, a coverage suggestion for each step with no feature, into the Suggested by dogfooding region"
+          >
+            <Lightbulb size={13} />Derive suggestions
+          </button>
+        )}
+        {which === 'userflow' && flowHas && (
+          <button
+            type="button"
+            className="deck-btn"
+            onClick={() => launchGraphUpdate('userflow')}
+            title="Launches /graph-update userflow — the agent reconciles the flow graph with the app, and each change lands here as it happens"
+          >
+            <Sparkles size={13} />Update graph
+          </button>
+        )}
+        {which === 'userflow' && flowHas && (
+          <button
+            type="button"
+            className="deck-btn"
+            onClick={() => launchDogfoodRun()}
+            title="Launches a dogfood run — the agent drives the live preview through this graph's steps and records how each step actually behaves, as it happens"
+          >
+            <Play size={13} />Dogfood run
           </button>
         )}
         {onToggleExpand && (
@@ -657,10 +862,16 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
             {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
         )}
-        <button type="button" className="deck-btn" onClick={() => void load()} title="Reload the graph"><RefreshCw size={13} /></button>
+        <button
+          type="button"
+          className="deck-btn"
+          onClick={() => { if (which === 'feature') void load(); else flowReloadRef.current?.() }}
+          title="Reload the graph"
+        ><RefreshCw size={13} /></button>
         <button type="button" className="deck-btn" onClick={onClose} aria-label="Close feature graph"><X size={14} /></button>
       </div>
 
+      <div style={{ display: which === 'feature' ? 'contents' : 'none' }}>
       {error && <div className="graph-error">{error}</div>}
       {notice && <div className="graph-notice">{notice}</div>}
       {feed.length > 0 && (
@@ -691,7 +902,7 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
           <div className="graph-diagram-wrap">
             {addForm && <div className="graph-diagram-add">{addFormEl}</div>}
             <GraphDiagram
-              nodes={graph.nodes}
+              nodes={graph.nodes.map(n => flowBlocked.has(n.id) ? { ...n, tag: 'flow blocked' } : n)}
               edges={graph.edges}
               selectedId={selectedId}
               onSelect={setSelectedId}
@@ -745,6 +956,18 @@ export function GraphOverlay({ onClose, onShowLibrary, onOpenReport, onOpenDiagr
           {renderInspector()}
         </div>
       )}
+      </div>
+      <div style={{ display: which === 'userflow' ? 'contents' : 'none' }}>
+        <UserFlowPane
+          featureGraph={graph}
+          onSelectFeature={id => { setWhich('feature'); setSelectedId(id) }}
+          view={view}
+          canvasMode={canvasMode}
+          reloadRef={flowReloadRef}
+          onHasGraph={setFlowHas}
+          onFlowGraph={setFlowGraph}
+        />
+      </div>
     </div>
   )
 }
@@ -826,5 +1049,13 @@ const GRAPH_CSS = `
 .graph-danger-row { display:flex; gap:6px; flex-wrap:wrap; border-top:1px solid var(--border-soft); padding-top:10px; }
 .graph-danger:hover { color:var(--red-text); border-color:var(--red); }
 .graph-lint-kind { color:var(--amber-text); font-size:calc(11px * var(--ui-scale, 1)); min-width:86px; }
+.graph-suggestion { border:1px dashed var(--violet, #a371f7); border-radius:8px; padding:7px 9px; margin:4px 0; display:flex; flex-direction:column; gap:5px; }
+.graph-suggestion.sel { background:var(--accent-soft-bg); }
+.graph-suggestion.flash-added { animation:graph-flash-added 2.6s ease-out; }
+.graph-suggestion-name { display:flex; align-items:center; gap:7px; width:100%; text-align:left; background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:calc(12.5px * var(--ui-scale, 1)); }
+.graph-suggestion-prov { font-size:calc(11.5px * var(--ui-scale, 1)); opacity:.75; }
+.graph-suggestion-evidence { font-size:calc(11.5px * var(--ui-scale, 1)); opacity:.6; font-style:italic; }
+.graph-suggestion-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.graph-suggestion-target { display:inline-flex; align-items:center; gap:6px; font-size:calc(11.5px * var(--ui-scale, 1)); opacity:.85; margin-right:auto; }
 .graph-overlay .mono { font-family:monospace; }
 `

@@ -78,7 +78,7 @@ export interface ChatDebugTurnRecord {
   workflowSwitched: boolean
   /** The exact activeTools list passed to the agent for this turn. */
   toolsOffered: string[] | null
-  toolSignals: { hasActivePlan?: boolean; hasFeatureGraph?: boolean; searchAvailable?: boolean } | null
+  toolSignals: { hasActivePlan?: boolean; hasFeatureGraph?: boolean; hasUserFlowGraph?: boolean; searchAvailable?: boolean } | null
   gateArmed: boolean
   gateBaselineCaptured: boolean | null
   gateBaselineError: string | null

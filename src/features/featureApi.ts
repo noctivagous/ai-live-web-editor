@@ -10,6 +10,10 @@ import {
 import { buildNode, writeNodeConfig } from './buildNode.js'
 import { graftPack, resolvePendingLinks, uninstallPack } from './graft.js'
 import { reconcileGraph } from './reconcile.js'
+import {
+  acceptSuggestion, deriveSuggestions, dismissSuggestion, liveSuggestions,
+} from './suggestions.js'
+import { getUserFlowGraph } from '../userflows/userflows.js'
 import { getPack } from '../catalog/packs.js'
 import { getFsRoot } from '../launcher.js'
 
@@ -192,6 +196,54 @@ export function mountFeatureApi(app: Express) {
     }
     saveFeatureGraph(graph)
     res.json({ ok: true, node: getNode(graph, id) })
+  })
+
+  /* ── Dogfood suggestions (the flow graph's reflection) ──────
+   * Derivation reads both graphs and writes only the feature
+   * graph; accept/dismiss are the review actions the pane's
+   * suggestion cards call. */
+
+  app.post('/api/features/suggestions/derive', (_req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const flowGraph = getUserFlowGraph()
+    if (!flowGraph) return res.status(404).json({ ok: false, error: 'No user flow graph in this project — suggestions are derived from it' })
+    const result = deriveSuggestions(graph, flowGraph)
+    saveFeatureGraph(graph)
+    res.json({
+      ok: true,
+      created: result.created,
+      withdrawn: result.withdrawn.map(n => ({ id: n.id, name: n.name })),
+      skippedDismissed: result.skippedDismissed,
+      alreadyLive: result.alreadyLive,
+      suggestions: liveSuggestions(graph),
+      rollup: graphRollup(graph).overall,
+    })
+  })
+
+  app.post('/api/features/suggestions/accept', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    // regionId: a string lands in that region, null = top level,
+    // absent = derive the target from the step's exercises.
+    const regionId = 'regionId' in (req.body ?? {})
+      ? (typeof req.body.regionId === 'string' ? req.body.regionId : null)
+      : undefined
+    const problem = acceptSuggestion(graph, getUserFlowGraph(), id, regionId)
+    if (problem) return res.status(422).json({ ok: false, error: problem })
+    saveFeatureGraph(graph)
+    res.json({ ok: true, node: getNode(graph, id), rollup: graphRollup(graph).overall })
+  })
+
+  app.post('/api/features/suggestions/dismiss', (req, res) => {
+    const graph = getFeatureGraph()
+    if (!graph) return res.status(404).json({ ok: false, error: 'No feature graph in this project' })
+    const id = typeof req.body?.id === 'string' ? req.body.id : ''
+    const record = dismissSuggestion(graph, id)
+    if (!record) return res.status(422).json({ ok: false, error: 'That node is not a live dogfood suggestion.' })
+    saveFeatureGraph(graph)
+    res.json({ ok: true, dismissed: record, rollup: graphRollup(graph).overall })
   })
 
   app.post('/api/features/remove-node', (req, res) => {

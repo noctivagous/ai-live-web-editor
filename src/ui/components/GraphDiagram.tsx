@@ -49,6 +49,7 @@ export const DIAGRAM_STATUS_COLORS: Record<string, string> = {
   verified: 'var(--green)',
   blocked: 'var(--red)',
   dropped: 'var(--text-muted, #8a8a8c)',
+  suggested: 'var(--violet, #a371f7)',
 }
 
 export interface DiagramRollup { pct: number, built: number, total: number }
@@ -383,6 +384,7 @@ export function GraphDiagram({ nodes, edges, selectedId, onSelect, flash, region
         <span className="gd-chip">{node.kind}</span>
         <span className="gd-status">{node.status}</span>
         {node.status === 'blocked' && <span className="gd-blocked">blocked</span>}
+        {node.tag && <span className="gd-blocked">{node.tag}</span>}
       </span>
     </div>
   )

@@ -13,6 +13,7 @@ import {
   FILE_DOC_TOOLS,
   FILE_RESEARCH_TOOLS,
   FILE_SPREADSHEET_TOOLS,
+  FILE_USERFLOW_TOOLS,
   fileToolsForTurn,
   isWriteTool,
   SKETCH_ACTIVE_TOOLS,
@@ -119,13 +120,24 @@ describe('fileToolsForTurn', () => {
     }
   })
 
+  it('adds user flow tools on user-flow state or user-flow talk, not otherwise', () => {
+    for (const t of FILE_USERFLOW_TOOLS) {
+      assert.ok(fileToolsForTurn({ userText: 'fix the typo', hasUserFlowGraph: true }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'what does the user flow say is blocked?' }).includes(t), t)
+      assert.ok(fileToolsForTurn({ userText: 'update the flow graph' }).includes(t), t)
+      assert.equal(fileToolsForTurn({ userText: 'add a feature to the header' }).includes(t), false, t)
+      assert.equal(fileToolsForTurn({ userText: 'fix the typo' }).includes(t), false, t)
+    }
+  })
+
   it('the groups partition the full set, and a fully-triggered turn gets all of it', () => {
-    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS, ...FILE_FEATURE_TOOLS, ...FILE_SPREADSHEET_TOOLS, ...FILE_DATA_TOOLS, ...FILE_DOC_TOOLS]
+    const grouped = [...FILE_CORE_TOOLS, ...FILE_LAYOUT_TOOLS, ...FILE_CATALOG_TOOLS, ...FILE_CODE_TOOLS, ...FILE_RESEARCH_TOOLS, ...FILE_PLAN_TOOLS, ...FILE_FEATURE_TOOLS, ...FILE_USERFLOW_TOOLS, ...FILE_SPREADSHEET_TOOLS, ...FILE_DATA_TOOLS, ...FILE_DOC_TOOLS]
     assert.deepEqual([...grouped].sort(), [...FILE_ACTIVE_TOOLS].sort())
     const all = fileToolsForTurn({
       userText: 'check the layout of the pricing page, search the latest docs, unpack the bundle, then update the plan and the feature graph and fix the sales spreadsheet and the app config json and rewrite the readme heading',
       hasActivePlan: true,
       hasFeatureGraph: true,
+      hasUserFlowGraph: true,
       searchAvailable: true,
     })
     assert.deepEqual(all, [...FILE_ACTIVE_TOOLS])

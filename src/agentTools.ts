@@ -106,6 +106,15 @@ export const FILE_SPREADSHEET_TOOLS = [
   'spreadsheet-add-row',
 ] as const
 
+/** User flow graph — only meaningful while a flow graph exists or is being discussed. */
+export const FILE_USERFLOW_TOOLS = [
+  'userflow-add-step',
+  'userflow-set-verification',
+  'userflow-link',
+  'userflow-query',
+  'userflow-derive-suggestions',
+] as const
+
 /** Feature graph — only meaningful while a graph exists or is being discussed. */
 export const FILE_FEATURE_TOOLS = [
   'feature-add-node',
@@ -174,6 +183,11 @@ export const FILE_ACTIVE_TOOLS = [
   'feature-lint',
   'feature-uninstall-pack',
   'feature-reconcile',
+  'userflow-add-step',
+  'userflow-set-verification',
+  'userflow-link',
+  'userflow-query',
+  'userflow-derive-suggestions',
   'spreadsheet-inspect',
   'spreadsheet-find',
   'spreadsheet-set-cell',
@@ -263,6 +277,7 @@ const CATALOG_RE = /\b(components?|templates?|catalog|library|install|buttons?|d
 const RESEARCH_RE = /\b(web|internet|online|search|research|lookup|google|docs?|documentation|latest|changelog|version of)\b|\blook up\b/i
 const PLAN_RE = /\bplans?\b|\/plan\b/i
 const FEATURE_RE = /feature[-\s]?graph|feature[-\s]pack|\binstall(?:ing|ed)?\b[^.]*\bpack\b/i
+const FLOW_RE = /user[-\s]?flow|flow[-\s]?graph/i
 const CODE_RE = /\b(unpack\w*|unminif\w*|de-?minif\w*|minified|beautif\w*|prettif\w*|bundles?|bundled|vendor|obfuscat\w*)\b|\.min\.(?:js|mjs|cjs|ts)\b/i
 const SPREADSHEET_RE = /\bspreadsheets?\b|\bcsv\b|\btsv\b|\bcells?\b/i
 const DATA_RE = /\b(json|ya?ml|toml|xml|config|configuration|settings?)\b|\.env\b/i
@@ -276,6 +291,8 @@ export interface FilesTurnSignals {
   hasActivePlan?: boolean
   /** A feature graph exists in this project (state evidence, beats text). */
   hasFeatureGraph?: boolean
+  /** A user flow graph exists in this project (state evidence, beats text). */
+  hasUserFlowGraph?: boolean
   /** A web search backend is available this turn. */
   searchAvailable?: boolean
 }
@@ -294,5 +311,6 @@ export function fileToolsForTurn(signals: FilesTurnSignals): string[] {
   if (signals.searchAvailable && RESEARCH_RE.test(text)) for (const t of FILE_RESEARCH_TOOLS) wanted.add(t)
   if (signals.hasActivePlan || PLAN_RE.test(text)) for (const t of FILE_PLAN_TOOLS) wanted.add(t)
   if (signals.hasFeatureGraph || FEATURE_RE.test(text)) for (const t of FILE_FEATURE_TOOLS) wanted.add(t)
+  if (signals.hasUserFlowGraph || FLOW_RE.test(text)) for (const t of FILE_USERFLOW_TOOLS) wanted.add(t)
   return FILE_ACTIVE_TOOLS.filter((t) => wanted.has(t))
 }

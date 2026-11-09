@@ -450,7 +450,21 @@ export async function planFromGraph(input: { nodeId?: string, packId?: string })
 
 /* ── Feature graph (ai-features/) ─────────────────────────── */
 
-export type FeatureNodeStatus = 'proposed' | 'planned' | 'building' | 'done' | 'verified' | 'blocked' | 'dropped'
+export type FeatureNodeStatus = 'proposed' | 'planned' | 'building' | 'done' | 'verified' | 'blocked' | 'dropped' | 'suggested'
+
+/** Dogfood provenance on a feature node derivation created —
+ * mirrors src/features/features.ts SuggestionProvenance. */
+export interface SuggestionProvenanceItem {
+  source: 'dogfood'
+  kind: 'fix' | 'coverage'
+  stepId: string
+  stepName: string
+  state?: 'blocked' | 'error'
+  blockKind?: string
+  evidence?: string
+  runId?: string
+  at: string
+}
 
 export interface FeatureParamItem {
   name: string
@@ -472,6 +486,7 @@ export interface FeatureNodeItem {
   params?: FeatureParamItem[]
   values?: Record<string, string>
   note?: string
+  suggestion?: SuggestionProvenanceItem
 }
 
 export interface FeatureEdgeItem { from: string, to: string, type: string }
@@ -545,6 +560,32 @@ export async function unlinkFeatures(from: string, to: string, type: string) {
   return postJson<{ ok: boolean, totalEdges?: number, error?: string }>('/api/features/unlinks', { from, to, type })
 }
 
+export interface DeriveSuggestionsResult {
+  ok: boolean
+  created?: FeatureNodeItem[]
+  withdrawn?: { id: string, name: string }[]
+  skippedDismissed?: number
+  alreadyLive?: number
+  suggestions?: FeatureNodeItem[]
+  rollup?: FeatureRollup
+  error?: string
+}
+
+export async function deriveFeatureSuggestions() {
+  return postJson<DeriveSuggestionsResult>('/api/features/suggestions/derive', {})
+}
+
+export async function acceptFeatureSuggestion(id: string, regionId?: string | null) {
+  return postJson<{ ok: boolean, node?: FeatureNodeItem, rollup?: FeatureRollup, error?: string }>(
+    '/api/features/suggestions/accept',
+    regionId === undefined ? { id } : { id, regionId },
+  )
+}
+
+export async function dismissFeatureSuggestion(id: string) {
+  return postJson<{ ok: boolean, rollup?: FeatureRollup, error?: string }>('/api/features/suggestions/dismiss', { id })
+}
+
 export interface GraphProblemItem { kind: string, message: string, nodeId?: string }
 
 export async function getFeatureLint() {
@@ -557,6 +598,78 @@ export interface DriftItem { nodeId: string, node: string, binding: string, prob
 export async function getFeatureReconcile() {
   const r = await fetch(`${API}/api/features/reconcile`)
   return r.json() as Promise<{ ok: boolean, drift: DriftItem[], checked: number }>
+}
+
+/* ── User flow graph (ai-user-flows/) ─────────────────────── */
+
+export type UserFlowStepType = 'screen' | 'action' | 'outcome'
+export type UserFlowEdgeType = 'navigates-to' | 'submits' | 'branches-on' | 'requires'
+export type VerificationState = 'untested' | 'ok' | 'blocked' | 'error'
+export type BlockKind = 'unreachable' | 'missing-affordance' | 'console-error' | 'dead-end' | 'state-blocked'
+
+export interface StepBlockItem {
+  kind: BlockKind
+  evidence?: string
+  runId?: string
+  at: string
+}
+
+export interface UserFlowJourneyItem { id: string, name: string, note?: string }
+
+export interface UserFlowStepItem {
+  id: string
+  name: string
+  type: UserFlowStepType
+  journey: string
+  note?: string
+  verification: { state: VerificationState, block?: StepBlockItem }
+}
+
+export interface UserFlowEdgeItem { from: string, to: string, type: UserFlowEdgeType }
+export interface ExercisesLinkItem { step: string, feature: string }
+
+export interface UserFlowGraphItem {
+  title: string
+  journeys: UserFlowJourneyItem[]
+  steps: UserFlowStepItem[]
+  edges: UserFlowEdgeItem[]
+  exercises: ExercisesLinkItem[]
+  sync?: { commit: string | null, at: number }
+}
+
+export interface UserFlowCountsItem {
+  journeys: number
+  steps: number
+  ok: number
+  blocked: number
+  error: number
+  untested: number
+  verifiedPct: number
+}
+
+export async function getUserFlows() {
+  const r = await fetch(`${API}/api/userflows`)
+  return r.json() as Promise<{ ok: boolean, graph: UserFlowGraphItem | null, counts: UserFlowCountsItem | null, error?: string }>
+}
+
+/** Add a step; `journey` is a journey id or name — a name that
+ * does not exist yet starts that journey (the store's rule). */
+export async function addUserFlowStep(input: { name: string, type: UserFlowStepType, journey: string, note?: string }) {
+  return postJson<{ ok: boolean, step?: UserFlowStepItem, journey?: { id: string, name: string }, totalSteps?: number, error?: string }>('/api/userflows/steps', input)
+}
+
+export async function editUserFlowStep(id: string, patch: { name?: string, type?: UserFlowStepType, journey?: string }) {
+  return postJson<{ ok: boolean, step?: UserFlowStepItem, error?: string }>('/api/userflows/steps/edit', { id, ...patch })
+}
+
+/** Link two steps with a typed edge, or — type 'exercises' — a
+ * step to the feature node it exercises (`to` is then a feature id). */
+export async function linkUserFlows(from: string, to: string, type: UserFlowEdgeType | 'exercises') {
+  return postJson<{ ok: boolean, totalEdges?: number, totalExercises?: number, error?: string }>('/api/userflows/links', { from, to, type })
+}
+
+export async function unlinkUserFlows(from: string, to: string, type: UserFlowEdgeType | 'exercises') {
+  return postJson<{ ok: boolean, totalEdges?: number, totalExercises?: number, error?: string }>('/api/userflows/unlinks', { from, to, type })
 }
 
 export async function getPlan(slug: string) {

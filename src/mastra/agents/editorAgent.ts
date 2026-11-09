@@ -17,6 +17,9 @@ import {
 import {
   featureAddNodeTool, featureBuildNodeTool, featureEditNodeTool, featureInstallPackTool, featureLinkTool, featureLintTool, featureQueryTool, featureReconcileTool, featureRemoveNodeTool, featureSetParamTool, featureSetStatusTool, featureUninstallPackTool, featureUnlinkTool,
 } from '../tools/featureTools.js'
+import {
+  userflowAddStepTool, userflowDeriveSuggestionsTool, userflowLinkTool, userflowQueryTool, userflowSetVerificationTool,
+} from '../tools/userflowTools.js'
 import { toolResultTrimProcessor } from '../../contextTrim.js'
 import { readSkillTool, runSkillChecksTool } from '../tools/skillTools.js'
 import { readSymbolTool, unpackCodeTool } from '../tools/codeTools.js'
@@ -158,6 +161,11 @@ export const editorAgent = new Agent({
     'feature-lint': featureLintTool,
     'feature-uninstall-pack': featureUninstallPackTool,
     'feature-reconcile': featureReconcileTool,
+    'userflow-add-step': userflowAddStepTool,
+    'userflow-set-verification': userflowSetVerificationTool,
+    'userflow-link': userflowLinkTool,
+    'userflow-query': userflowQueryTool,
+    'userflow-derive-suggestions': userflowDeriveSuggestionsTool,
     'get-console': getConsoleTool,
     'get-network-failures': getNetworkFailuresTool,
   }

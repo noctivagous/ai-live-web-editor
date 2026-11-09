@@ -35,7 +35,7 @@ import {
 } from '../lib/annotationSync'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { loadUiPrefs, saveUiPrefs, type ChatViewPref } from '../lib/uiPrefs'
-import { graphUpdateTarget, launchGraphUpdate, parseGraphUpdateCommand } from '../lib/graphUpdate'
+import { GRAPH_UPDATE_TARGETS, graphUpdateTarget, launchGraphUpdate, parseGraphUpdateCommand } from '../lib/graphUpdate'
 import { WRITE_TOOLS } from '../../agentTools'
 import { slideTurnsOrDefault } from '../lib/deck'
 
@@ -244,15 +244,17 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       setInput('')
       const target = graphUpdateTarget(graphUpdate.target)
       if (!target) {
-        setLog(l => [...l, { role: 'system', text: `No graph called “${graphUpdate.target}”. /graph-update takes a target — today that is just: feature.` }])
+        const ready = GRAPH_UPDATE_TARGETS.filter(t => t.ready).map(t => t.id).join(', ')
+        setLog(l => [...l, { role: 'system', text: `No graph called “${graphUpdate.target}”. /graph-update takes a target — today those are: ${ready}.` }])
         return
       }
       if (!target.ready) {
-        setLog(l => [...l, { role: 'system', text: `The ${target.label.toLowerCase()} is not a /graph-update target yet — the command is ready for it, the graph is not built. For now: /graph-update feature.` }])
+        const ready = GRAPH_UPDATE_TARGETS.filter(t => t.ready).map(t => `/graph-update ${t.id}`).join(' or ')
+        setLog(l => [...l, { role: 'system', text: `The ${target.label.toLowerCase()} is not a /graph-update target yet — the command is ready for it, the graph is not built. For now: ${ready}.` }])
         return
       }
       launchGraphUpdate(target.id)
-      setLog(l => [...l, { role: 'system', text: '/graph-update feature launched — the graph pane is open; each change the agent makes lands there as it happens.' }])
+      setLog(l => [...l, { role: 'system', text: `/graph-update ${target.id} launched — the graph pane is open; each change the agent makes lands there as it happens.` }])
       return
     }
     void sendText(input)

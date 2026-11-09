@@ -23,6 +23,7 @@ import { packSummaryLine } from './catalog/packs.js'
 import { searchAvailable, searchBackendLabel } from './research/searchBackend.js'
 import { getActivePlan } from './plans/plans.js'
 import { featureGraphSummary, getFeatureGraph } from './features/features.js'
+import { flowGraphSummary, getUserFlowGraph } from './userflows/userflows.js'
 
 export const PROJECT_CONFIG_FILE = 'project.ai.json'
 
@@ -200,6 +201,10 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   try {
     const graph = getFeatureGraph()
     if (graph) lines.push(featureGraphSummary(graph))
+  } catch { /* the brief never breaks on the graph */ }
+  try {
+    const flowGraph = getUserFlowGraph()
+    if (flowGraph) lines.push(flowGraphSummary(flowGraph))
   } catch { /* the brief never breaks on the graph */ }
   return lines.join('\n')
 }

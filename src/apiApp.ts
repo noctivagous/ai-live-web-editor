@@ -17,6 +17,7 @@ import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountFeatureApi } from './features/featureApi.js'
+import { mountUserFlowApi } from './userflows/userflowApi.js'
 import { mountMcpApi } from './mcp/mcpApi.js'
 import { mountSkillsApi } from './skills/skillsApi.js'
 import { mountMemoryApi } from './mastra/memoryApi.js'
@@ -76,6 +77,7 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 mountResearchApi(app)
 mountPlanApi(app)
 mountFeatureApi(app)
+mountUserFlowApi(app)
 mountMcpApi(app)
 mountSkillsApi(app)
 mountMemoryApi(app)
@@ -220,11 +222,13 @@ mountMemoryApi(app)
       if (mode === 'files') {
         const { getActivePlan } = await import('./plans/plans.js')
         const { getFeatureGraph } = await import('./features/features.js')
+        const { getUserFlowGraph } = await import('./userflows/userflows.js')
         const { getSearchBackend } = await import('./searchSession.js')
         tools = fileToolsForTurn({
           userText,
           hasActivePlan: Boolean(getActivePlan()),
           hasFeatureGraph: Boolean(getFeatureGraph()),
+          hasUserFlowGraph: Boolean(getUserFlowGraph()),
           searchAvailable: getSearchBackend() !== 'off',
         })
       }

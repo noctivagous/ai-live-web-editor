@@ -91,7 +91,7 @@ describe('mapMastraChunk', () => {
           result: { error: 'old_string not found — file unchanged', path: '/App.jsx', matches: 0 },
         },
       }),
-      { type: 'tool-result', id: 'c3', name: 'str-replace', ok: false, detail: 'old_string not found — file unchanged' },
+      { type: 'tool-result', id: 'c3', name: 'str-replace', ok: false, detail: 'old_string not found — file unchanged · /App.jsx · 0 matches' },
     )
   })
 
@@ -144,6 +144,14 @@ describe('summarize', () => {
   it('summarizes file lists and errors', () => {
     assert.equal(summarizeResult({ files: ['a', 'b'], root: '/x' }), '2 files')
     assert.equal(summarizeResult({ error: 'Not found: /nope' }), 'Not found: /nope')
+    assert.equal(
+      summarizeResult({ error: 'old_string not found — file unchanged', path: '/src/App.jsx', matches: 0, fileLines: 3 }),
+      'old_string not found — file unchanged · /src/App.jsx · 0 matches · 3 lines',
+    )
+    assert.equal(
+      summarizeResult({ ok: true, path: '/src/App.jsx', matches: 1, range: [2, 3], fileLines: 4 }),
+      '/src/App.jsx · 1 match · L2–3 · 4 lines',
+    )
     assert.equal(summarizeResult({ ok: true, path: '/a', bytes: 12 }), '/a · 12b')
     assert.equal(summarizeResult({ hits: [{ path: '/a', line: 1, text: 'x' }], count: 1 }), '1 hits')
     assert.equal(summarizeResult({ path: '/a', matches: 1, snippet: '1| x' }), '/a · 1 match')

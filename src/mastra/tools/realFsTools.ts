@@ -5,7 +5,8 @@ import fs from 'fs'
 import path from 'path'
 import { getFsRoot } from '../../launcher.js'
 import { livePageOp, poolOpen } from '../../liveTarget.js'
-import { applyStrReplace, compileGrep, GREP_MAX_HITS, grepText, isPlaceholderWrite, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
+import { applyStrReplace, compileGrep, countLines, GREP_MAX_HITS, grepText, isPlaceholderWrite, lineRangeOf, sliceLines, snippetAround, type GrepHit } from './fsEdit.js'
+import { logToolCall, type ToolCallEntry } from '../../serverLog.js'
 import { sketchWriteGuard } from '../../sketchSession.js'
 import { selfWriteGuard } from '../../selfMode.js'
 import { resolveProjectPath } from '../../projectPath.js'
@@ -27,6 +28,75 @@ function toolPath(p: string): ToolPath {
 function relFromRoot(full: string): string {
   const root = getFsRoot()
   return '/' + path.relative(root, full).replace(/\\/g, '/')
+}
+
+/** Cap for the logging re-read (mirrors grep's 1MB skip). */
+const LOG_READ_CAP = 1_000_000
+
+/** Best-effort current line count for a canonical project path. */
+function liveLineCount(canonicalPath: string): number | undefined {
+  try {
+    const r = resolveProjectPath(getFsRoot(), canonicalPath)
+    if (r.ok === false) return undefined
+    const st = fs.statSync(r.full)
+    if (!st.isFile() || st.size > LOG_READ_CAP) return undefined
+    const buf = fs.readFileSync(r.full)
+    if (buf.subarray(0, 8192).includes(0)) return undefined
+    return countLines(buf.toString('utf-8'))
+  } catch { return undefined }
+}
+
+/**
+ * Tool-call logging for the file tools: every call appends tool name,
+ * canonical path, line range, the file's actual line count, and outcome
+ * to logs/ as JSONL — counts and ranges only, never file contents.
+ * Applied by mutation so tool identity (and mastra registration) is
+ * unchanged; logging never breaks or alters the wrapped call.
+ */
+function withToolLog<T extends { execute?: (...args: any[]) => Promise<any> }>(toolId: string, tool: T): T {
+  const inner = tool.execute?.bind(tool)
+  if (!inner) return tool
+  const wrapped = async (...args: any[]): Promise<any> => {
+    const t0 = Date.now()
+    const finish = (out: unknown, thrown: string | null): void => {
+      try {
+        const rec = (out ?? {}) as Record<string, unknown>
+        const err = thrown ?? (typeof rec.error === 'string' ? rec.error : null)
+        const entry: ToolCallEntry = { tool: toolId, ok: !err, elapsedMs: Date.now() - t0 }
+        if (err) entry.error = err
+        const argPath = (args[0] as { path?: unknown } | undefined)?.path
+        const p = typeof rec.path === 'string' ? rec.path
+          : typeof rec.to === 'string' ? rec.to
+          : typeof rec.from === 'string' ? rec.from
+          : typeof argPath === 'string' ? argPath : undefined
+        if (p) entry.path = p
+        if (typeof rec.matches === 'number') entry.matches = rec.matches
+        if (typeof rec.created === 'boolean') entry.created = rec.created
+        if (Array.isArray(rec.range) && rec.range.length === 2 && typeof rec.range[0] === 'number' && typeof rec.range[1] === 'number') {
+          entry.range = [rec.range[0], rec.range[1]]
+        } else if (typeof rec.startLine === 'number' && typeof rec.endLine === 'number') {
+          entry.range = [rec.startLine, rec.endLine]
+        }
+        if (typeof rec.totalLines === 'number') entry.fileLines = rec.totalLines
+        else if (typeof rec.fileLines === 'number') entry.fileLines = rec.fileLines
+        else if (entry.path) {
+          const live = liveLineCount(entry.path)
+          if (typeof live === 'number') entry.fileLines = live
+        }
+        logToolCall(entry)
+      } catch { /* logging never breaks the tool call */ }
+    }
+    try {
+      const out = await inner(...args)
+      finish(out, null)
+      return out
+    } catch (e) {
+      finish(undefined, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+  ;(tool as { execute: (...args: any[]) => Promise<any> }).execute = wrapped
+  return tool
 }
 
 function walkFiles(dir: string, acc: string[] = []): string[] {
@@ -147,13 +217,18 @@ export const strReplaceTool = createTool({
     if (fs.statSync(r.full).isDirectory()) return { error: 'Is a directory: ' + r.rel, path: r.rel }
     const before = fs.readFileSync(r.full, 'utf-8')
     const result = applyStrReplace(before, old_string, new_string, replace_all === true)
-    if (result.ok === false) return { error: result.error, path: r.rel, matches: result.matches }
+    // Line facts ride the result so a failure report can say what the
+    // file actually looked like (e.g. a miss on a 124-line file).
+    if (result.ok === false) return { ok: false, error: result.error, path: r.rel, matches: result.matches, fileLines: countLines(before) }
     fs.writeFileSync(r.full, result.content, 'utf-8')
+    const range = lineRangeOf(result.content, new_string)
     return {
       ok: true,
       path: r.rel,
       matches: result.matches,
       bytes: result.content.length,
+      fileLines: countLines(result.content),
+      ...(range ? { range } : null),
       snippet: snippetAround(result.content, new_string),
       mode: 'str-replace',
     }
@@ -359,3 +434,16 @@ export const runProjectCheckTool = createTool({
     }
   },
 })
+
+/* Tool-call logging for the file tools (see withToolLog above): applied
+ * here, after every tool is defined, by mutation — tool identity and
+ * mastra registration are unchanged. run-project-check keeps its own
+ * server-error logging; live-page tools carry no file/line facts. */
+withToolLog('list-real-files', listRealFilesTool)
+withToolLog('read-real-file', readRealFileTool)
+withToolLog('grep', grepTool)
+withToolLog('str-replace', strReplaceTool)
+withToolLog('write-real-file', writeRealFileTool)
+withToolLog('delete-file', deleteFileTool)
+withToolLog('rename-file', renameFileTool)
+withToolLog('make-dir', makeDirTool)

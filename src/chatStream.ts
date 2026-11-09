@@ -144,20 +144,39 @@ export function summarizeArgs(name: string, args: unknown): string {
   return parts.join(' ')
 }
 
+/** Applied line range from a tool result (`range` or `startLine`/`endLine`). */
+function resultRange(r: LooseRecord): [number, number] | null {
+  if (Array.isArray(r.range) && r.range.length === 2 && typeof r.range[0] === 'number' && typeof r.range[1] === 'number') {
+    return [r.range[0], r.range[1]]
+  }
+  if (typeof r.startLine === 'number' && typeof r.endLine === 'number') return [r.startLine, r.endLine]
+  return null
+}
+
+function matchBits(r: LooseRecord): string[] {
+  const bits: string[] = []
+  if (typeof r.matches === 'number') bits.push(`${r.matches} match${r.matches === 1 ? '' : 'es'}`)
+  const range = resultRange(r)
+  if (range) bits.push(`L${range[0]}–${range[1]}`)
+  if (typeof r.fileLines === 'number') bits.push(`${r.fileLines} lines`)
+  return bits
+}
+
 export function summarizeResult(result: unknown): string {
   if (result == null) return 'done'
   if (typeof result === 'string') return clip(result, 200)
   if (typeof result !== 'object') return clip(String(result), 200)
   const r = result as LooseRecord
-  if (r.error) return clip(String(r.error), 200)
+  // Error results keep the message first, then the line facts — a miss
+  // reads "old_string not found … · /path · 0 matches · 124 lines".
+  if (r.error) return [clip(String(r.error), 200), ...(typeof r.path === 'string' ? [r.path] : []), ...matchBits(r)].join(' · ')
   const bits: string[] = []
   if (typeof r.path === 'string') bits.push(r.path)
   if (typeof r.bytes === 'number') bits.push(`${r.bytes}b`)
   if (typeof r.content === 'string') bits.push(`${r.content.length} chars`)
   if (Array.isArray(r.files)) bits.push(`${r.files.length} files`)
   if (Array.isArray(r.hits)) bits.push(`${r.hits.length} hits`)
-  if (typeof r.matches === 'number') bits.push(`${r.matches} match${r.matches === 1 ? '' : 'es'}`)
-  if (typeof r.startLine === 'number' && typeof r.endLine === 'number') bits.push(`L${r.startLine}–${r.endLine}`)
+  bits.push(...matchBits(r))
   if (r.rect && typeof r.rect === 'object') {
     const rect = r.rect as { width?: number; height?: number }
     if (rect.width != null && rect.height != null) bits.push(`${Math.round(rect.width)}×${Math.round(rect.height)}`)

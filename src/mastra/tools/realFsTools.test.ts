@@ -1,9 +1,30 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { afterEach, beforeEach, describe, it } from 'node:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { dayFile } from '../../serverLog.js'
 import { setFsRoot } from '../../launcher.js'
+
+/* Tool calls append to logs/ — isolate the log home per test so the
+ * suite never touches the repo's real logs. */
+let logHome = ''
+let savedLogHome: string | undefined
+beforeEach(() => {
+  logHome = fs.mkdtempSync(path.join(os.tmpdir(), 'realfs-log-test-'))
+  savedLogHome = process.env.AI_LIVE_LOG_DIR
+  process.env.AI_LIVE_LOG_DIR = logHome
+})
+afterEach(() => {
+  if (savedLogHome === undefined) delete process.env.AI_LIVE_LOG_DIR
+  else process.env.AI_LIVE_LOG_DIR = savedLogHome
+  fs.rmSync(logHome, { recursive: true, force: true })
+})
+function loggedRows(): Record<string, unknown>[] {
+  const file = dayFile(logHome)
+  if (!fs.existsSync(file)) return []
+  return fs.readFileSync(file, 'utf-8').trim().split('\n').map(l => JSON.parse(l) as Record<string, unknown>)
+}
 import { deleteFileTool, grepTool, LIST_FILES_CAP, listRealFilesTool, makeDirTool, readRealFileTool, renameFileTool, strReplaceTool, writeRealFileTool } from './realFsTools.js'
 
 /**
@@ -218,6 +239,47 @@ describe('read / str-replace / grep path forms', () => {
       assert.equal(r.count, 1)
       const bad = await run(grepTool, { pattern: 'div', path: '../' })
       assert.match(String(bad.error), /escapes the project root/)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('str-replace line facts (failure report)', () => {
+  it('a miss returns the file’s actual line count with matches:0', async () => {
+    const root = tmpProject()
+    try {
+      fs.writeFileSync(path.join(root, 'src', 'App.jsx'), 'line1\nline2\nline3\n')
+      const miss = await run(strReplaceTool, { path: '/src/App.jsx', old_string: 'nope-not-here', new_string: 'x' })
+      assert.match(String(miss.error), /old_string not found/)
+      assert.equal(miss.matches, 0)
+      assert.equal(miss.fileLines, 3)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('a hit returns the applied 1-based line range', async () => {
+    const root = tmpProject()
+    try {
+      fs.writeFileSync(path.join(root, 'src', 'App.jsx'), 'line1\nline2\nline3\n')
+      const hit = await run(strReplaceTool, { path: '/src/App.jsx', old_string: 'line2', new_string: 'LINE2\nLINE2b' })
+      assert.equal(hit.ok, true)
+      assert.deepEqual(hit.range, [2, 3])
+      assert.equal(hit.fileLines, 4)
+    } finally { fs.rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('logs every call with tool, path, line facts and outcome', async () => {
+    const root = tmpProject()
+    try {
+      fs.writeFileSync(path.join(root, 'src', 'App.jsx'), 'line1\nline2\nline3\n')
+      await run(strReplaceTool, { path: '/src/App.jsx', old_string: 'nope', new_string: 'x' })
+      const rows = loggedRows()
+      assert.equal(rows.length, 1)
+      assert.equal(rows[0].kind, 'tool-call')
+      assert.equal(rows[0].tool, 'str-replace')
+      assert.equal(rows[0].path, '/src/App.jsx')
+      assert.equal(rows[0].ok, false)
+      assert.equal(rows[0].matches, 0)
+      assert.equal(rows[0].fileLines, 3)
+      assert.match(String(rows[0].error), /old_string not found/)
     } finally { fs.rmSync(root, { recursive: true, force: true }) }
   })
 })

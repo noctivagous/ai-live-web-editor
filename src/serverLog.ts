@@ -26,6 +26,7 @@ export type ServerLogKind =
   | 'verify-gate'
   | 'pool'
   | 'project-check'
+  | 'tool-call'
 
 export interface ServerLogEntry {
   kind: ServerLogKind
@@ -70,6 +71,54 @@ export function pruneLogs(dir: string = logDir(), retainDays: number = RETAIN_DA
 
 function clipped(value: unknown): string {
   return String(value ?? '').slice(0, FIELD_CAP)
+}
+
+export interface ToolCallEntry {
+  tool: string
+  /** Canonical /… project path when the call targets one. */
+  path?: string
+  /** Requested (read offset/limit) or applied (edit location) 1-based line range. */
+  range?: [number, number]
+  /** Actual file line count observed at call time. */
+  fileLines?: number
+  /** str-replace match count. */
+  matches?: number
+  /** write-real-file created flag. */
+  created?: boolean
+  ok: boolean
+  /** Failure message only — never file contents or edit bodies. */
+  error?: string
+  elapsedMs?: number
+}
+
+/**
+ * Tool-call log: what the agent touched, where it landed, and what the
+ * file actually looked like — tool name, path, line range, and the
+ * file's real line count, plus outcome. Lengths, counts, and ranges
+ * only, never file contents or edit bodies (redaction by construction,
+ * same as logServerError). Every write is guarded: logging can never
+ * break the tool call it records.
+ */
+export function logToolCall(entry: ToolCallEntry): void {
+  try {
+    const dir = logDir()
+    fs.mkdirSync(dir, { recursive: true })
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      kind: 'tool-call',
+      tool: clipped(entry.tool),
+      ...(entry.path ? { path: clipped(entry.path) } : null),
+      ...(entry.range ? { range: entry.range } : null),
+      ...(typeof entry.fileLines === 'number' ? { fileLines: entry.fileLines } : null),
+      ...(typeof entry.matches === 'number' ? { matches: entry.matches } : null),
+      ...(typeof entry.created === 'boolean' ? { created: entry.created } : null),
+      ok: entry.ok,
+      ...(entry.error ? { error: clipped(entry.error) } : null),
+      ...(typeof entry.elapsedMs === 'number' ? { elapsedMs: entry.elapsedMs } : null),
+    })
+    fs.appendFileSync(dayFile(dir), line + '\n', 'utf-8')
+    pruneLogs(dir)
+  } catch { /* logging never breaks the tool call */ }
 }
 
 /** Append one JSONL line. Never throws. */

@@ -106,3 +106,20 @@ export function compileGrep(pattern: string, caseInsensitive?: boolean): RegExp 
 export function isPlaceholderWrite(content: string): boolean {
   return /\[original content\]/i.test(content)
 }
+
+/** Line count of text (a trailing newline does not add a phantom line). */
+export function countLines(text: string): number {
+  if (!text) return 0
+  const parts = text.split('\n')
+  return parts.length - (text.endsWith('\n') ? 1 : 0)
+}
+
+/** 1-based [start, end] line range of needle's first occurrence in content, or null. */
+export function lineRangeOf(content: string, needle: string): [number, number] | null {
+  if (!needle) return null
+  const idx = content.indexOf(needle)
+  if (idx < 0) return null
+  const start = countLines(content.slice(0, idx)) + 1
+  const end = start + countLines(needle) - 1
+  return [start, Math.max(start, end)]
+}

@@ -3,7 +3,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { dayFile, logDir, logServerError, pruneLogs } from './serverLog.js'
+import { dayFile, logDir, logServerError, logToolCall, pruneLogs } from './serverLog.js'
 
 let dir = ''
 let savedEnv = ''
@@ -76,5 +76,27 @@ describe('pruneLogs', () => {
 describe('logDir', () => {
   it('follows the override env', () => {
     assert.equal(logDir(), path.resolve(dir))
+  })
+})
+
+describe('logToolCall', () => {
+  it('writes one JSONL tool-call line with tool, path, range, file lines and outcome', () => {
+    logToolCall({ tool: 'str-replace', path: '/src/hooks/usePersistedSettings.js', range: [387, 387], fileLines: 124, matches: 0, ok: false, error: 'old_string not found — file unchanged', elapsedMs: 2 })
+    const row = JSON.parse(fs.readFileSync(dayFile(dir), 'utf-8').trim())
+    assert.deepEqual(
+      Object.keys(row).sort(),
+      ['elapsedMs', 'error', 'fileLines', 'kind', 'matches', 'ok', 'path', 'range', 'tool', 'ts'],
+    )
+    assert.equal(row.kind, 'tool-call')
+    assert.equal(row.tool, 'str-replace')
+    assert.equal(row.fileLines, 124)
+    assert.equal(row.ok, false)
+  })
+
+  it('never throws when the log home is unwritable', () => {
+    process.env.AI_LIVE_LOG_DIR = '/proc/ai-live-logs-test-unwritable'
+    assert.doesNotThrow(() => {
+      logToolCall({ tool: 'read-real-file', path: '/x', ok: true })
+    })
   })
 })

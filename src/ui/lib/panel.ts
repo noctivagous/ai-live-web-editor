@@ -1,4 +1,4 @@
-import { classifyTool, filesFromSteps, looksLikeKeyError, type DeckTurn, type ToolGroup } from './deck.js'
+import { classifyTool, filesFromSteps, looksLikeKeyError, skillsOfTurn, type DeckTurn, type ToolGroup } from './deck.js'
 import type { ToolStep } from './chatSession.js'
 
 /**
@@ -79,7 +79,7 @@ export interface PanelState {
   /** First line of the turn's error, or null when nothing needs the user. */
   attention: string | null
   attentionIsKeyError: boolean
-  summary: { task: string, result: string, changes: string }
+  summary: { task: string, result: string, changes: string, skills: string }
 }
 
 function clip(text: string, max = 140): string {
@@ -119,7 +119,7 @@ export function derivePanel(turn: DeckTurn | null, opts: { sending?: boolean, wo
       tokens: null,
       attention: null,
       attentionIsKeyError: false,
-      summary: { task: '—', result: '—', changes: '—' },
+      summary: { task: '—', result: '—', changes: '—', skills: '—' },
     }
   }
 
@@ -248,6 +248,7 @@ export function derivePanel(turn: DeckTurn | null, opts: { sending?: boolean, wo
       task: turn.intent ? clip(turn.intent, 120) : '—',
       result: resultCard ? firstLine(resultCard.text) : '—',
       changes,
+      skills: skillsOfTurn(turn).map(s => s.name).join(' · ') || '—',
     },
   }
 }

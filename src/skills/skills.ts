@@ -26,18 +26,31 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getFsRoot } from '../launcher.js'
 import { readProjectConfig } from '../projectConfig.js'
+import { disabledSkillNames } from './skillSettings.js'
 
 export const SKILL_BODY_TOKEN_BUDGET = 5000
 export const SKILL_INJECTION_TOKEN_BUDGET = 5000
+/**
+ * Soft budget for the resident index (tier 1): the token cost the
+ * Skills panel warns past. Nothing is ever dropped at this line —
+ * the panel shows the overage and lets the user decide (skills UI
+ * slice 1). Enforcement through per-skill toggles is a later slice.
+ */
+export const SKILL_INDEX_TOKEN_BUDGET = 1200
 
-export const SKILLS_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..', '..', 'skills',
-)
+export const SKILLS_DIR = process.env.AI_LIVE_SKILLS_DIR
+  ? path.resolve(process.env.AI_LIVE_SKILLS_DIR)
+  : path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..', '..', 'skills',
+  )
 
 export interface SkillMeta {
   name: string
   description: string
+  /** Display grouping in the Skills panel (an ALE field, not part
+   *  of the agentskills.io spec's six). Defaults to 'General'. */
+  category: string
   /** Phrases/words in the user's ask that trigger this skill. */
   triggers: string[]
   /** Project types (project.ai.json) this skill applies to. */
@@ -85,6 +98,7 @@ export function parseSkillFile(text: string, dir: string): Skill | null {
   return {
     name,
     description,
+    category: fields.get('category')?.replace(/^['"]|['"]$/g, '').trim() || 'General',
     triggers: parseList(fields.get('triggers')),
     types: parseList(fields.get('types')),
     dependsOn: parseList(fields.get('dependsOn')),
@@ -121,6 +135,19 @@ export function resetSkillsCache(): void {
   cached = null
 }
 
+/**
+ * The skills the agent actually carries: everything loadSkills
+ * found, minus the ones the user turned off in the Skills panel
+ * (slice 2). Off means entirely out — no index line, no trigger
+ * matching, no read-skill. The panel itself lists ALL skills,
+ * using loadSkills, so an off skill stays visible and fixable.
+ */
+export function activeSkills(): Skill[] {
+  const disabled = disabledSkillNames()
+  if (!disabled.size) return loadSkills()
+  return loadSkills().filter(s => !disabled.has(s.name))
+}
+
 export function getSkill(name: string, skills: Skill[] = loadSkills()): Skill | undefined {
   return skills.find(s => s.name === name)
 }
@@ -130,16 +157,24 @@ export function getSkill(name: string, skills: Skill[] = loadSkills()): Skill | 
  * Each skill costs one line (~100 tokens): name, one-line
  * description, and how its body is reached.
  */
-export function skillIndexText(skills: Skill[] = loadSkills()): string {
+/** One skill's index line — the exact text that rides every turn. */
+export function skillIndexLine(s: Skill): string {
+  const desc = s.description.length > 220 ? s.description.slice(0, 219).trimEnd() + '…' : s.description
+  const via: string[] = []
+  if (s.triggers.length) via.push(`ask mentions ${s.triggers.slice(0, 4).join('/')}`)
+  if (s.dependsOn.length) via.push(`project depends on ${s.dependsOn.join('/')}`)
+  if (s.types.length) via.push(`project type ${s.types.join('/')}`)
+  return `- ${s.name}: ${desc}${via.length ? ` (loads when: ${via.join('; ')})` : ''}`
+}
+
+/** What one skill's index line costs on every turn, in tokens. */
+export function skillIndexTokens(s: Skill): number {
+  return estimateTokens(skillIndexLine(s))
+}
+
+export function skillIndexText(skills: Skill[] = activeSkills()): string {
   if (!skills.length) return ''
-  const lines = skills.map(s => {
-    const desc = s.description.length > 220 ? s.description.slice(0, 219).trimEnd() + '…' : s.description
-    const via: string[] = []
-    if (s.triggers.length) via.push(`ask mentions ${s.triggers.slice(0, 4).join('/')}`)
-    if (s.dependsOn.length) via.push(`project depends on ${s.dependsOn.join('/')}`)
-    if (s.types.length) via.push(`project type ${s.types.join('/')}`)
-    return `- ${s.name}: ${desc}${via.length ? ` (loads when: ${via.join('; ')})` : ''}`
-  })
+  const lines = skills.map(skillIndexLine)
   return `\n\nSkills (progressive disclosure — these one-liners are always visible; a skill's body loads only when the task triggers it, or when you call read-skill with its name; never guess a body you have not loaded):\n${lines.join('\n')}`
 }
 
@@ -197,26 +232,50 @@ export function projectDependencies(root: string = getFsRoot()): string[] {
  * only, in match order; anything past the budget stays metadata.
  * Returns null when nothing triggers (a plain copy fix pays 0).
  */
-export function skillInjectionText(
+export interface SkillInjectionDetail {
+  text: string | null
+  /** The skills whose bodies actually joined (budget-skips excluded). */
+  included: { name: string, via: SkillMatch['via'] }[]
+}
+
+/** skillInjectionText plus the record of what was included — the
+ *  turn path reports `included` to the chat UI (the Skills-used
+ *  chip), so what the agent carried is never invisible. */
+export function skillInjectionDetail(
   input: { text?: string, projectType?: string, deps?: string[] },
-  skills: Skill[] = loadSkills(),
+  skills: Skill[] = activeSkills(),
   budgetTokens: number = SKILL_INJECTION_TOKEN_BUDGET,
-): string | null {
+): SkillInjectionDetail {
   const matches = matchSkills(input, skills)
-  if (!matches.length) return null
+  if (!matches.length) return { text: null, included: [] }
   const parts: string[] = []
+  const included: SkillInjectionDetail['included'] = []
   let used = 0
   for (const m of matches) {
     if (used + m.skill.bodyTokens > budgetTokens) continue
     used += m.skill.bodyTokens
+    included.push({ name: m.skill.name, via: m.via })
     parts.push(`Skill loaded: ${m.skill.name} (via ${m.via}). Follow it for this task.\n\n${m.skill.body}`)
   }
-  return parts.length ? parts.join('\n\n---\n\n') : null
+  return { text: parts.length ? parts.join('\n\n---\n\n') : null, included }
+}
+
+export function skillInjectionText(
+  input: { text?: string, projectType?: string, deps?: string[] },
+  skills: Skill[] = activeSkills(),
+  budgetTokens: number = SKILL_INJECTION_TOKEN_BUDGET,
+): string | null {
+  return skillInjectionDetail(input, skills, budgetTokens).text
 }
 
 /** Resolve everything a turn needs from the live project and build its injection. */
 export function skillInjectionForTurn(userText: string, root: string = getFsRoot()): string | null {
+  return skillInjectionDetailForTurn(userText, root).text
+}
+
+/** skillInjectionForTurn with the included-skills record. */
+export function skillInjectionDetailForTurn(userText: string, root: string = getFsRoot()): SkillInjectionDetail {
   let projectType: string | undefined
   try { projectType = readProjectConfig(root).type || undefined } catch { /* undesignated */ }
-  return skillInjectionText({ text: userText, projectType, deps: projectDependencies(root) })
+  return skillInjectionDetail({ text: userText, projectType, deps: projectDependencies(root) })
 }

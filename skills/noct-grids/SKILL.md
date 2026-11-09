@@ -1,6 +1,7 @@
 ---
 name: noct-grids
 description: Knowledge pack for the Noct grid substrates from grid-paint-labs (Hull, Dot Shading, Hex Paint, Metaball Grid, Vector Field) and the key-click interaction model: mouse aims, keys act.
+category: Libraries & code
 triggers: grid paint, substrate, hex grid, metaball, dot shading, key-click, vector field
 types: canvas-tool, game
 ---

@@ -1,6 +1,7 @@
 ---
 name: paper-js
 description: Knowledge pack for Paper.js vector/canvas work: scope and item-tree model, paths and boolean ops, hit-testing, the onFrame loop, and the pitfalls that cost the most time.
+category: Libraries & code
 triggers: paper.js, paperjs, bezier, vector path, hit test, hit-test
 dependsOn: paper
 ---

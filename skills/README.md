@@ -20,6 +20,9 @@ dependsOn: paper
 - `description` (required) — the always-visible line. It is the
   only part most turns ever see, so it must say what the skill is
   *for*, not repeat its name.
+- `category` (optional) — the Skills panel's display grouping
+  (an ALE field, not one of the agentskills.io spec's six).
+  Defaults to `General`.
 - `triggers` (optional) — words or phrases in the user's ask that
   mean this skill applies. Keep them specific: a trigger that
   fires on unrelated turns taxes every one of those turns with

@@ -21,6 +21,18 @@ describe('tileGroup', () => {
 })
 
 describe('derivePanel phases', () => {
+  it('the summary names the skills the turn used', () => {
+    const withSkills: LogItem[] = [
+      { role: 'user', text: 'lay out the page' },
+      { role: 'skills', skills: [{ name: 'making-layouts', via: 'trigger' }] },
+      { role: 'ai', text: 'Done.' },
+    ]
+    assert.equal(derivePanel(turnOf(withSkills)).summary.skills, 'making-layouts')
+    const without: LogItem[] = [{ role: 'user', text: 'hi' }, { role: 'ai', text: 'hello' }]
+    assert.equal(derivePanel(turnOf(without)).summary.skills, '—')
+    assert.equal(derivePanel(null).summary.skills, '—')
+  })
+
   it('reads an empty turn as idle with every phase pending', () => {
     const s = derivePanel(null)
     assert.equal(s.now, 'No task running')

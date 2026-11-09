@@ -1,4 +1,4 @@
-import { classifyTool, TOOL_GROUP_LABEL, type DeckCard, type DeckTurn, type ToolGroup } from './deck.js'
+import { classifyTool, skillsOfTurn, TOOL_GROUP_LABEL, type DeckCard, type DeckTurn, type ToolGroup } from './deck.js'
 import type { ToolStep } from './chatSession.js'
 
 /**
@@ -49,6 +49,8 @@ export interface EarlierEntry {
   text: string
   reasoning: boolean
   turnIndex: number
+  /** Skills the entry's turn used — carried on its intent entry. */
+  skills?: { name: string, via: string }[]
 }
 
 export interface ActivityColumn {
@@ -63,6 +65,8 @@ export interface ActivityColumn {
 export interface StationaryModel {
   /** The current (last) turn's intent, shown as the pinned card's context line. */
   intent: string | null
+  /** Skills the current turn used (the Skills-used chip line). */
+  skills: { name: string, via: string }[]
   pinned: PinnedMessage | null
   notes: StationaryNote[]
   activity: ActivityColumn[]
@@ -93,8 +97,9 @@ function lastResultOf(turn: DeckTurn): Segment | null {
 function earlierOfTurn(turn: DeckTurn): EarlierEntry[] {
   const out: EarlierEntry[] = []
   const final = lastResultOf(turn)
+  const skills = skillsOfTurn(turn)
   turn.cards.forEach((card: DeckCard, cardIndex) => {
-    if (card.kind === 'intent') out.push({ kind: 'intent', text: card.text, reasoning: false, turnIndex: turn.index })
+    if (card.kind === 'intent') out.push({ kind: 'intent', text: card.text, reasoning: false, turnIndex: turn.index, skills: skills.length ? skills : undefined })
     else if (card.kind === 'result') out.push({ kind: final && cardIndex === final.cardIndex ? 'final' : 'working', text: card.text, reasoning: false, turnIndex: turn.index })
     else if (card.kind === 'reasoning') out.push({ kind: 'working', text: card.text, reasoning: true, turnIndex: turn.index })
     else if (card.kind === 'error') out.push({ kind: 'error', text: card.text, reasoning: false, turnIndex: turn.index })
@@ -108,7 +113,7 @@ export function deriveStationary(turns: DeckTurn[], opts: { sending?: boolean } 
     group, label: TOOL_GROUP_LABEL[group], steps: [], done: 0, errors: 0, total: 0,
   }))
   const empty: StationaryModel = {
-    intent: null, pinned: null, notes: [], activity,
+    intent: null, skills: [], pinned: null, notes: [], activity,
     activityTotals: { total: 0, done: 0, errors: 0, running: false },
     earlier: [], live: false,
   }
@@ -160,5 +165,5 @@ export function deriveStationary(turns: DeckTurn[], opts: { sending?: boolean } 
   const earlier: EarlierEntry[] = []
   for (let i = turns.length - 2; i >= 0; i--) earlier.push(...earlierOfTurn(turns[i]))
 
-  return { intent: current.intent, pinned, notes, activity, activityTotals, earlier, live }
+  return { intent: current.intent, skills: skillsOfTurn(current), pinned, notes, activity, activityTotals, earlier, live }
 }

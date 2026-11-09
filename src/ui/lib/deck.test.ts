@@ -25,6 +25,22 @@ describe('classifyTool', () => {
 })
 
 describe('groupTurns', () => {
+  it('a skills record becomes a skills card on its turn (the Skills-used chip)', () => {
+    const log: LogItem[] = [
+      { role: 'user', text: 'lay out the page' },
+      { role: 'skills', skills: [{ name: 'making-layouts', via: 'trigger' }] },
+      { role: 'ai', text: 'done' },
+      { role: 'user', text: 'fix the label' },
+      { role: 'ai', text: 'ok' },
+    ]
+    const turns = groupTurns(log)
+    assert.deepEqual(turns[0].cards.map(c => c.kind), ['intent', 'skills', 'result'])
+    const card = turns[0].cards[1]
+    assert.ok(card.kind === 'skills')
+    assert.deepEqual(card.skills, [{ name: 'making-layouts', via: 'trigger' }])
+    assert.ok(turns[1].cards.every(c => c.kind !== 'skills'), 'an untriggered turn carries no chip')
+  })
+
   it('keeps the preamble separate and starts a turn per user ask', () => {
     const log: LogItem[] = [
       { role: 'system', text: 'welcome' },

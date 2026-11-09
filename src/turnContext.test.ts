@@ -55,4 +55,19 @@ describe('buildTurnContext', () => {
     const parts = await buildTurnContext('add a state machine for the checkout flow', { mode: 'sketch' })
     assert.equal(parts.length, 1)
   })
+
+  it('reports the skills a turn used through onSkillsUsed (the chat chip)', async () => {
+    const seen: { name: string, via: string }[][] = []
+    await buildTurnContext('add a state machine for the checkout flow', {
+      mode: 'files',
+      onSkillsUsed: used => { seen.push(used) },
+    })
+    assert.deepEqual(seen, [[{ name: 'state-machines', via: 'trigger' }]])
+    const quiet: unknown[] = []
+    await buildTurnContext('fix the button label', {
+      mode: 'files',
+      onSkillsUsed: used => { quiet.push(used) },
+    })
+    assert.deepEqual(quiet, [], 'an untriggered turn reports nothing')
+  })
 })

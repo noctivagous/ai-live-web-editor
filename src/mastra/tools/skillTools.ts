@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getSkill, loadSkills } from '../../skills/skills.js'
+import { activeSkills, getSkill } from '../../skills/skills.js'
 
 export const readSkillTool = createTool({
   id: 'read-skill',
@@ -10,9 +10,9 @@ export const readSkillTool = createTool({
     name: z.string().describe('Skill name from the index, e.g. "making-layouts"'),
   }),
   execute: async ({ name }) => {
-    const skill = getSkill(name, loadSkills())
+    const skill = getSkill(name, activeSkills())
     if (!skill) {
-      return { ok: false, error: `No skill named ${name}`, available: loadSkills().map(s => s.name) }
+      return { ok: false, error: `No skill named ${name}`, available: activeSkills().map(s => s.name) }
     }
     return {
       ok: true,

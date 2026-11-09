@@ -330,6 +330,7 @@ export type ChatStreamEvent =
   | { type: 'tool-delta'; id: string; name: string; text: string }
   | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
   | { type: 'text-delta'; text: string }
+  | { type: 'skills'; skills: { name: string, via: string }[] }
   | { type: 'error'; error: string }
   | { type: 'done'; usage?: import('./chatSession').TurnUsage | null; model?: string }
 

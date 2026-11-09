@@ -1,6 +1,7 @@
 ---
 name: making-layouts
 description: How to build page and screen layouts in this editor: project components first, catalog primitives second, layout templates third, custom markup last; responsive across the project's device targets by default.
+category: Design & layout
 triggers: layout, landing page, section, responsive, columns, arrange, hero, pricing, dashboard layout
 ---
 

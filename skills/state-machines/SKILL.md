@@ -1,6 +1,7 @@
 ---
 name: state-machines
 description: Knowledge pack for modelling interactive state as an explicit machine: states as data, a transitions table, guards and actions separated — instead of boolean-flag soup and impossible states.
+category: Libraries & code
 triggers: state machine, xstate, fsm, finite state, workflow states
 dependsOn: xstate
 ---

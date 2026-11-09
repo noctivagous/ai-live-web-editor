@@ -10,6 +10,24 @@ const step = (id: string, name: string, status: 'running' | 'done' | 'error' = '
 })
 
 describe('stationary derivation', () => {
+  it('skills surface on the current turn and on earlier turns intent entries', () => {
+    const log: LogItem[] = [
+      { role: 'user', text: 'lay out the page' },
+      { role: 'skills', skills: [{ name: 'making-layouts', via: 'trigger' }] },
+      { role: 'ai', text: 'Done.' },
+      { role: 'user', text: 'now a paper.js canvas' },
+      { role: 'skills', skills: [{ name: 'paper-js', via: 'trigger' }] },
+      { role: 'ai', text: 'Canvas added.' },
+    ]
+    const m = deriveStationary(groupTurns(log))
+    assert.deepEqual(m.skills, [{ name: 'paper-js', via: 'trigger' }], 'current turn skills ride the model')
+    const earlierIntent = m.earlier.find(e => e.kind === 'intent')
+    assert.deepEqual(earlierIntent?.skills, [{ name: 'making-layouts', via: 'trigger' }], 'earlier turn keeps its skills on its intent entry')
+    const plain = deriveStationary(groupTurns([{ role: 'user', text: 'hi' }, { role: 'ai', text: 'hello' }] as LogItem[]))
+    assert.deepEqual(plain.skills, [])
+  })
+
+
   it('completed turn: last result pins as the final report, earlier segments become numbered working notes', () => {
     const log: LogItem[] = [
       { role: 'user', text: 'make a blue theme for lumen' },

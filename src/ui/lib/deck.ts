@@ -86,6 +86,7 @@ export type DeckCard =
   | { kind: 'result', text: string }
   | { kind: 'error', text: string }
   | { kind: 'system', text: string }
+  | { kind: 'skills', skills: { name: string, via: string }[] }
 
 export type TurnStatus = 'done' | 'running' | 'error' | 'pending'
 
@@ -175,6 +176,8 @@ export function groupTurns(log: LogItem[], opts: { sending?: boolean } = {}): De
       if (item.text) ensure().cards.push({ kind: 'result', text: item.text })
     } else if (item.role === 'error') {
       ensure().cards.push({ kind: 'error', text: item.text })
+    } else if (item.role === 'skills') {
+      ensure().cards.push({ kind: 'skills', skills: item.skills })
     } else {
       ensure().cards.push({ kind: 'system', text: item.text })
     }
@@ -194,6 +197,13 @@ export function groupTurns(log: LogItem[], opts: { sending?: boolean } = {}): De
       usage: t.usage,
     }
   })
+}
+
+/** The skills a turn used, flattened from its skills cards. */
+export function skillsOfTurn(turn: DeckTurn): { name: string, via: string }[] {
+  const out: { name: string, via: string }[] = []
+  for (const c of turn.cards) if (c.kind === 'skills') out.push(...c.skills)
+  return out
 }
 
 /** Turns worth a slide in Deck mode: a real ask, or any tools/result. */

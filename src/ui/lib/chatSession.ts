@@ -15,6 +15,7 @@ export type ToolStep = { id: string, name: string, detail: string, result?: stri
 export type LogItem =
   | { role: 'system' | 'user' | 'ai' | 'error' | 'think', text: string, usage?: TurnUsage }
   | { role: 'tools', steps: ToolStep[], usage?: TurnUsage }
+  | { role: 'skills', skills: { name: string, via: string }[] }
 
 export type ChatShared = {
   v: 1
@@ -41,7 +42,7 @@ export function chatStorageKey(projectId: string) {
 
 function clipLog(log: LogItem[]): LogItem[] {
   const next = log.slice(-LOG_CAP).map((item) => {
-    if (item.role === 'tools') return item
+    if (item.role === 'tools' || item.role === 'skills') return item
     return { ...item, text: item.text.slice(0, item.role === 'think' ? 4000 : 8000) }
   })
   return next.length ? next : DEFAULT_CHAT_LOG

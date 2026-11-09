@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  estimateTokens, getSkill, loadSkills, matchSkills, parseSkillFile,
-  projectDependencies, skillIndexText, skillInjectionText,
-  SKILL_BODY_TOKEN_BUDGET,
+  activeSkills, estimateTokens, getSkill, loadSkills, matchSkills, parseSkillFile,
+  projectDependencies, skillIndexLine, skillIndexText, skillIndexTokens,
+  skillInjectionDetail, skillInjectionText,
+  SKILL_BODY_TOKEN_BUDGET, SKILL_INDEX_TOKEN_BUDGET,
 } from './skills.js'
 
 describe('SKILL.md parsing', () => {
@@ -96,5 +97,71 @@ describe('trigger matching: a plain copy fix pays nothing', () => {
   it('reads real project dependencies as evidence', () => {
     const deps = projectDependencies(process.cwd())
     assert.ok(deps.includes('react') || deps.includes('@mastra/core'), `editor deps seen: ${deps.slice(0, 5).join(', ')}`)
+  })
+})
+
+describe('categories and the panel numbers (skills UI slice 1)', () => {
+  it('parses category, defaulting to General', () => {
+    const withCat = parseSkillFile(`---\nname: demo\ndescription: Teaches demo work.\ncategory: Design & layout\n---\n\nBody.`, 'demo')
+    assert.equal(withCat!.category, 'Design & layout')
+    const without = parseSkillFile(`---\nname: demo\ndescription: Teaches demo work.\n---\n\nBody.`, 'demo')
+    assert.equal(without!.category, 'General')
+  })
+
+  it('every shipped skill carries a real category', () => {
+    const byName = new Map(loadSkills().map(s => [s.name, s.category]))
+    assert.equal(byName.get('making-layouts'), 'Design & layout')
+    assert.equal(byName.get('paper-js'), 'Libraries & code')
+    assert.equal(byName.get('state-machines'), 'Libraries & code')
+    assert.equal(byName.get('noct-grids'), 'Libraries & code')
+  })
+
+  it('the per-skill index cost is the cost of its index line', () => {
+    for (const s of loadSkills()) {
+      assert.equal(skillIndexTokens(s), estimateTokens(skillIndexLine(s)))
+      assert.ok(skillIndexTokens(s) > 0 && skillIndexTokens(s) <= 130, `${s.name} index line stays ~100 tokens`)
+      assert.ok(skillIndexText().includes(skillIndexLine(s)), 'the agent index carries the same line the panel prices')
+    }
+    assert.ok(SKILL_INDEX_TOKEN_BUDGET > 0)
+  })
+
+  it('the injection detail reports exactly what was included', () => {
+    const detail = skillInjectionDetail({ text: 'add a pricing section to the landing page', deps: [] }, loadSkills())
+    assert.deepEqual(detail.included, [{ name: 'making-layouts', via: 'trigger' }])
+    assert.ok(detail.text?.includes('Skill loaded: making-layouts'))
+    const none = skillInjectionDetail({ text: 'fix the button label', deps: [] }, loadSkills())
+    assert.deepEqual(none, { text: null, included: [] })
+    const starved = skillInjectionDetail({ text: 'add a state machine', deps: [] }, loadSkills(), 50)
+    assert.deepEqual(starved, { text: null, included: [] }, 'budget-skipped skills are not reported as used')
+  })
+})
+
+describe('on/off state (skills UI slice 2)', () => {
+  it('a disabled skill leaves the index, matching and read-skill — and returns when re-enabled', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const { setSkillEnabled } = await import('./skillSettings.js')
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'skills-off-')), 'skills.json')
+    const saved = process.env.AI_LIVE_SKILLS_PATH
+    process.env.AI_LIVE_SKILLS_PATH = file
+    try {
+      setSkillEnabled('paper-js', false, file)
+      assert.deepEqual(activeSkills().map(s => s.name), ['making-layouts', 'noct-grids', 'state-machines'])
+      assert.ok(!skillIndexText().includes('paper-js'), 'no index line for an off skill')
+      assert.deepEqual(
+        skillInjectionDetail({ text: 'draw with paper.js', deps: ['paper'] }).included, [],
+        'an off skill never triggers',
+      )
+      assert.equal(getSkill('paper-js', activeSkills()), undefined, 'read-skill cannot reach an off skill')
+      assert.ok(getSkill('paper-js', loadSkills()), 'the panel still sees it via loadSkills')
+      setSkillEnabled('paper-js', true, file)
+      assert.ok(skillIndexText().includes('paper-js'), 're-enabled: back in the index')
+      assert.deepEqual(skillInjectionDetail({ text: 'draw with paper.js', deps: ['paper'] }).included, [{ name: 'paper-js', via: 'trigger' }])
+    } finally {
+      if (saved === undefined) delete process.env.AI_LIVE_SKILLS_PATH
+      else process.env.AI_LIVE_SKILLS_PATH = saved
+      fs.rmSync(path.dirname(file), { recursive: true, force: true })
+    }
   })
 })

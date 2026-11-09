@@ -60,6 +60,9 @@ export function StationaryView({ turns, sending, workingLabel }: {
       {m.intent !== null && (
         <div className="st-intent" title={m.intent}><span className="st-intent-label">You</span>{m.intent}</div>
       )}
+      {m.skills.length > 0 && (
+        <div className="st-skills">Skills used: {m.skills.map(s => s.name).join(' · ')}</div>
+      )}
 
       {m.pinned ? (
         <div key={m.pinned.key} className={`st-pin ${m.pinned.kind}`}>
@@ -150,6 +153,9 @@ export function StationaryView({ turns, sending, workingLabel }: {
                     </div>
                   )}
                 </>
+              )}
+              {e.skills && e.skills.length > 0 && (
+                <div className="st-old-skills">Skills used: {e.skills.map(s => s.name).join(' · ')}</div>
               )}
             </div>
           ))}

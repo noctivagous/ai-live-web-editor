@@ -33,7 +33,10 @@ export function latestUserText(messages: unknown): string {
  * skill injections are Files-mode only and best-effort — a failure
  * in either never breaks the turn.
  */
-export async function buildTurnContext(userText: string, opts: { mode: string }): Promise<string[]> {
+export async function buildTurnContext(
+  userText: string,
+  opts: { mode: string, onSkillsUsed?: (used: { name: string, via: string }[]) => void },
+): Promise<string[]> {
   const parts: string[] = []
   // Project brief (phase-11-06): type, device targets, style set —
   // every agent turn knows what kind of project it is building.
@@ -56,9 +59,12 @@ export async function buildTurnContext(userText: string, opts: { mode: string })
     // explicit ask trigger, library evidence in package.json, or the
     // project type. Untriggered turns pay nothing.
     try {
-      const { skillInjectionForTurn } = await import('./skills/skills.js')
-      const injection = userText ? skillInjectionForTurn(userText) : null
-      if (injection) parts.push(injection)
+      const { skillInjectionDetailForTurn } = await import('./skills/skills.js')
+      const detail = userText ? skillInjectionDetailForTurn(userText) : null
+      if (detail?.text) parts.push(detail.text)
+      if (detail && detail.included.length && opts.onSkillsUsed) {
+        try { opts.onSkillsUsed(detail.included) } catch { /* reporting never breaks a turn */ }
+      }
     } catch { /* skill injection is an optimisation, not a requirement */ }
   }
   return parts

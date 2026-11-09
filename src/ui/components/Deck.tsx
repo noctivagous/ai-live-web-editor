@@ -162,6 +162,14 @@ export function DeckCardView({ card, onNeedSetup, embed, turn }: {
     case 'system':
       if (!card.text) return null
       return <div className="dcard-system">{card.text}</div>
+    case 'skills': {
+      const why = card.skills.map(s => `${s.name} (${s.via === 'trigger' ? 'your ask matched' : s.via === 'dependency' ? 'the project uses its library' : 'the project type matches'})`).join(' · ')
+      return (
+        <div className="dcard-skills" title={why}>
+          Skills used: {card.skills.map(s => s.name).join(' · ')}
+        </div>
+      )
+    }
   }
 }
 

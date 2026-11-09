@@ -137,6 +137,10 @@ export function PanelView({ turns, sending, workingLabel, onOpenPath, onNeedSetu
           <span className="pv-sum-label">Changes</span>
           <span className="pv-sum-val" title={state.summary.changes}>{state.summary.changes}</span>
         </div>
+        <div className="pv-sum">
+          <span className="pv-sum-label">Skills</span>
+          <span className="pv-sum-val" title={state.summary.skills}>{state.summary.skills}</span>
+        </div>
       </section>
     </div>
   )

@@ -43,6 +43,7 @@ import { SetupWizard } from './components/SetupWizard'
 import { PlanOverlay } from './components/PlanOverlay'
 import { GraphOverlay } from './components/GraphOverlay'
 import { McpManager } from './components/McpManager'
+import { SkillsPanel } from './components/SkillsPanel'
 import { OpenTabs } from './components/OpenTabs'
 import { loadPinnedTabs, savePinnedTabs } from './lib/openTabs'
 import { VDivider, HDivider } from './components/PaneDivider'
@@ -1285,6 +1286,7 @@ export default function App() {
       <>
         {selects}
         <McpManager />
+        <SkillsPanel />
       </>
     )
   }

@@ -485,6 +485,7 @@ select.pill:disabled{cursor:default; opacity:.7}
 .dcard-error{border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.05)}
 .dcard-result{border-color:var(--border)}
 .dcard-system{font-size:calc(12px * var(--ui-scale, 1)); color:var(--muted); line-height:1.55; padding:2px 4px}
+.dcard-skills{font-size:calc(12px * var(--ui-scale, 1)); color:var(--accent, #2f5aa6); line-height:1.55; padding:2px 4px; font-weight:600}
 .step-list{display:flex; flex-direction:column; gap:2px}
 .step-row{border-radius:8px}
 .step-head{
@@ -1102,6 +1103,8 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
   color:var(--text-strong); font-weight:600; margin-right:6px;
   font-size:calc(10.5px * var(--ui-scale, 1)); text-transform:uppercase; letter-spacing:.04em;
 }
+.st-skills{flex-shrink:0; color:var(--accent, #2f5aa6); font-weight:600; font-size:calc(12px * var(--ui-scale, 1)); padding:1px 0 3px}
+.st-old-skills{color:var(--accent, #2f5aa6); font-weight:600; font-size:calc(11.5px * var(--ui-scale, 1)); margin-top:3px}
 .st-pin{
   flex-shrink:0; background:var(--card); border:1px solid var(--border);
   border-radius:12px; padding:12px; animation:st-pin-in .45s ease both;

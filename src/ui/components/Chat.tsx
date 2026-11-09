@@ -369,6 +369,10 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       } else if (ev.type === 'text-delta') {
         setWorkingLabel('writing…')
         setLog(l => appendTextDelta(l, 'ai', ev.text))
+      } else if (ev.type === 'skills') {
+        // Skills that joined this turn — rendered as a chip card on
+        // the turn (Deck 'skills' card), never silent.
+        setLog(l => [...l, { role: 'skills', skills: ev.skills }])
       } else if (ev.type === 'error') {
         const msg = ev.error
         setLog(l => [...l, { role: 'error', text: looksLikeKeyError(msg) ? guidedKeyError(keyKnown === true) : `Chat failed: ${msg.slice(0, 2000)}` }])
@@ -560,7 +564,7 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     let total = 0
     let seen = false
     for (const item of log) {
-      if (item.usage) {
+      if ('usage' in item && item.usage) {
         seen = true
         total += item.usage.total
       }

@@ -18,6 +18,7 @@ import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountFeatureApi } from './features/featureApi.js'
 import { mountMcpApi } from './mcp/mcpApi.js'
+import { mountSkillsApi } from './skills/skillsApi.js'
 import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
 import { mountCatalogApi } from './catalog/catalogApi.js'
@@ -76,6 +77,7 @@ mountResearchApi(app)
 mountPlanApi(app)
 mountFeatureApi(app)
 mountMcpApi(app)
+mountSkillsApi(app)
 mountMemoryApi(app)
   mountCodebaseMapApi(app)
   mountCatalogApi(app)

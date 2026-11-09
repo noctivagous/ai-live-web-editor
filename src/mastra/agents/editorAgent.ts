@@ -25,10 +25,7 @@ import { docAddBlockTool, docFindTool, docGetTool, docInspectTool, docRemoveBloc
 import { skillIndexText } from '../../skills/skills.js'
 import { editorMemory } from '../memory.js'
 
-export const editorAgent = new Agent({
-  id: 'editorAgent',
-  name: 'editorAgent',
-  instructions: `
+const BASE_INSTRUCTIONS = `
 You are a live code editor. You write real files on disk under the active Vite project.
 The running app is the Vite page (typically :5173).
 
@@ -70,7 +67,15 @@ Live-edit mode: the user may annotate elements on the page. When you receive a l
 2. inspect-dom on the selector plus ranged read-real-file around the resolved range
 3. str-replace the fix (write-real-file only if the file is new)
 Priority: bug, move, layout, style, copy, note. Never write repo files unless the request asks for changes.
-` + skillIndexText(),
+`
+
+export const editorAgent = new Agent({
+  id: 'editorAgent',
+  name: 'editorAgent',
+  // Function form (Mastra DynamicArgument): resolved per call, so
+  // the skills index below always reflects the panel's current
+  // on/off state instead of the state at server start.
+  instructions: () => BASE_INSTRUCTIONS + skillIndexText(),
   // §2 in-turn trimming: bulky tool results fold after the next step
   // (transient per provider call; stored history/UI keep full results).
   inputProcessors: [toolResultTrimProcessor],

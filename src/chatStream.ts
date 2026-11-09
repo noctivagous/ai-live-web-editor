@@ -30,6 +30,7 @@ export type ChatStreamEvent =
   | { type: 'tool-delta'; id: string; name: string; text: string }
   | { type: 'tool-result'; id: string; name: string; ok: boolean; detail: string }
   | { type: 'text-delta'; text: string }
+  | { type: 'skills'; skills: { name: string, via: string }[] }
   | { type: 'error'; error: string }
   | { type: 'done'; usage?: TurnUsage | null; model?: string; verification?: VerifySummary }
 
@@ -475,7 +476,11 @@ export async function pipeAgentChatStream(
   // -> volatile so the conversation history ahead of it stays a
   // cacheable prefix (see withContextBeforeLastUser). Only the
   // constant mode preambles above still lead the payload.
-  const turnContext = await buildTurnContext(latestUserText(messages), { mode })
+  let skillsUsed: { name: string, via: string }[] = []
+  const turnContext = await buildTurnContext(latestUserText(messages), {
+    mode,
+    onSkillsUsed: used => { skillsUsed = used },
+  })
   payload = withContextBeforeLastUser(turnContext, payload)
   // Server-side thread memory (one thread per project root): the first
   // turn seeds the thread from the client payload as-is; later turns
@@ -519,6 +524,10 @@ export async function pipeAgentChatStream(
   }
   if (routed.switched) send({ type: 'workflow', mode: routed.mode, reason: routed.reason })
   send({ type: 'status', text: mode === 'sketch' ? 'live sketch…' : routed.switched ? 'switched to Files…' : 'starting…' })
+  // Skills that joined this turn (skills UI slice 1): the chat
+  // renders them as a chip on the turn, so what the agent carried
+  // is visible instead of silent.
+  if (skillsUsed.length) send({ type: 'skills', skills: skillsUsed })
   try {
     const { mastra } = await import('./mastra/index.js')
     const agent = mastra.getAgent('editorAgent')

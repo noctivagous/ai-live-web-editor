@@ -17,6 +17,11 @@ import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
 import { mountFeatureApi } from './features/featureApi.js'
+import { mountDesignApi } from './design/designApi.js'
+import { mountArchitectureApi } from './architecture/architectureApi.js'
+import { mountTechStackApi } from './techstack/techStackApi.js'
+import { mountConfigApi } from './configregistry/configApi.js'
+import { mountCrossLinksApi } from './facetLinks/crossLinksApi.js'
 import { mountUserFlowApi } from './userflows/userflowApi.js'
 import { mountMcpApi } from './mcp/mcpApi.js'
 import { mountSkillsApi } from './skills/skillsApi.js'
@@ -77,6 +82,11 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
 mountResearchApi(app)
 mountPlanApi(app)
 mountFeatureApi(app)
+mountDesignApi(app)
+mountArchitectureApi(app)
+mountTechStackApi(app)
+mountConfigApi(app)
+mountCrossLinksApi(app)
 mountUserFlowApi(app)
 mountMcpApi(app)
 mountSkillsApi(app)
@@ -321,12 +331,14 @@ mountMemoryApi(app)
         const { getFeatureGraph } = await import('./features/features.js')
         const { getUserFlowGraph } = await import('./userflows/userflows.js')
         const { getSearchBackend } = await import('./searchSession.js')
+        const { facetOff } = await import('./facetState.js')
         tools = fileToolsForTurn({
           userText,
           hasActivePlan: Boolean(getActivePlan()),
           hasFeatureGraph: Boolean(getFeatureGraph()),
           hasUserFlowGraph: Boolean(getUserFlowGraph()),
           searchAvailable: getSearchBackend() !== 'off',
+          featuresFacetOff: facetOff('features'),
         })
       }
       // The shared turn-context stack (brief + map + skills), identical

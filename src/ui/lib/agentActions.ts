@@ -24,7 +24,10 @@
  * Every card in the menu must do something complete when pressed.
  */
 
-export type ActionFacet = 'features' | 'architecture' | 'styles' | 'any'
+import type { ProjectFacetId } from './facets.js'
+
+/** An action's facet: a project facet, or 'any' (facet-free). */
+export type ActionFacet = ProjectFacetId | 'any'
 
 export type ActionGroup = 'Inspect' | 'Build' | 'Fix' | 'Design' | 'Project' | 'Plan'
 
@@ -116,12 +119,12 @@ export const AGENT_ACTIONS: AgentAction[] = [
     dispatch: { kind: 'prompt', text: 'Explain the file {file}: what it is for, its main sections or exports, and what else in this project depends on it.' },
   },
   {
-    id: 'page-sections', title: 'Map page sections', group: 'Inspect', facet: 'styles', needs: 'page', context: 'page',
+    id: 'page-sections', title: 'Map page sections', group: 'Inspect', facet: 'graphic-design', needs: 'page', context: 'page',
     blurb: 'The live page as sections: their order and what each contains',
     dispatch: { kind: 'prompt', text: 'Map the live page with page-sections and summarise its layout: the sections, their order, and what each one contains.' },
   },
   {
-    id: 'layout-snapshot', title: 'Check the layout', group: 'Inspect', facet: 'styles', needs: 'page', context: 'page',
+    id: 'layout-snapshot', title: 'Check the layout', group: 'Inspect', facet: 'graphic-design', needs: 'page', context: 'page',
     blurb: 'Overlaps, overflow, and clipped or misaligned elements on the live page',
     dispatch: { kind: 'prompt', text: 'Take a layout-snapshot of the live page and report any layout problems you find: overlaps, overflow, clipped or misaligned elements.' },
   },
@@ -187,19 +190,19 @@ export const AGENT_ACTIONS: AgentAction[] = [
 
   /* ── Design ──────────────────────────────────────────────── */
   {
-    id: 'make-layout', title: 'Design a layout', group: 'Design', facet: 'styles', writes: true,
+    id: 'make-layout', title: 'Design a layout', group: 'Design', facet: 'graphic-design', writes: true,
     blurb: 'Lay out the main page with the making-layouts skill',
     dispatch: { kind: 'prompt', text: 'Design work: use the making-layouts skill to lay out the main page of this app properly — choose a layout structure, apply it, and show me the result in the preview.' },
   },
   {
-    id: 'make-responsive', title: 'Make it responsive', group: 'Design', facet: 'styles', needs: 'page', context: 'page', writes: true,
+    id: 'make-responsive', title: 'Make it responsive', group: 'Design', facet: 'graphic-design', needs: 'page', context: 'page', writes: true,
     blurb: 'Phone, tablet, and desktop widths checked and fixed',
     dispatch: { kind: 'prompt', text: 'Make the main page responsive: check the layout at phone, tablet, and desktop widths and fix anything that overflows, clips, or stacks badly.' },
   },
   {
-    id: 'restyle-page', title: 'Restyle the page', group: 'Design', facet: 'styles', writes: true,
-    blurb: 'Colours, type sizes, and spacing applied consistently from the style set',
-    dispatch: { kind: 'prompt', text: 'Restyle the main page: pick a coherent set of colours, type sizes, and spacing from the project\u2019s style set and apply it consistently across the page.' },
+    id: 'restyle-page', title: 'Restyle the page', group: 'Design', facet: 'graphic-design', writes: true,
+    blurb: 'Colours, type sizes, and spacing applied consistently from the design system',
+    dispatch: { kind: 'prompt', text: 'Restyle the main page: pick a coherent set of colours, type sizes, and spacing from the project\u2019s design system (its design guide and tokens) and apply it consistently across the page.' },
   },
 
   /* ── Project ─────────────────────────────────────────────── */
@@ -222,10 +225,11 @@ export function actionsForGroup(group: ActionGroup): AgentAction[] {
 }
 
 /** The facets a palette can filter by ('any' actions belong everywhere). */
-export const ACTION_FACETS: { id: Exclude<ActionFacet, 'any'>, title: string }[] = [
+/** Palette facet filters, from the facet registry (lib/facets). */
+export const ACTION_FACETS: { id: ProjectFacetId, title: string }[] = [
   { id: 'features', title: 'Features' },
   { id: 'architecture', title: 'Architecture' },
-  { id: 'styles', title: 'Styles' },
+  { id: 'graphic-design', title: 'Graphic Design' },
 ]
 
 /** Actions belonging to a facet: its own plus the facet-free ones. */
@@ -254,7 +258,7 @@ const ACTION_KEYWORDS: Record<string, string> = {
   'diagnose': 'broken bug fix debug troubleshoot wrong',
   'make-layout': 'design arrange page skill',
   'make-responsive': 'mobile tablet desktop breakpoints widths',
-  'restyle-page': 'theme colors fonts appearance css',
+  'restyle-page': 'theme colors fonts appearance css design system tokens',
   'project-type': 'architecture manifest format device targets settings',
   'new-plan': 'plan questions planning goal rillan',
 }

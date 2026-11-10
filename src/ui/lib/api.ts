@@ -577,6 +577,73 @@ export async function getFeatureCurrency(): Promise<GraphCurrency> {
 
 export interface FeatureRollup { total: number, built: number, blocked: number, pct: number }
 
+/** The design guide record (Facets design §3.3), as stored in
+ * ai-design/guide.json. Every field optional — a partial guide
+ * is a real guide. */
+export interface DesignGuideItem {
+  version: 1
+  name?: string
+  description?: string
+  principles?: string
+  tokens?: { source?: 'css-variables' | 'tokens-json' | 'tailwind', file?: string, groups?: string[] }
+  typography?: {
+    families: { name: string, role?: string, source?: string }[]
+    scale: { step: string, size: string, weight?: string, lineHeight?: string, role?: string }[]
+  }
+  layout?: {
+    grid?: { columns?: number, gutter?: string, margin?: string }
+    breakpoints: { name: string, minWidth: number }[]
+    spacingBase?: number
+  }
+  icons?: { sets: { name: string, source?: string, format?: string }[], usage?: string }
+  components?: { name: string, note?: string }[]
+  voice?: string
+  motion?: string
+  provenance?: string
+}
+
+export async function getDesignGuide() {
+  const r = await fetch(`${API}/api/design/guide`)
+  return r.json() as Promise<{ ok: boolean, guide: DesignGuideItem | null, error?: string }>
+}
+
+export async function saveDesignGuide(guide: DesignGuideItem) {
+  return postJson<{ ok: boolean, guide: DesignGuideItem, error?: string }>('/api/design/guide', { guide })
+}
+
+/** The derived design graph (Facets design §3.5) and its report. */
+export interface DesignGraphItem {
+  version: 1
+  derivedAt: number
+  source?: { kind: 'css-variables' | 'tokens-json' | 'tailwind', file: string }
+  nodes: { id: string, kind: string, name: string, value?: string, group?: string, file?: string, note?: string }[]
+  edges: { from: string, to: string, type: string }[]
+}
+
+export interface DesignReportItem {
+  unusedTokens: string[]
+  hardcoded: { value: string, count: number, files: string[] }[]
+  contrastFlags: { background: string, text: string, ratio: number }[]
+  unseenTypeSteps: string[]
+  componentsMissingFromGuide: string[]
+  guideComponentsNotFound: string[]
+}
+
+export async function getDesignGraph() {
+  const r = await fetch(`${API}/api/design/graph`)
+  return r.json() as Promise<{ ok: boolean, graph: DesignGraphItem | null, report: DesignReportItem | null, error?: string }>
+}
+
+export async function deriveDesignGraph() {
+  return postJson<{ ok: boolean, graph: DesignGraphItem, report: DesignReportItem, error?: string }>('/api/design/derive', {})
+}
+
+/** Write one token back to its source file (§3.4); the response
+ * carries the re-derived graph so previews re-render. */
+export async function setDesignTokenValue(name: string, value: string) {
+  return postJson<{ ok: boolean, graph: DesignGraphItem, report: DesignReportItem, error?: string }>('/api/design/token', { name, value })
+}
+
 export async function getFeatures() {
   const r = await fetch(`${API}/api/features`)
   return r.json() as Promise<{
@@ -909,9 +976,177 @@ export interface PackSummaryItem {
   configures: string[]
 }
 
+export interface DesignPackSummaryItem {
+  id: string
+  kind: 'design'
+  name: string
+  version: string
+  description: string
+  contents: string[]
+}
+
 export async function getCatalog(q = '') {
   const r = await fetch(`${API}/api/catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`)
-  return r.json() as Promise<{ ok: boolean, packs: PackSummaryItem[], components: CatalogSummaryItem[], templates: TemplateItem[], error?: string }>
+  return r.json() as Promise<{ ok: boolean, packs: PackSummaryItem[], components: CatalogSummaryItem[], templates: TemplateItem[], designPacks: DesignPackSummaryItem[], archPacks: DesignPackSummaryItem[], error?: string }>
+}
+
+export interface DesignPackItem extends DesignPackSummaryItem {
+  guide: DesignGuideItem
+  tokensFile?: { path: string, content: string }
+}
+
+export async function getDesignPacks() {
+  const r = await fetch(`${API}/api/design/packs`)
+  return r.json() as Promise<{ ok: boolean, packs: DesignPackItem[], error?: string }>
+}
+
+export async function previewDesignPack(id: string) {
+  return postJson<{ ok: boolean, preview: { pack: string, items: { item: string, state: string, detail: string }[] }, error?: string }>('/api/design/packs/preview', { id })
+}
+
+export async function applyDesignPack(id: string) {
+  return postJson<{ ok: boolean, guide: DesignGuideItem, graph: DesignGraphItem, report: DesignReportItem, error?: string }>('/api/design/packs/apply', { id })
+}
+
+export interface DesignImportMappingItem {
+  isPack: boolean
+  mapped: { field: string, source: string, detail: string }[]
+  unmapped: { source: string, keptAs: string }[]
+  missing: string[]
+  guide: DesignGuideItem | null
+}
+
+/* ── Architecture facet (Facets slice 7) ──────────────────── */
+
+export interface ArchitectureDeclarationItem {
+  version: 1
+  name?: string
+  layers: string[]
+  modules: { name: string, path: string, responsibility?: string }[]
+  allowedDependencies: { from: string, to: string }[]
+  rules: { id: string, say: string, kind: 'no-import' | 'naming', from?: string, to?: string, path?: string, pattern?: string }[]
+  provenance?: string
+}
+
+export interface ArchitectureReportItem {
+  designated: boolean
+  rules: { id: string, say: string, verdict: 'pass' | 'fail' | 'couldnt-check', evidence: string }[]
+  drift: { declaredNotFound: string[], foundNotDeclared: string[] }
+  guidePresent: boolean
+}
+
+export async function getArchitecture() {
+  const r = await fetch(`${API}/api/architecture`)
+  return r.json() as Promise<{ ok: boolean, declaration: ArchitectureDeclarationItem | null, guide: string, report: ArchitectureReportItem, error?: string }>
+}
+
+export interface ArchPackItem {
+  id: string
+  kind: 'architecture'
+  name: string
+  version: string
+  description: string
+  contents: string[]
+  declaration: ArchitectureDeclarationItem
+  guide: string
+  refactorOutline: string[]
+}
+
+export async function getArchPacks() {
+  const r = await fetch(`${API}/api/architecture/packs`)
+  return r.json() as Promise<{ ok: boolean, packs: ArchPackItem[], error?: string }>
+}
+
+export async function previewArchPack(id: string) {
+  return postJson<{ ok: boolean, preview: { item: string, state: string, detail: string }[], error?: string }>('/api/architecture/packs/preview', { id })
+}
+
+export async function followArchPack(id: string) {
+  return postJson<{ ok: boolean, declaration: ArchitectureDeclarationItem, report: ArchitectureReportItem, error?: string }>('/api/architecture/packs/follow', { id })
+}
+
+export async function planArchPack(id: string) {
+  return postJson<{ ok: boolean, plan: { slug: string, title: string, tasks: number }, error?: string }>('/api/architecture/packs/plan', { id })
+}
+
+/* ── Tech Stack facet (Facets slice 8) ────────────────────── */
+
+export interface TechStackItem {
+  derivedAt: number
+  languages: { name: string, files: number, locations: string[] }[]
+  packages: { name: string, declared?: string, installed?: string, kind: 'runtime' | 'dev', usedBy: string[] }[]
+  filesOfNote: { path: string, what: string }[]
+  facts: string[]
+  ecosystems: string[]
+  report: {
+    declaredNotInstalled: string[]
+    installedNotDeclared: string[]
+    versionMismatches: { name: string, declared: string, installed: string }[]
+    candidateUnused: string[]
+  }
+}
+
+export async function getTechStack() {
+  const r = await fetch(`${API}/api/tech-stack`)
+  return r.json() as Promise<{ ok: boolean, stack: TechStackItem, error?: string }>
+}
+
+/* ── Configuration facet (Facets slice 9) ─────────────────── */
+
+export interface ConfigInventoryItem {
+  derivedAt: number
+  groups: {
+    id: string, label: string,
+    entries: { file: string, aspect: string, profileId?: string, summary: string, envKeys?: string[] }[],
+    missingAspects: string[],
+  }[]
+  unrecognised: string[]
+  projectRecord?: { format?: string, deviceTargets?: string[], entry?: string, type?: string }
+}
+
+export async function getConfigInventory() {
+  const r = await fetch(`${API}/api/config-inventory`)
+  return r.json() as Promise<{ ok: boolean, inventory: ConfigInventoryItem, error?: string }>
+}
+
+/* ── Cross-facet links + criteria (Facets slice 10) ───────── */
+
+export interface CrossLinkItem {
+  id: string
+  kind: 'uses-component' | 'requires-package' | 'needs-config' | 'follows-rule' | 'styled-by'
+  from: string
+  to: string
+  note?: string
+  resolved: boolean
+  targetLabel: string
+}
+
+export async function getCrossLinks() {
+  const r = await fetch(`${API}/api/cross-links`)
+  return r.json() as Promise<{ ok: boolean, links: CrossLinkItem[], error?: string }>
+}
+
+export async function addCrossLink(link: { kind: CrossLinkItem['kind'], from: string, to: string }) {
+  return postJson<{ ok: boolean, links: CrossLinkItem[], error?: string }>('/api/cross-links', link)
+}
+
+export async function removeCrossLink(id: string) {
+  return postJson<{ ok: boolean, links: CrossLinkItem[], error?: string }>('/api/cross-links/remove', { id })
+}
+
+export interface FacetCriteriaRunItem {
+  facet: string
+  ranAt: number
+  results: { id: string, say: string, verdict: 'pass' | 'fail' | 'couldnt-check', evidence: string }[]
+}
+
+export async function getFacetCriteria(facet: string) {
+  const r = await fetch(`${API}/api/facet-criteria/${facet}`)
+  return r.json() as Promise<{ ok: boolean, run: FacetCriteriaRunItem, error?: string }>
+}
+
+export async function mapDesignImport(files: { path: string, content: string }[], apply: boolean) {
+  return postJson<{ ok: boolean, mapping: DesignImportMappingItem, applied: boolean, graph?: DesignGraphItem, report?: DesignReportItem, error?: string }>('/api/design/import', { files, apply })
 }
 
 export async function installCatalogComponent(tag: string) {

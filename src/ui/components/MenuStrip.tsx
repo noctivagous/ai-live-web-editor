@@ -7,7 +7,8 @@ import { wizardById, wizardRowState, type WizardDef } from '../lib/wizards'
 import { FACET_IDS, FACET_TITLES, formatRoute, type AppLayout, type FacetId } from '../lib/layoutRoute'
 import { SETTING_SECTIONS } from '../lib/settingsSchema'
 import { UI_THEMES, type UiThemeId } from '../lib/themes'
-import type { HeaderBarPref, MenuLayoutPref } from '../lib/uiPrefs'
+import { facetEnabled } from '../lib/facetPrefs'
+import { loadUiPrefs, type HeaderBarPref, type MenuLayoutPref } from '../lib/uiPrefs'
 import { AgentActionsMenu } from './AgentActionsMenu'
 import { WizardsMenu } from './WizardsMenu'
 import {
@@ -246,7 +247,7 @@ export function MenuStrip(props: MenuStripProps) {
             })}
             <div className="ms-sep" />
             <div className="aa-group">Facets — routes</div>
-            {FACET_IDS.map((f: FacetId) => itemRow({
+            {FACET_IDS.filter((f: FacetId) => facetEnabled(loadUiPrefs(), f)).map((f: FacetId) => itemRow({
               key: f,
               title: FACET_TITLES[f], tag: `/facets/${f}`,
               checked: props.route.kind === 'facets' && props.route.facet === f,

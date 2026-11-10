@@ -74,9 +74,9 @@ describe('actionAvailability', () => {
       assert.ok(list.some(a => a.facet === 'any'), `${f.id} facet lost the facet-free actions`)
       assert.ok(list.every(a => a.facet === f.id || a.facet === 'any'), `${f.id} facet leaked another facet's actions`)
     }
-    const styles = actionsForFacet('styles')
-    assert.ok(styles.some(a => a.id === 'make-responsive'))
-    assert.ok(!styles.some(a => a.id === 'install-pack'), 'features-facet action leaked into styles')
+    const design = actionsForFacet('graphic-design')
+    assert.ok(design.some(a => a.id === 'make-responsive'))
+    assert.ok(!design.some(a => a.id === 'install-pack'), 'features-facet action leaked into graphic design')
     assert.equal(actionsForFacet(null).length, AGENT_ACTIONS.length)
   })
 

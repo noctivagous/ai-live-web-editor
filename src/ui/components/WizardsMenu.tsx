@@ -1,5 +1,7 @@
 import React from 'react'
 import { STUB_REASON, WIZARD_FACETS, wizardsForFacet } from '../lib/wizards'
+import { facetEnabled } from '../lib/facetPrefs'
+import { loadUiPrefs } from '../lib/uiPrefs'
 
 /**
  * The Wizards menu (slice 3): two-column pressable cards like the
@@ -14,7 +16,7 @@ export function WizardsMenu({ onOpenWizard, onClose }: {
 }) {
   return (
     <div className="aa-menu" role="menu" aria-label="Wizards">
-      {WIZARD_FACETS.map(f => (
+      {WIZARD_FACETS.filter(f => facetEnabled(loadUiPrefs(), f.id)).map(f => (
         <React.Fragment key={f.id}>
           <div className="aa-group">{f.title} wizards</div>
           <div className="aa-grid">

@@ -6,6 +6,8 @@ import {
   type ActionContext, type ActionContextKind, type ActionFacet, type AgentAction,
 } from '../lib/agentActions'
 import { runAction } from '../lib/actionDispatch'
+import { facetEnabled } from '../lib/facetPrefs'
+import { loadUiPrefs } from '../lib/uiPrefs'
 import {
   ACTION_PINS_KEY, ACTION_RECENTS_KEY, loadIdList, pushRecent, saveIdList, togglePin,
 } from '../lib/actionHistory'
@@ -13,7 +15,7 @@ import {
 /**
  * The Actions palette (slice 2): the registry docked in the left
  * pane, next to Files and Library. Search on top, facet chips under
- * it (Features / Architecture / Styles — facet-free actions belong
+ * it (Features / Architecture / Graphic Design — facet-free actions belong
  * to every facet), then the same cards the menu shows, grouped.
  * Cards can be pinned; pinned and recently-run actions surface at
  * the top when the palette is unfiltered. Pins and recents are
@@ -117,7 +119,7 @@ export function ActionsPalette({ ctx, onOpenLibrary, onOpenSettings }: {
       />
       <div className="ap-chips" role="group" aria-label="Filter by facet">
         <button type="button" className={`ap-chip${facet === null ? ' on' : ''}`} onClick={() => setFacet(null)}>All facets</button>
-        {ACTION_FACETS.map(f => (
+        {ACTION_FACETS.filter(f => facetEnabled(loadUiPrefs(), f.id)).map(f => (
           <button key={f.id} type="button" className={`ap-chip${facet === f.id ? ' on' : ''}`} onClick={() => setFacet(facet === f.id ? null : f.id)}>{f.title}</button>
         ))}
       </div>

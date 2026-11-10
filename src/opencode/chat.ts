@@ -562,7 +562,12 @@ export async function pipeOpencodeChatStream(
         const { getSearchBackend } = await import('../searchSession.js')
         searchAvailable = getSearchBackend() !== 'off'
       } catch { /* research tools stay off */ }
-      return { userText: text, hasActivePlan, hasFeatureGraph, hasUserFlowGraph, searchAvailable }
+      let featuresFacetOff = false
+      try {
+        const { facetOff } = await import('../facetState.js')
+        featuresFacetOff = facetOff('features')
+      } catch { /* facet state unreadable: every facet stays on */ }
+      return { userText: text, hasActivePlan, hasFeatureGraph, hasUserFlowGraph, searchAvailable, featuresFacetOff }
     }
     const mainSignals = await readFilesSignals(userText)
     const mainGate: TurnGate = {

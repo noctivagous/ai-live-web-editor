@@ -21,6 +21,14 @@ describe('appSettings store', () => {
     assert.deepEqual(s.get().uiPrefs, merged.uiPrefs)
   })
 
+  it('round-trips the facet on/off state through validation', () => {
+    const s = tmpStore()
+    const merged = s.save({ uiPrefs: { facetsOff: ['features', 'overview', 'bogus'], facetSectionsOff: { 'graphic-design': ['icons', 'nope'] } } })
+    assert.deepEqual(merged.uiPrefs?.facetsOff, ['features'])
+    assert.deepEqual(merged.uiPrefs?.facetSectionsOff, { 'graphic-design': ['icons'] })
+    assert.deepEqual(s.get().uiPrefs?.facetsOff, ['features'])
+  })
+
   it('merges partial uiPrefs over stored values', () => {
     const s = tmpStore()
     s.save({ uiPrefs: { uiTheme: 'dark-pro-classic' } })

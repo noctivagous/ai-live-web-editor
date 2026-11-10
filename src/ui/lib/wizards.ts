@@ -3,7 +3,7 @@ import type { ActionFacet } from './agentActions'
 
 /**
  * The wizard registry (slice 3). Wizards live under facets — each
- * facet (features / architecture / styles) has its own set, because
+ * facet (features / architecture / graphic design / …) has its own set, because
  * a wizard walks one aspect of the project from its current state
  * to a new one. A wizard is either `ready` (it runs) or a `stub`:
  * named, described, and shown in the menu greyed with its reason,
@@ -26,7 +26,9 @@ export interface WizardDef {
 export const WIZARD_FACETS: { id: WizardDef['facet'], title: string }[] = [
   { id: 'features', title: 'Features' },
   { id: 'architecture', title: 'Architecture' },
-  { id: 'styles', title: 'Styles' },
+  { id: 'graphic-design', title: 'Graphic Design' },
+  { id: 'tech-stack', title: 'Tech Stack' },
+  { id: 'configuration', title: 'Configuration' },
 ]
 
 export const WIZARDS: WizardDef[] = [
@@ -50,26 +52,58 @@ export const WIZARDS: WizardDef[] = [
     blurb: 'What kind of project this is and how it is laid out on disk',
   },
   {
-    id: 'device-targets', title: 'Device Targets', facet: 'architecture', status: 'stub',
-    blurb: 'Phone, tablet, desktop — which devices the project must fit',
+    id: 'choose-arch-pack', title: 'Choose an Architecture Plan Pack', facet: 'architecture', status: 'stub',
+    blurb: 'A plan, philosophy, and checkable rules chosen as one set — preview and follow it from the Architecture facet',
   },
   {
-    id: 'connect-provider', title: 'Connect a Provider', facet: 'architecture', status: 'stub',
+    id: 'apply-arch-pack', title: 'Apply Plan Pack to This Codebase', facet: 'architecture', status: 'stub',
+    blurb: 'Form a refactor plan that moves this codebase towards a plan pack, step by gated step',
+  },
+  /* ── Configuration ─────────────────────────────────────── */
+  {
+    id: 'device-targets', title: 'Device Targets', facet: 'configuration', status: 'stub',
+    blurb: 'Phone, tablet, desktop — which devices the project must fit (moved here from Architecture: targets are setup)',
+  },
+  {
+    id: 'connect-provider', title: 'Connect a Provider', facet: 'configuration', status: 'stub',
     blurb: 'Bring your own key and connect an AI provider, step by step',
   },
+  {
+    id: 'add-configuration', title: 'Add a Configuration', facet: 'configuration', status: 'stub',
+    blurb: 'Pick an aspect with no file yet — a lint config, a CI workflow — and scaffold it from the registry',
+  },
 
-  /* ── Styles ──────────────────────────────────────────────── */
+  /* ── Graphic Design ──────────────────────────────────────── */
   {
-    id: 'style-set', title: 'Choose a Style Set', facet: 'styles', status: 'stub',
-    blurb: 'The project\u2019s colours, type, and spacing, chosen as one set',
+    id: 'choose-design-pack', title: 'Choose a Design Pack', facet: 'graphic-design', status: 'stub',
+    blurb: 'A premade design system — guide, tokens, type, and icons — chosen as one set',
   },
   {
-    id: 'restyle-app', title: 'Restyle the App', facet: 'styles', status: 'stub',
-    blurb: 'Apply a new look across the whole app, page by page',
+    id: 'import-graphic-design', title: 'Import Graphic Design', facet: 'graphic-design', status: 'stub',
+    blurb: 'Bring a design system in from a folder or zip file and fit it to the design guide form',
+  },
+  /* ── Tech Stack ──────────────────────────────────────────── */
+  {
+    id: 'add-package', title: 'Add a Package', facet: 'tech-stack', status: 'stub',
+    blurb: 'An agent turn from the Tech Stack facet, with the current stack as its brief — the facet itself runs no npm commands',
   },
   {
-    id: 'make-responsive', title: 'Make It Responsive', facet: 'styles', status: 'stub',
-    blurb: 'Walk each width — phone, tablet, desktop — and fix what breaks',
+    id: 'upgrade-package', title: 'Upgrade a Package', facet: 'tech-stack', status: 'stub',
+    blurb: 'An agent turn from the Tech Stack facet, naming the package and its declared and installed versions',
+  },
+  {
+    id: 'remove-package', title: 'Remove a Package', facet: 'tech-stack', status: 'stub',
+    blurb: 'An agent turn from the Tech Stack facet — removal is agent work, verified by the gate',
+  },
+
+  /* ── Graphic Design (continued) ──────────────────────────── */
+  {
+    id: 'restyle-app', title: 'Restyle the App', facet: 'graphic-design', status: 'stub',
+    blurb: 'Apply the design guide across the whole app, page by page',
+  },
+  {
+    id: 'make-responsive', title: 'Make It Responsive', facet: 'graphic-design', status: 'stub',
+    blurb: 'Walk each width — phone, tablet, desktop — against the layout breakpoints and fix what breaks',
   },
 ]
 

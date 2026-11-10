@@ -22,6 +22,7 @@ import {
 } from '../lib/themes'
 import { ModalityPanel, ProviderSetup, useConnections } from './ProviderSetup'
 import { SearchSetup } from './SearchSetup'
+import { FacetsSettingsSection } from './FacetsSettingsSection'
 import { McpSettingsSection } from './McpSettingsSection'
 
 /* The Settings window: a left rail of sections over one content area.
@@ -595,6 +596,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     if (s.custom === 'about') return aboutSection()
     if (s.custom === 'themes') return themesSection()
     if (s.custom === 'mcp') return <McpSettingsSection />
+    if (s.custom === 'facets') return <FacetsSettingsSection />
     return (
       <div>
         {s.id === 'project' && (

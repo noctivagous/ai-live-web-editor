@@ -632,6 +632,7 @@ export async function pipeAgentChatStream(
     const agent = mastra.getAgent('editorAgent')
     const { activeToolsForMode, fileToolsForTurn } = await import('./agentTools.js')
     const { verifyGateEnabled } = await import('./env.js')
+    const { facetOff } = await import('./facetState.js')
     const { captureBaseline, runVerifyGate, gatePrompt } = await import('./verify/runGate.js')
     const { shouldTriggerGate, gateNeedsFollowUp } = await import('./verify/gate.js')
     // P0-b pre-edit baseline on Files turns (post-edit diff needs it).
@@ -773,7 +774,7 @@ export async function pipeAgentChatStream(
           // prompt/reply must not be persisted into the user's thread.
           // The gate prompt names the layout tools, so its own text
           // triggers the layout group; research stays off for a verify pass.
-          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, hasUserFlowGraph: turnHasUserFlowGraph }),
+          activeTools: fileToolsForTurn({ userText: prompt, hasActivePlan: turnHasActivePlan, hasFeatureGraph: turnHasFeatureGraph, hasUserFlowGraph: turnHasUserFlowGraph, featuresFacetOff: facetOff('features') }),
         })
         followResult = follow
         await streamChunks(follow.fullStream)

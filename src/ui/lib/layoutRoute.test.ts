@@ -17,7 +17,7 @@ describe('layoutRoute', () => {
     }
     assert.deepEqual(parseRoute('#/facets'), { kind: 'facets', facet: 'features' })
     assert.deepEqual(parseRoute('#/facets/bogus'), { kind: 'facets', facet: 'features' })
-    assert.deepEqual(parseRoute('#/facets/styles/'), { kind: 'facets', facet: 'styles' })
+    assert.deepEqual(parseRoute('#/facets/graphic-design/'), { kind: 'facets', facet: 'graphic-design' })
   })
 
   it('format and parse round-trip', () => {
@@ -44,7 +44,7 @@ describe('layoutRoute', () => {
   })
 
   it('graph views outside the features facet are ignored', () => {
-    assert.deepEqual(parseRoute('#/facets/styles/graph/report'), { kind: 'facets', facet: 'styles' })
+    assert.deepEqual(parseRoute('#/facets/graphic-design/graph/report'), { kind: 'facets', facet: 'graphic-design' })
     assert.deepEqual(parseRoute('#/facets/features/graph/bogus'), { kind: 'facets', facet: 'features' })
   })
 

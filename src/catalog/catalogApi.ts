@@ -15,6 +15,8 @@ import { entryEnabled, entrySummary, getComponent, loadCatalog, searchSummaries 
 import { loadTemplates, placeTemplate } from './templates.js'
 import { getPack, loadPacks, packSummary, searchPacks } from './packs.js'
 import { installCatalogComponent } from '../codebaseMap/mapStore.js'
+import { loadDesignPacks } from '../design/designPacks.js'
+import { loadArchPacks } from '../architecture/archPacks.js'
 
 export function mountCatalogApi(app: Express) {
   app.get('/api/catalog', (req, res) => {
@@ -26,7 +28,11 @@ export function mountCatalogApi(app: Express) {
       : catalog.components.filter(e => entryEnabled(e, includeAppkit)).map(entrySummary)
     const packsFile = loadPacks()
     const packs = q ? searchPacks(q, 24, packsFile) : packsFile.packs.map(packSummary)
-    res.json({ ok: true, packs, components, templates: loadTemplates().templates })
+    // The Library holds all catalog kinds (§12 decision 4);
+    // facets show their own kind filtered from this same list.
+    const designPacks = loadDesignPacks().map(p => ({ id: p.id, kind: p.kind, name: p.name, version: p.version, description: p.description, contents: p.contents }))
+    const archPacks = loadArchPacks().map(p => ({ id: p.id, kind: p.kind, name: p.name, version: p.version, description: p.description, contents: p.contents }))
+    res.json({ ok: true, packs, components, templates: loadTemplates().templates, designPacks, archPacks })
   })
 
   app.get('/api/catalog/pack', (req, res) => {

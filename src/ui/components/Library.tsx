@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, WandSparkles } from 'lucide-react'
 import {
   askAi, getCatalog, installCatalogComponent, placeTemplate,
-  type CatalogSummaryItem, type PackSummaryItem, type TemplateItem,
+  type CatalogSummaryItem, type DesignPackSummaryItem, type PackSummaryItem, type TemplateItem,
 } from '../lib/api'
 
 /**
@@ -24,6 +24,8 @@ export function Library({ onOpenPath, onNotice }: {
 }) {
   const [q, setQ] = useState('')
   const [packs, setPacks] = useState<PackSummaryItem[]>([])
+  const [designPacks, setDesignPacks] = useState<DesignPackSummaryItem[]>([])
+  const [archPacks, setArchPacks] = useState<DesignPackSummaryItem[]>([])
   const [components, setComponents] = useState<CatalogSummaryItem[]>([])
   const [templates, setTemplates] = useState<TemplateItem[]>([])
   const [busy, setBusy] = useState('')
@@ -33,7 +35,7 @@ export function Library({ onOpenPath, onNotice }: {
     let live = true
     getCatalog(q).then(d => {
       if (!live) return
-      if (d.ok) { setPacks(d.packs || []); setComponents(d.components || []); setTemplates(d.templates || []); setError('') }
+      if (d.ok) { setPacks(d.packs || []); setDesignPacks(d.designPacks || []); setArchPacks(d.archPacks || []); setComponents(d.components || []); setTemplates(d.templates || []); setError('') }
       else setError(d.error || 'Catalog failed to load')
     }).catch(e => { if (live) setError(e.message) })
     return () => { live = false }
@@ -103,6 +105,50 @@ export function Library({ onOpenPath, onNotice }: {
         </div>
       ))}
       {!packs.length && !error && <div style={{ padding: '10px', fontSize: 'calc(12px * var(--ui-scale, 1))', opacity: 0.6 }}>No feature packs match.</div>}
+
+      <div className="panel-head">Design packs <span className="sub">{designPacks.length}</span></div>
+      {designPacks.map(item => (
+        <div key={item.id} style={rowStyle}>
+          <div style={nameStyle}>
+            <span>{item.name}</span>
+            <span style={chipStyle}>design pack</span>
+            <span style={{ ...chipStyle, fontFamily: 'monospace' }}>{item.id}</span>
+          </div>
+          <div style={descStyle}>{item.description}</div>
+          <div style={propsStyle}>v{item.version} · {item.contents.join(' · ')}</div>
+          <div style={btnRow}>
+            <button
+              type="button" className="deck-btn"
+              onClick={() => askAi(`Show me the ${item.name} design pack (pack id ${item.id}) in the Graphic Design facet: preview it against my current guide and tokens first, and only apply it after I have seen the preview.`)}
+            >
+              <WandSparkles size={13} />Preview it in Graphic Design
+            </button>
+          </div>
+        </div>
+      ))}
+      {!designPacks.length && !error && <div style={{ padding: '10px', fontSize: 'calc(12px * var(--ui-scale, 1))', opacity: 0.6 }}>No design packs in the catalog.</div>}
+
+      <div className="panel-head">Architecture plan packs <span className="sub">{archPacks.length}</span></div>
+      {archPacks.map(item => (
+        <div key={item.id} style={rowStyle}>
+          <div style={nameStyle}>
+            <span>{item.name}</span>
+            <span style={chipStyle}>architecture pack</span>
+            <span style={{ ...chipStyle, fontFamily: 'monospace' }}>{item.id}</span>
+          </div>
+          <div style={descStyle}>{item.description}</div>
+          <div style={propsStyle}>v{item.version} · {item.contents.join(' · ')}</div>
+          <div style={btnRow}>
+            <button
+              type="button" className="deck-btn"
+              onClick={() => askAi(`Show me the ${item.name} architecture plan pack (pack id ${item.id}) in the Architecture facet: preview it against this codebase first, and only follow it or form its refactor plan after I have seen the preview.`)}
+            >
+              <WandSparkles size={13} />Preview it in Architecture
+            </button>
+          </div>
+        </div>
+      ))}
+      {!archPacks.length && !error && <div style={{ padding: '10px', fontSize: 'calc(12px * var(--ui-scale, 1))', opacity: 0.6 }}>No architecture plan packs in the catalog.</div>}
 
       <div className="panel-head">Components <span className="sub">{components.length}</span></div>
       {components.map(item => (

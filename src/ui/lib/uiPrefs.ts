@@ -9,6 +9,8 @@
  * (connections, project.ai.json).
  */
 
+import { sanitizeFacetsOff, sanitizeFacetSectionsOff } from './facetPrefs'
+import type { ProjectFacetId } from './facets'
 import { sanitizeOverrides } from './shortcuts'
 import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, type UiThemeId } from './themes'
 
@@ -70,6 +72,14 @@ export interface UiPrefs {
   editorLineNumbers: boolean
   /** Keyboard shortcut overrides by registry id (shortcuts.ts). */
   shortcutOverrides: Record<string, string>
+  /** Facets turned off in Settings → Facets (design §10): facet
+   * ids from the registry (lib/facets); Overview is the project
+   * home and is never in this list. A facet off also leaves the
+   * agent brief and loses its facet-gated tools. */
+  facetsOff: ProjectFacetId[]
+  /** Sections hidden per facet (Settings → Facets): facet id →
+   * section ids from the registry. Display-only (§10.2). */
+  facetSectionsOff: Record<string, string[]>
 }
 
 export const UI_PREFS_DEFAULTS: UiPrefs = {
@@ -89,6 +99,8 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   editorMinimap: false,
   editorLineNumbers: true,
   shortcutOverrides: {},
+  facetsOff: [],
+  facetSectionsOff: {},
 }
 
 export const UI_PREFS_KEY = 'ai-live-editor.uiPrefs'
@@ -130,6 +142,8 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     editorMinimap: v.editorMinimap === true,
     editorLineNumbers: v.editorLineNumbers !== false,
     shortcutOverrides: sanitizeOverrides(v.shortcutOverrides),
+    facetsOff: sanitizeFacetsOff(v.facetsOff),
+    facetSectionsOff: sanitizeFacetSectionsOff(v.facetSectionsOff),
   }
 }
 

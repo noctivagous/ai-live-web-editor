@@ -5,10 +5,10 @@
  * map to hash routes, exactly as the prototype settled:
  *
  *   #/workbench            the workbench
+ *   #/facets/overview      … Overview (the project home)
  *   #/facets/features      the facets layout, Features facet
  *   #/facets/architecture  … Architecture
- *   #/facets/styles        … Styles
- *   #/facets/overview      … Overview
+ *   #/facets/graphic-design … Graphic Design
  *   #/facets/features/graph/report   the feature graph, report (tree) view
  *   #/facets/features/graph/diagram  the feature graph, diagram view
  *
@@ -26,23 +26,15 @@
  * graph sub-views and unknown modals fall back to the plain route.
  */
 
-export type FacetId = 'features' | 'architecture' | 'styles' | 'overview'
+/**
+ * Facet ids, titles, and blurbs live in the facet registry
+ * (lib/facets) — the single source routes, menus, facet screens,
+ * and Settings → Facets all read. Re-exported here because the
+ * route module is where facet consumers already look.
+ */
+import { FACET_BLURBS, FACET_IDS, FACET_TITLES, isFacetId, type FacetId } from './facets.js'
 
-export const FACET_IDS: FacetId[] = ['features', 'architecture', 'styles', 'overview']
-
-export const FACET_TITLES: Record<FacetId, string> = {
-  features: 'Features',
-  architecture: 'Architecture',
-  styles: 'Styles',
-  overview: 'Overview',
-}
-
-export const FACET_BLURBS: Record<FacetId, string> = {
-  features: 'What the app can do — its feature graph, packs, and build status',
-  architecture: 'What kind of project this is — type, format, and device targets',
-  styles: 'How the app looks — its style set, theme, and page design',
-  overview: 'The whole project at a glance, and where each facet stands',
-}
+export { FACET_BLURBS, FACET_IDS, FACET_TITLES, type FacetId }
 
 export type GraphView = 'graph-report' | 'graph-diagram'
 
@@ -56,10 +48,6 @@ export type AppLayout =
   | { kind: 'facets', facet: FacetId, view?: GraphView, modal?: RouteModal, file?: string }
 
 export const WORKBENCH: AppLayout = { kind: 'workbench' }
-
-export function isFacetId(s: string): s is FacetId {
-  return (FACET_IDS as string[]).includes(s)
-}
 
 function parseModal(params: URLSearchParams): RouteModal | undefined {
   if (params.get('globalModal') !== 'settings') return undefined

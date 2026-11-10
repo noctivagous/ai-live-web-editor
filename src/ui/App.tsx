@@ -21,7 +21,7 @@ import { AddFeatureWizard } from './components/AddFeatureWizard'
 import { FileActionsMenu } from './components/FileActionsMenu'
 import { FacetView } from './components/FacetView'
 import { formatRoute, parseRoute, type AppLayout, type FacetId, type RouteModal } from './lib/layoutRoute'
-import { themeById } from './lib/themes'
+import { facetEnabled } from './lib/facetPrefs'
 import { SETTING_SECTIONS } from './lib/settingsSchema'
 import { loadUiPrefs, saveUiPrefs, UI_PREFS_CHANGED_EVENT, type UiPrefs } from './lib/uiPrefs'
 import { applyUiTheme } from './lib/themes'
@@ -1769,11 +1769,10 @@ export default function App() {
           <div className="panel" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
             <FacetView
               key={`${activeProject}-${route.facet}`}
-              facet={route.facet}
+              facet={facetEnabled(uiPrefsState, route.facet) ? route.facet : 'overview'}
               projectName={projects.find(p => p.id === activeProject)?.root.split('/').filter(Boolean).pop() ?? activeProject}
               filesCount={files.length}
               startPage={startPage}
-              themeLabel={themeById(uiPrefsState.uiTheme)?.label ?? uiPrefsState.uiTheme}
               ctx={actionCtx}
               onNavigateFacet={(f) => navigate({ kind: 'facets', facet: f })}
               onOpenWizard={(id) => setWizard(id)}

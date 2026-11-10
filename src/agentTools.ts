@@ -295,6 +295,9 @@ export interface FilesTurnSignals {
   hasUserFlowGraph?: boolean
   /** A web search backend is available this turn. */
   searchAvailable?: boolean
+  /** The Features facet is turned off (Settings → Facets): its
+   * tools are not offered this turn, whatever the text says. */
+  featuresFacetOff?: boolean
 }
 
 /** The Files tool set for one turn: core always, groups on evidence. */
@@ -310,7 +313,7 @@ export function fileToolsForTurn(signals: FilesTurnSignals): string[] {
   if (DOC_RE.test(text)) for (const t of FILE_DOC_TOOLS) wanted.add(t)
   if (signals.searchAvailable && RESEARCH_RE.test(text)) for (const t of FILE_RESEARCH_TOOLS) wanted.add(t)
   if (signals.hasActivePlan || PLAN_RE.test(text)) for (const t of FILE_PLAN_TOOLS) wanted.add(t)
-  if (signals.hasFeatureGraph || FEATURE_RE.test(text)) for (const t of FILE_FEATURE_TOOLS) wanted.add(t)
+  if (!signals.featuresFacetOff && (signals.hasFeatureGraph || FEATURE_RE.test(text))) for (const t of FILE_FEATURE_TOOLS) wanted.add(t)
   if (signals.hasUserFlowGraph || FLOW_RE.test(text)) for (const t of FILE_USERFLOW_TOOLS) wanted.add(t)
   return FILE_ACTIVE_TOOLS.filter((t) => wanted.has(t))
 }

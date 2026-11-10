@@ -63,6 +63,32 @@ export interface FeaturePack {
   nodes: PackNode[]
   edges: PackEdge[]
   externalLinks: PackExternalLink[]
+  /* §2.1 envelope fields (Facets design §2/§5): the common pack
+   * envelope every kind carries. Optional in the manifest —
+   * packEnvelope() fills the defaults — so existing packs are
+   * under the envelope without a manifest rewrite. */
+  kind?: 'feature'
+  version?: string
+  author?: string
+  contents?: string[]
+  /** §5: what situation the suite is for; grouping only. */
+  scenario?: string
+}
+
+/** The §2.1 envelope view of a feature pack, defaults filled. */
+export function packEnvelope(pack: FeaturePack): {
+  id: string, kind: 'feature', name: string, version: string,
+  author?: string, description: string, contents: string[],
+} {
+  return {
+    id: pack.id,
+    kind: 'feature',
+    name: pack.name,
+    version: pack.version ?? '1.0.0',
+    ...(pack.author ? { author: pack.author } : {}),
+    description: pack.description,
+    contents: pack.contents ?? [`${pack.nodes.length} feature nodes`, `${pack.edges.length} edges`],
+  }
 }
 
 export interface PacksFile {

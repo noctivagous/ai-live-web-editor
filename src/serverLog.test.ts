@@ -42,7 +42,7 @@ describe('logServerError', () => {
   })
 
   it('never throws when the log home is unwritable', () => {
-    process.env.AI_LIVE_LOG_DIR = '/proc/ai-live-logs-test-unwritable'
+    process.env.AI_LIVE_LOG_DIR = '/sys/ai-live-logs-test-unwritable'
     assert.doesNotThrow(() => {
       logServerError({ kind: 'server-error', message: 'disk gone' })
     })
@@ -94,7 +94,7 @@ describe('logToolCall', () => {
   })
 
   it('never throws when the log home is unwritable', () => {
-    process.env.AI_LIVE_LOG_DIR = '/proc/ai-live-logs-test-unwritable'
+    process.env.AI_LIVE_LOG_DIR = '/sys/ai-live-logs-test-unwritable'
     assert.doesNotThrow(() => {
       logToolCall({ tool: 'read-real-file', path: '/x', ok: true })
     })

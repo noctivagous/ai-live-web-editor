@@ -23,6 +23,11 @@ import { packSummaryLine } from './catalog/packs.js'
 import { searchAvailable, searchBackendLabel } from './research/searchBackend.js'
 import { getActivePlan } from './plans/plans.js'
 import { featureGraphSummary, getFeatureGraph } from './features/features.js'
+import { facetOff } from './facetState.js'
+import { designGuideSummary, getDesignGuide } from './design/designGuide.js'
+import { architectureSummary } from './architecture/architecture.js'
+import { techStackSummary } from './techstack/techStack.js'
+import { configSummary } from './configregistry/configRegistry.js'
 import { flowGraphSummary, getUserFlowGraph } from './userflows/userflows.js'
 
 export const PROJECT_CONFIG_FILE = 'project.ai.json'
@@ -173,12 +178,37 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
   if (config.entry) lines.push(`Start page: ${config.entry} — the project's designated entry page; the preview opens here and other pages/components are reached from it.`)
   if (config.appkit) lines.push('Component stock: this project opts into the Noct AppKit (Lit) catalog stock in addition to shadcn.')
   if (config.styleSet) lines.push(`Style set: ${config.styleSet} — use its tokens for new UI.`)
+  if (!facetOff('graphic-design')) {
+    try {
+      const design = designGuideSummary(getDesignGuide())
+      if (design) lines.push(design)
+    } catch { /* the brief never breaks on the design guide */ }
+  }
+  if (!facetOff('architecture')) {
+    try {
+      const arch = architectureSummary()
+      if (arch) lines.push(arch)
+    } catch { /* the brief never breaks on the architecture declaration */ }
+  }
+  if (!facetOff('tech-stack')) {
+    try {
+      const stack = techStackSummary()
+      if (stack) lines.push(stack)
+    } catch { /* the brief never breaks on the tech stack */ }
+  }
+  if (!facetOff('configuration')) {
+    try {
+      const cfg = configSummary()
+      if (cfg) lines.push(cfg)
+    } catch { /* the brief never breaks on the configuration inventory */ }
+  }
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)
   const catalog = catalogSummary()
   if (catalog) lines.push(catalog)
   const templates = templateSummary()
   if (templates) lines.push(templates)
-  const packs = packSummaryLine()
+  const featuresOff = facetOff('features')
+  const packs = featuresOff ? '' : packSummaryLine()
   if (packs) lines.push(packs)
   if (searchAvailable()) {
     lines.push(`Web research is available via ${searchBackendLabel()}: web-search / fetch-page for quick lookups, research for multi-source briefs — build from cited briefs, not memory, when external facts matter.`)
@@ -198,13 +228,15 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
       lines.push('This plan was generated from the feature graph: its tasks are tied to graph nodes, and marking a task doing/done updates the node (building/done) on its own — no separate feature-set-status call is needed for them.')
     }
   }
-  try {
-    const graph = getFeatureGraph()
-    if (graph) lines.push(featureGraphSummary(graph))
-  } catch { /* the brief never breaks on the graph */ }
-  try {
-    const flowGraph = getUserFlowGraph()
-    if (flowGraph) lines.push(flowGraphSummary(flowGraph))
-  } catch { /* the brief never breaks on the graph */ }
+  if (!featuresOff) {
+    try {
+      const graph = getFeatureGraph()
+      if (graph) lines.push(featureGraphSummary(graph))
+    } catch { /* the brief never breaks on the graph */ }
+    try {
+      const flowGraph = getUserFlowGraph()
+      if (flowGraph) lines.push(flowGraphSummary(flowGraph))
+    } catch { /* the brief never breaks on the graph */ }
+  }
   return lines.join('\n')
 }

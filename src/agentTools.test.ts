@@ -126,6 +126,12 @@ describe('fileToolsForTurn', () => {
     }
   })
 
+  it('withholds feature tools when the Features facet is turned off, whatever the evidence', () => {
+    for (const t of FILE_FEATURE_TOOLS) {
+      assert.equal(fileToolsForTurn({ userText: 'what does the feature graph say is blocked?', hasFeatureGraph: true, featuresFacetOff: true }).includes(t), false, t)
+    }
+  })
+
   it('adds user flow tools on user-flow state or user-flow talk, not otherwise', () => {
     for (const t of FILE_USERFLOW_TOOLS) {
       assert.ok(fileToolsForTurn({ userText: 'fix the typo', hasUserFlowGraph: true }).includes(t), t)

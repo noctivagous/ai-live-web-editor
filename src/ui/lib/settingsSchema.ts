@@ -45,7 +45,7 @@ export interface SettingSection {
   title: string
   scope: SettingScope
   /** Set for sections rendered by a dedicated component, not fields. */
-  custom?: 'providers' | 'search' | 'preview' | 'data' | 'shortcuts' | 'about' | 'themes' | 'mcp'
+  custom?: 'providers' | 'search' | 'preview' | 'data' | 'shortcuts' | 'about' | 'themes' | 'mcp' | 'facets'
   keywords?: string
 }
 
@@ -60,6 +60,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'shortcuts', title: 'Keyboard Shortcuts', scope: 'device', custom: 'shortcuts', keywords: 'keys hotkeys bindings rebind f2 delete deck shortcuts' },
   { id: 'agent', title: 'Agent & Chat', scope: 'global', keywords: 'agent chat default workflow sketch context trimming codebase map injection tokens chat engine opencode advanced overrides' },
   { id: 'mcp', title: 'MCP', scope: 'global', custom: 'mcp', keywords: 'mcp servers tools protocol model context protocol chat integration handshake' },
+  { id: 'facets', title: 'Facets', scope: 'device', custom: 'facets', keywords: 'facets sections show hide turn off features architecture graphic design tech stack configuration overview facet bar' },
   { id: 'project', title: 'Project', scope: 'project', keywords: 'type format device targets style appkit catalog manifest' },
   { id: 'plans', title: 'Plans & Workflow', scope: 'project', keywords: 'plan level mutability default planning' },
   { id: 'preview', title: 'Preview & Live App', scope: 'global', custom: 'preview', keywords: 'playwright pool browser live target preview' },

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { chatStream, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
+import { chatStream, clearChatHistory, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import { PanelView } from './Panel'
@@ -551,6 +551,11 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
     if (sending) return
     setLog(DEFAULT_CHAT_LOG)
     setWorkingLabel('')
+    // Server-side history (Mastra thread / cached OpenCode session)
+    // is keyed by project and survives a local log reset — forget it
+    // too, so the next turn starts fresh. Best-effort: the visible
+    // log clears regardless.
+    void clearChatHistory().catch(() => {})
   }
 
   const chatTokens = useMemo(() => {

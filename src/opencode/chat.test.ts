@@ -9,7 +9,7 @@ import {
   beginConsoleExpectations, endConsoleExpectations, resetConsoleExpectationsForTests,
 } from '../verify/consoleExpectations.js'
 import {
-  createOpencodeEventFolder, pipeOpencodeChatStream, sumUsage, turnUsageFromTokens,
+  clearOpencodeSession, createOpencodeEventFolder, pipeOpencodeChatStream, sumUsage, turnUsageFromTokens,
 } from './chat.js'
 
 const SID = 'ses_test'
@@ -169,5 +169,11 @@ describe('pipeOpencodeChatStream without a connection', () => {
     // engine's next turn) can begin immediately.
     assert.equal(beginConsoleExpectations('probe-turn'), true)
     endConsoleExpectations('probe-turn')
+  })
+})
+
+describe('clearOpencodeSession', () => {
+  it('is a no-op when no session is cached for the root (chat Clear button)', () => {
+    assert.equal(clearOpencodeSession('/work/no-such-root'), false)
   })
 })

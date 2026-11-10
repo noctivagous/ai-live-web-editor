@@ -365,6 +365,17 @@ async function createSession(handle: OpencodeHandle, agent: string): Promise<str
  * — survive it. */
 const sessionsByRoot = new Map<string, { id: string; agent: string; providerID: string; modelID: string }>()
 
+/**
+ * Forget the shared OpenCode session for one project root (the chat
+ * Clear button's server half on this engine): the entry is dropped,
+ * so the next turn creates a fresh session and the cleared history
+ * is never recalled. The orphaned server-side session is simply
+ * never reused. True when a cached session was dropped.
+ */
+export function clearOpencodeSession(root: string = getFsRoot()): boolean {
+  return sessionsByRoot.delete(root)
+}
+
 /** One prompt's gating: the ALE agent to run it under and the ALE
  * tools this turn may call (agentTools-computed — see agents.ts).
  * Applied per prompt by prepareSession below. */

@@ -9,7 +9,7 @@ import path from 'node:path'
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-chat-memory-test-'))
 process.env.AI_LIVE_STORAGE = path.join(tmp, 'test.db')
 
-const { chatThreadIds, dropClientHistory, prepareMemoryTurn, clearChatThreads } = await import('./chatMemory.js')
+const { chatThreadIds, dropClientHistory, prepareMemoryTurn, clearChatThreads, clearChatThread } = await import('./chatMemory.js')
 const { editorMemory } = await import('./memory.js')
 const { getFsRoot } = await import('../launcher.js')
 
@@ -94,5 +94,28 @@ describe('prepareMemoryTurn + clearChatThreads (real LibSQL store)', () => {
     const cleared = await clearChatThreads()
     assert.ok(cleared.deleted >= 1)
     assert.equal(await editorMemory.getThreadById({ threadId: ids.thread }), null)
+  })
+
+  it("clearChatThread deletes only that root's thread (chat Clear button)", async () => {
+    const a = chatThreadIds('/work/clear-a')
+    const b = chatThreadIds('/work/clear-b')
+    const save = (ids: { thread: string, resource: string }) => editorMemory.saveThread({
+      thread: {
+        id: ids.thread,
+        resourceId: ids.resource,
+        title: '',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    })
+    await save(a)
+    await save(b)
+    assert.equal(await clearChatThread('/work/clear-a'), true)
+    assert.equal(await editorMemory.getThreadById({ threadId: a.thread }), null)
+    assert.notEqual(await editorMemory.getThreadById({ threadId: b.thread }), null)
+    assert.equal(await clearChatThread('/work/clear-a'), false)
+    assert.equal(await clearChatThread('/work/clear-b'), true)
+    assert.equal(await editorMemory.getThreadById({ threadId: b.thread }), null)
   })
 })

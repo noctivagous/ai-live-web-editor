@@ -370,6 +370,13 @@ export function clearServerChatThreads() {
   return fsPost('/api/chat/threads/clear', {})
 }
 
+/** Clear this chat's server-side history (Mastra thread + cached
+ * OpenCode session for the active project) — the server half of the
+ * chat Clear button. The visible log clears locally regardless. */
+export function clearChatHistory() {
+  return fsPost('/api/chat/clear', {})
+}
+
 export async function chat(messages: {role:string, content:string}[]) {
   const r = await fetch(`${API}/api/chat`, {
     method:'POST', headers:{'Content-Type':'application/json'},

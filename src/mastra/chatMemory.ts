@@ -84,6 +84,24 @@ export async function prepareMemoryTurn(payload: unknown): Promise<PreparedMemor
  * Clear saved chat sessions: once history lives server-side, clearing
  * only the browser copy would leave the agent still remembering.
  */
+/**
+ * Forget one project's chat thread (the chat Clear button's server
+ * half on the Mastra engine): the next turn finds no thread, so
+ * prepareMemoryTurn seeds fresh from the client payload instead of
+ * recalling the cleared history. True when a thread was deleted.
+ */
+export async function clearChatThread(root: string): Promise<boolean> {
+  const { thread } = chatThreadIds(root)
+  try {
+    const existing = await editorMemory.getThreadById({ threadId: thread })
+    if (!existing) return false
+    await editorMemory.deleteThread(thread)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function clearChatThreads(): Promise<{ deleted: number, attempted: number }> {
   const roots = new Set<string>([getFsRoot()])
   try {

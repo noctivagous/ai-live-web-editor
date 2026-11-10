@@ -86,7 +86,11 @@ export function opencodeBinaryPackageNames(platform = process.platform, arch = p
 }
 
 /** Resolve the opencode binary: explicit override, then the pinned
- * platform package in the editor's node_modules, then PATH. */
+ * v2 platform package in the editor's node_modules, then PATH.
+ * The PATH fallback is `opencode2`, never `opencode`: a v1 install
+ * owns the `opencode` name and refuses the generated V2 `permissions`
+ * config at startup, while v2 ships the side-by-side `opencode2`
+ * name for the same binary. */
 export function resolveOpencodeBinary(
   env: NodeJS.ProcessEnv = process.env,
   exists: (p: string) => boolean = fs.existsSync,
@@ -98,7 +102,7 @@ export function resolveOpencodeBinary(
     const candidate = path.join(OPENCODE_EDITOR_ROOT, 'node_modules', '@opencode', pkg, 'bin', exe)
     if (exists(candidate)) return candidate
   }
-  return 'opencode'
+  return process.platform === 'win32' ? 'opencode2.exe' : 'opencode2'
 }
 
 function freePort(): Promise<number> {

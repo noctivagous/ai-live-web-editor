@@ -18,12 +18,16 @@ describe('opencode binary resolution', () => {
   })
 
   it('finds the pinned platform package in the editor node_modules', () => {
-    const plain = path.join(OPENCODE_EDITOR_ROOT, 'node_modules', '@opencode', 'cli-linux-x64', 'bin', 'opencode')
+    const pkg = opencodeBinaryPackageNames()[0]
+    const exe = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
+    const plain = path.join(OPENCODE_EDITOR_ROOT, 'node_modules', '@opencode', pkg, 'bin', exe)
     const found = resolveOpencodeBinary({}, (p) => p === plain)
     assert.equal(found, plain)
   })
 
   it('falls back to PATH when no package is installed', () => {
-    assert.equal(resolveOpencodeBinary({}, () => false), 'opencode')
+    // opencode2, never opencode: a v1 install owns the `opencode`
+    // name and refuses the generated V2 permissions config.
+    assert.equal(resolveOpencodeBinary({}, () => false), process.platform === 'win32' ? 'opencode2.exe' : 'opencode2')
   })
 })

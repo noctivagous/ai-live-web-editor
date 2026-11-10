@@ -3,9 +3,11 @@ import { describe, it } from 'node:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { pipeAgentChatStream } from '../chatStream.js'
+import { pipeOpencodeChatStream } from '../opencode/chat.js'
 import { BASIC_SUITE, EMPTY_FACTS, type TurnFacts } from './suite.js'
-import { buildSummary, median, writeRunReport, type TaskRunRecord } from './report.js'
-import { FIXTURE_DIR, copyFixture } from './runner.js'
+import { buildSummary, median, renderReport, writeRunReport, type TaskRunRecord } from './report.js'
+import { FIXTURE_DIR, chatPipeForEngine, copyFixture } from './runner.js'
 
 function tmpRunCopy(): string {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-suite-'))
@@ -169,6 +171,7 @@ describe('report', () => {
       runId: 'test-run',
       startedAt: '2026-11-07T00:00:00.000Z',
       model: 'muse-spark-1.3-contributor',
+      engine: 'mastra',
       suiteId: BASIC_SUITE.id,
       tasks: BASIC_SUITE.tasks,
       records: [
@@ -189,9 +192,41 @@ describe('report', () => {
     const { summaryPath, reportPath } = writeRunReport(outDir, summary)
     const written = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')) as typeof summary
     assert.equal(written.aggregates.costPerSolvedTaskTokens, 450)
+    assert.equal(written.engine, 'mastra')
     const md = fs.readFileSync(reportPath, 'utf-8')
     assert.match(md, /fixed floor/)
     assert.match(md, /Cost per solved task/)
     assert.match(md, /add-counter/)
+    assert.match(md, /engine `mastra`/)
+    assert.match(md, /60,071/, 'the recorded baseline anchor rides every report')
+  })
+})
+
+describe('engine selection (slice 9)', () => {
+  it('the pipe for an engine is that engine\u2019s chat-stream function', () => {
+    assert.equal(chatPipeForEngine('opencode'), pipeOpencodeChatStream)
+    assert.equal(chatPipeForEngine('mastra'), pipeAgentChatStream)
+  })
+
+  it('an opencode run\u2019s summary names the engine; its report keeps the Mastra anchor with the keyed-run caveat', () => {
+    const summary = buildSummary({
+      runId: 'test-opencode-run',
+      startedAt: '2026-11-09T00:00:00.000Z',
+      model: 'stub-1',
+      engine: 'opencode',
+      suiteId: BASIC_SUITE.id,
+      tasks: BASIC_SUITE.tasks,
+      records: [{
+        taskId: 'control-ok', title: 'Control', rep: 1,
+        usage: { input: 90, output: 10, total: 100 }, durationMs: 500, toolCalls: 0,
+        solved: true, checks: [], error: null,
+      }],
+    })
+    assert.equal(summary.engine, 'opencode')
+    const md = renderReport(summary)
+    assert.match(md, /engine `opencode`/)
+    assert.match(md, /Comparison anchor/)
+    assert.match(md, /60,071/)
+    assert.match(md, /awaits a keyed run/)
   })
 })

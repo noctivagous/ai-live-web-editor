@@ -15,11 +15,18 @@ import {
 } from './checkFrames.js'
 import {
   applyFormatToFindings,
+  consoleEpochPlan,
   consoleFindings,
+  consoleInstanceOf,
   diffFindings,
   formatGatePrompt,
+  PAGE_RELOADED_NOTE,
+  POOL_PAGE_REPLACED_NOTE,
   toLayoutFindings,
+  type ConsoleChannelMark,
   type ConsoleEntry,
+  type ConsoleInstance,
+  type ConsoleWatermark,
   type LayoutFinding,
 } from './gate.js'
 import { effectiveFormat, readProjectConfig } from '../projectConfig.js'
@@ -27,10 +34,18 @@ import { effectiveFormat, readProjectConfig } from '../projectConfig.js'
 export type GateBaseline = {
   at: number
   bridgeSeq: number
+  /** Bridge page instance the seq watermark belongs to (epoch guard). */
+  bridgeInstance?: ConsoleInstance
   bridgeWidth?: number
   bridgeLayout: LayoutFinding[]
   frames: Array<{ width: number, findings: LayoutFinding[], seq: number }>
   poolSeq: number
+  /** Pool ring generation the pool seq watermark belongs to. */
+  poolInstance?: ConsoleInstance
+  /** Notes recorded while baselining (e.g. checks that could not run),
+   * carried into the gate result's unverified list so they surface in
+   * the turn's verify summary instead of degrading silently. */
+  unverified: string[]
 }
 
 export type GateResult = {
@@ -62,42 +77,69 @@ async function bridgeLayout(): Promise<{ findings: LayoutFinding[], width?: numb
   }
 }
 
-async function bridgeSeq(): Promise<number> {
+/** Bridge console watermark: the ring's current seq plus the page
+ * instance it belongs to, so a post-reload read can detect the epoch
+ * change instead of diffing against a dead page's seq space. */
+async function bridgeWatermark(): Promise<ConsoleChannelMark> {
   try {
     const raw = await pageCommand('console', { maxEntries: 1 }) as any
-    return Number(raw?.latestSeq || 0)
+    if (raw?.error) return { seq: 0, connected: false }
+    return { seq: Number(raw?.latestSeq || 0), instance: consoleInstanceOf(raw), connected: true }
   } catch {
-    return 0
+    return { seq: 0, connected: false }
   }
 }
 
-/** Pool counterpart of bridgeSeq: the pool console ring's current
- * sequence, so the post-turn diff reports only entries newer than the
- * baseline. Without it poolSeq stayed 0 and every pre-existing pool
- * console error counted as a new finding (slice 5a). */
-export async function poolSeq(): Promise<number> {
+/** Pool counterpart of bridgeWatermark: the pool console ring's current
+ * sequence (plus its generation), so the post-turn diff reports only
+ * entries newer than the baseline. Without it poolSeq stayed 0 and
+ * every pre-existing pool console error counted as a new finding
+ * (slice 5a). */
+async function poolProbe(): Promise<ConsoleChannelMark> {
   try {
     const { playwrightPoolEnabled, liveTarget } = await import('../env.js')
-    if (!playwrightPoolEnabled() || liveTarget() !== 'pool') return 0
+    if (!playwrightPoolEnabled() || liveTarget() !== 'pool') return { seq: 0, connected: false }
     const { liveConsole } = await import('../liveTarget.js')
     const raw = await liveConsole({ maxEntries: 1 }, undefined) as any
-    if (raw?.error) return 0
-    return Number(raw?.latestSeq || 0)
+    if (raw?.error) return { seq: 0, connected: false }
+    return { seq: Number(raw?.latestSeq || 0), instance: consoleInstanceOf(raw), connected: true }
   } catch {
-    return 0
+    return { seq: 0, connected: false }
   }
 }
 
-/** Pre-stream baseline. Cheap parts always run on Files turns; frames cost ~2 page loads. */
-export async function captureBaseline(): Promise<GateBaseline | null> {
+export async function poolSeq(): Promise<number> {
+  return (await poolProbe()).seq
+}
+
+/** The cheap console-only capture (slice B): both channels' watermarks
+ * and nothing else — no layout snapshot, no check frames. This is
+ * what every chat turn takes at its start when console checking is
+ * on; the gate baseline below reuses it instead of re-probing. */
+export async function captureConsoleMarks(): Promise<{ bridge: ConsoleChannelMark, pool: ConsoleChannelMark }> {
+  const [bridge, pool] = await Promise.all([bridgeWatermark(), poolProbe()])
+  return { bridge, pool }
+}
+
+/** Pre-stream baseline. Cheap parts always run on Files turns; frames cost ~2 page loads.
+ * `pre` carries a console capture already taken at this turn's start
+ * (slice B's cheap capture) — its watermarks are reused verbatim so
+ * the turn probes each channel once, not twice. */
+export async function captureBaseline(pre?: { bridge: ConsoleWatermark, pool: ConsoleWatermark }): Promise<GateBaseline | null> {
   if (!verifyGateEnabled()) return null
-  const base: GateBaseline = { at: Date.now(), bridgeSeq: 0, bridgeLayout: [], frames: [], poolSeq: 0 }
-  const [layout, seq, pseq] = await Promise.all([bridgeLayout(), bridgeSeq(), poolSeq()])
+  const base: GateBaseline = { at: Date.now(), bridgeSeq: 0, bridgeLayout: [], frames: [], poolSeq: 0, unverified: [] }
+  const [layout, mark, pmark] = pre
+    ? [await bridgeLayout(), pre.bridge, pre.pool]
+    : await Promise.all([bridgeLayout(), bridgeWatermark(), poolProbe()])
   base.bridgeLayout = layout.findings
   base.bridgeWidth = layout.width
-  base.bridgeSeq = seq
-  base.poolSeq = pseq
-  const markers = await ensureCheckFrames(currentCheckWidths())
+  base.bridgeSeq = mark.seq
+  base.bridgeInstance = mark.instance
+  base.poolSeq = pmark.seq
+  base.poolInstance = pmark.instance
+  const frames = await ensureCheckFrames(currentCheckWidths())
+  if (frames.skipped) base.unverified.push(frames.skipped)
+  const markers = frames.markers
   if (markers.length) {
     const snaps = await snapshotCheckFrames()
     const consoles = await consoleCheckFrames(0)
@@ -171,7 +213,7 @@ export async function runVerifyGate(baseline: GateBaseline | null): Promise<Gate
   await settleHmr()
   const layout: LayoutFinding[] = []
   const consoleOut: ConsoleEntry[] = []
-  const unverified: string[] = []
+  const unverified: string[] = [...(baseline.unverified ?? [])]
 
   // Bridge current width.
   const post = await bridgeLayout()
@@ -179,9 +221,24 @@ export async function runVerifyGate(baseline: GateBaseline | null): Promise<Gate
     layout.push(...diffFindings(baseline.bridgeLayout, post.findings))
   }
   try {
-    const raw = await pageCommand('console', { sinceSeq: baseline.bridgeSeq, maxEntries: 100 }) as any
-    if (raw?.error) unverified.push(`bridge console: ${raw.error}`)
-    else consoleOut.push(...consoleFindings(((raw?.entries || []) as ConsoleEntry[]), baseline.bridgeSeq))
+    // Probe the instance first: if the page reloaded during the turn,
+    // its seq restarted at 1 and the baseline watermark would suppress
+    // the new page's errors — read from its load instead, and say so.
+    const probe = await pageCommand('console', { maxEntries: 1 }) as any
+    if (probe?.error) {
+      unverified.push(`bridge console: ${probe.error}`)
+    } else {
+      const plan = consoleEpochPlan(
+        { seq: baseline.bridgeSeq, instance: baseline.bridgeInstance },
+        consoleInstanceOf(probe),
+      )
+      const raw = await pageCommand('console', { sinceSeq: plan.sinceSeq, maxEntries: 100 }) as any
+      if (raw?.error) unverified.push(`bridge console: ${raw.error}`)
+      else {
+        if (plan.reloaded) unverified.push(PAGE_RELOADED_NOTE)
+        consoleOut.push(...consoleFindings(((raw?.entries || []) as ConsoleEntry[]), plan.sinceSeq))
+      }
+    }
   } catch (e: any) {
     unverified.push(`bridge console: ${e?.message || e}`)
   }
@@ -211,11 +268,24 @@ export async function runVerifyGate(baseline: GateBaseline | null): Promise<Gate
   }
 
   // Pool console — only when the pool is the live target, never fatal.
+  // Same epoch guard as the bridge: if the pool page object was
+  // replaced mid-turn, its ring restarted and the baseline seq would
+  // suppress the new page's entries.
   try {
     const { playwrightPoolEnabled, liveTarget } = await import('../env.js')
     if (playwrightPoolEnabled() && liveTarget() === 'pool') {
-      const raw = await liveConsole({ sinceSeq: baseline.poolSeq, maxEntries: 100 }, undefined) as any
-      if (!raw?.error) consoleOut.push(...consoleFindings(((raw?.entries || []) as ConsoleEntry[]), baseline.poolSeq))
+      const probe = await liveConsole({ maxEntries: 1 }, undefined) as any
+      if (!probe?.error) {
+        const plan = consoleEpochPlan(
+          { seq: baseline.poolSeq, instance: baseline.poolInstance },
+          consoleInstanceOf(probe),
+        )
+        const raw = await liveConsole({ sinceSeq: plan.sinceSeq, maxEntries: 100 }, undefined) as any
+        if (!raw?.error) {
+          if (plan.reloaded) unverified.push(POOL_PAGE_REPLACED_NOTE)
+          consoleOut.push(...consoleFindings(((raw?.entries || []) as ConsoleEntry[]), plan.sinceSeq))
+        }
+      }
     }
   } catch { /* best effort */ }
 

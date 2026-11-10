@@ -1,4 +1,5 @@
 /** Capped ring buffer with sequence numbers — shared shape for console capture. */
+import type { ConsoleSrc } from './consoleSource.js'
 
 export type RingEntry = {
   seq: number
@@ -8,6 +9,9 @@ export type RingEntry = {
   url?: string
   ts: number
   kind?: string
+  /** Source attribution (slice C): whose code produced the entry.
+   * Absent on pre-slice-C entries, where it means 'app'. */
+  src?: ConsoleSrc
 }
 
 export type RingBuffer = {

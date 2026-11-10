@@ -106,6 +106,88 @@ describe('page-bridge console buffer', () => {
     assert.equal(body.latestSeq, 250)
   })
 
+  it('stamps a page-instance id on console reads, stable within the page', async () => {
+    const { instances, posted } = loadBridge()
+    sendCmd(instances, 'console', {}, 'i1')
+    await new Promise((r) => setTimeout(r, 20))
+    sendCmd(instances, 'console', {}, 'i2')
+    await new Promise((r) => setTimeout(r, 20))
+    assert.equal(posted.length, 2)
+    const a = (posted[0] as any).instance
+    const b = (posted[1] as any).instance
+    assert.equal(typeof a, 'string')
+    assert.ok(a.length > 0, 'instance id present')
+    assert.equal(a, b, 'same page instance across reads')
+  })
+
+  it('mints a different instance id for a new page (reload)', async () => {
+    const one = loadBridge()
+    sendCmd(one.instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    const two = loadBridge()
+    sendCmd(two.instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    const a = (one.posted[0] as any).instance
+    const b = (two.posted[0] as any).instance
+    assert.equal(typeof a, 'string')
+    assert.equal(typeof b, 'string')
+    assert.notEqual(a, b)
+  })
+
+  it('slice C: a pageerror whose stack runs through an injected client is tagged editor', async () => {
+    const { instances, posted, listeners } = loadBridge()
+    const stack = [
+      'Error: chat blew up',
+      '    at mountChatOverlay (http://localhost:5173/@ai-live-editor/chat-overlay.js:120:11)',
+      '    at http://localhost:5173/src/main.tsx:5:1',
+    ].join('\n')
+    listeners.error[0]({ message: 'chat blew up', error: { stack } })
+    sendCmd(instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    const body = posted[0] as any
+    assert.equal(body.entries[0].level, 'pageerror')
+    assert.equal(body.entries[0].src, 'editor')
+  })
+
+  it('slice C: a pageerror through the overlay’s served path is tagged editor', async () => {
+    const { instances, posted, listeners } = loadBridge()
+    const stack = 'Error: pick failed\n    at HTMLDocument.<anonymous> (/live-edit/overlay.js:812:9)'
+    listeners.error[0]({ message: 'pick failed', error: { stack } })
+    sendCmd(instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    assert.equal((posted[0] as any).entries[0].src, 'editor')
+  })
+
+  it('slice C: an app-stack pageerror is tagged app', async () => {
+    const { instances, posted, listeners } = loadBridge()
+    const stack = 'Error: boom\n    at App (http://localhost:5173/src/App.tsx:9:3)'
+    listeners.error[0]({ message: 'boom', error: { stack } })
+    sendCmd(instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    assert.equal((posted[0] as any).entries[0].src, 'app')
+  })
+
+  it('slice C: a stackless console.error stays app (no stack is captured for console.*)', async () => {
+    const { ctx, instances, posted } = loadBridge()
+    ctx.console.error('plain app error')
+    sendCmd(instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    const body = posted[0] as any
+    assert.equal(body.entries[0].level, 'error')
+    assert.equal(body.entries[0].src, 'app')
+  })
+
+  it('slice C: an unhandled rejection with an editor stack is tagged editor', async () => {
+    const { instances, posted, listeners } = loadBridge()
+    const reason = { stack: 'Error: overlay submit failed\n    at submit (http://localhost:5173/live-edit/overlay.js:1200:5)' }
+    listeners.unhandledrejection[0]({ reason })
+    sendCmd(instances, 'console', {})
+    await new Promise((r) => setTimeout(r, 20))
+    const body = posted[0] as any
+    assert.equal(body.entries[0].level, 'pageerror')
+    assert.equal(body.entries[0].src, 'editor')
+  })
+
   it('tags check-frame connections and echoes the marker', async () => {
     const { instances, posted } = loadBridge({ hash: '#ai-check-375' })
     assert.ok(instances[0].url.includes('check=375'))

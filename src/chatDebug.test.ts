@@ -198,3 +198,39 @@ describe('ChatDebugTurn enabled', () => {
     ])
   })
 })
+
+describe('ChatDebugTurn engine options (slice 9, additive)', () => {
+  it('a default recorder writes NO engine field — the Mastra record shape is unchanged', () => {
+    const dir = tmpDir()
+    const file = path.join(dir, 'report.jsonl')
+    const dbg = createChatDebugTurn({ env: { AI_LIVE_CHAT_DEBUG: '1' }, file, projectRoot: dir })
+    const record = dbg.finish({})
+    assert.ok(record)
+    assert.equal('engine' in record, false)
+    assert.equal(fs.readFileSync(file, 'utf-8').includes('"engine"'), false)
+  })
+
+  it('engine + extraWriteTools: the record is stamped and native write names become claims', () => {
+    const dir = tmpDir()
+    const root = path.join(dir, 'project')
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'src', 'app.ts'), 'export const x = 1\n')
+    const file = path.join(dir, 'report.jsonl')
+    const dbg = createChatDebugTurn({
+      env: { AI_LIVE_CHAT_DEBUG: '1' }, file, projectRoot: root,
+      engine: 'opencode', extraWriteTools: new Set(['edit', 'write', 'apply_patch']),
+    })
+    // A native edit: unknown to agentTools' WRITE_TOOLS, counted
+    // only because the engine declared it a write tool.
+    dbg.noteToolChunk({ type: 'tool-call', id: 'e1', name: 'edit', detail: 'edit src/app.ts' },
+      { payload: { args: { path: 'src/app.ts' } } })
+    dbg.recordEvent({ type: 'tool-call', id: 'e1', name: 'edit', detail: 'edit src/app.ts' })
+    dbg.recordEvent({ type: 'tool-result', id: 'e1', name: 'edit', ok: true, detail: 'ok' })
+    const record = dbg.finish({})
+    assert.ok(record)
+    assert.equal(record.engine, 'opencode')
+    assert.deepEqual(record.writes.map((w) => [w.tool, w.claimedPath, w.claimSource, w.exists]), [
+      ['edit', 'src/app.ts', 'args', true],
+    ])
+  })
+})

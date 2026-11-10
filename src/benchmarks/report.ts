@@ -10,8 +10,19 @@
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import type { ChatEngine } from '../agentSettings.js'
 import type { TurnUsage } from '../chatStream.js'
 import type { GradeCheck } from './suite.js'
+
+/**
+ * The comparison anchor: the Mastra engine's recorded BASIC
+ * baseline after step-economy slice 1 (2026-11-07; the pre-fix
+ * baseline was 97,944). Every report carries it so a run on
+ * either engine reads against the same yardstick. It is an
+ * anchor, not a promise — re-recording the OpenCode engine's
+ * own baseline needs a keyed run.
+ */
+export const MASTRA_COST_PER_SOLVED_BASELINE = 60_071
 
 export interface TaskRunRecord {
   taskId: string
@@ -36,6 +47,8 @@ export interface BenchmarkSummary {
   runId: string
   startedAt: string
   model: string
+  /** The chat engine that served the run's turns (slice 9). */
+  engine: ChatEngine
   suite: string
   /** sha256 of each task's verbatim prompt, keyed by task id. */
   promptHashes: Record<string, string>
@@ -67,6 +80,7 @@ export function buildSummary(input: {
   runId: string
   startedAt: string
   model: string
+  engine: ChatEngine
   suiteId: string
   tasks: { id: string; title: string; prompt: string }[]
   records: TaskRunRecord[]
@@ -91,6 +105,7 @@ export function buildSummary(input: {
     runId: input.runId,
     startedAt: input.startedAt,
     model: input.model,
+    engine: input.engine,
     suite: input.suiteId,
     promptHashes,
     records: input.records,
@@ -114,7 +129,7 @@ export function renderReport(summary: BenchmarkSummary): string {
   const lines: string[] = []
   lines.push(`# Token benchmark — ${summary.suite} suite`)
   lines.push('')
-  lines.push(`Run: ${summary.runId} · started ${summary.startedAt} · model \`${summary.model}\``)
+  lines.push(`Run: ${summary.runId} · started ${summary.startedAt} · model \`${summary.model}\` · engine \`${summary.engine}\``)
   lines.push('')
   lines.push('| Task | Rep | Solved | Tokens (total) | Input | Output | Cached input | Tool calls | Elapsed |')
   lines.push('| --- | ---: | :---: | ---: | ---: | ---: | ---: | ---: | ---: |')
@@ -141,6 +156,11 @@ export function renderReport(summary: BenchmarkSummary): string {
   lines.push(`- Tasks solved: ${a.solvedCount} of ${a.totalRuns} runs`)
   lines.push(`- Total tokens: ${fmt(a.totalTokens)}`)
   lines.push(`- Cost per solved task: ${a.costPerSolvedTaskTokens === null ? '— (nothing solved)' : `${fmt(a.costPerSolvedTaskTokens)} tokens`}`)
+  if (summary.engine === 'opencode') {
+    lines.push(`- Comparison anchor: the Mastra engine's recorded baseline is ${fmt(MASTRA_COST_PER_SOLVED_BASELINE)} tokens per solved task. The OpenCode baseline re-record awaits a keyed run — a stub-model run measures the wiring, not quality.`)
+  } else {
+    lines.push(`- Recorded baseline for comparison: ${fmt(MASTRA_COST_PER_SOLVED_BASELINE)} tokens per solved task (Mastra engine, step-economy slice 1).`)
+  }
   lines.push('')
   const failed = summary.records.filter((r) => !r.solved)
   if (failed.length) {

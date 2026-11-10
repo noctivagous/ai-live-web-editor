@@ -12,10 +12,21 @@
  *
  * The fixture template is never edited: every task×rep gets a fresh
  * copy under .ai-live/benchmark-work/<runId>/.
+ *
+ * Engine selection (re-platform slice 9): a run serves its turns
+ * through ONE chat engine — the Mastra stream or the OpenCode
+ * translator — chosen by the same chatEngine agent setting the
+ * app routes with. BenchmarkRunOptions.engine, when given, wins
+ * and is set into that setting for the run's duration (restored
+ * afterwards, like the fs root); without it the run uses the
+ * setting's current value. The summary/report name the engine,
+ * and the Mastra baseline (60,071 tokens per solved task) stays
+ * on the report as the comparison anchor either way.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { currentAgentSettings, saveAgentSettings, type ChatEngine } from '../agentSettings.js'
 import { pipeAgentChatStream, type ChatStreamEvent, type TurnUsage } from '../chatStream.js'
 import {
   activateConnection, connectionKey, getStore, recordProbe,
@@ -23,6 +34,9 @@ import {
 } from '../connections.js'
 import { loadDotEnv } from '../env.js'
 import { EDITOR_ROOT, getFsRoot, setFsRoot } from '../launcher.js'
+import { pipeOpencodeChatStream } from '../opencode/chat.js'
+import { opencodeMappingFor } from '../opencode/config.js'
+import { presetById } from '../providerPresets.js'
 import { listProviderModels } from '../providers.js'
 import { buildSummary, writeRunReport, type TaskRunRecord } from './report.js'
 import { BASIC_SUITE, type TurnFacts } from './suite.js'
@@ -76,6 +90,55 @@ export async function ensureBenchmarkConnection(model: string): Promise<void> {
   const resolved = resolveConnectionModel()
   if (!resolved || resolved.id !== `openai/${model}`) {
     throw new Error(`Connection setup did not resolve to ${model} (resolved: ${resolved?.id ?? 'none'}). Check the Meta connection in Settings.`)
+  }
+}
+
+/** The turn pipe for an engine: the exact function behind
+ * POST /api/chat/stream for that engine. */
+export function chatPipeForEngine(engine: ChatEngine) {
+  return engine === 'opencode' ? pipeOpencodeChatStream : pipeAgentChatStream
+}
+
+/** Whether a stored connection maps onto the OpenCode engine —
+ * the supervisor's own mapping check (opencode/config.ts). */
+function opencodeMappingOk(conn: { id: string; name: string; model: string; baseUrl: string; presetId: string }): boolean {
+  const preset = presetById(conn.presetId)
+  return opencodeMappingFor(
+    { id: conn.id, name: conn.name, model: conn.model, baseUrl: conn.baseUrl, presetProviderId: preset?.providerId ?? null },
+    { pluginDir: '', hostUrl: '' },
+  ).ok === true
+}
+
+/**
+ * The OpenCode engine's counterpart of ensureBenchmarkConnection:
+ * make sure the ACTIVE connection names the requested model and
+ * maps onto the engine. The supervisor reads the active
+ * connection directly (no probe, no modality defaults — those
+ * feed the Mastra agent's model resolution), so the setup is:
+ * an already-active connection that names the model, resolves a
+ * key, and maps is honored as-is (the mechanical stub-provider
+ * runs seed exactly that); otherwise the recorded-baseline Meta
+ * connection is upserted/activated exactly as the Mastra path
+ * sets it up, and its mapping is verified.
+ */
+export async function ensureOpencodeBenchmarkConnection(model: string): Promise<void> {
+  loadDotEnv()
+  const store = getStore()
+  const active = store.connections.find((c) => c.id === store.activeId)
+  if (active && active.model === model && connectionKey(active) && opencodeMappingOk(active)) return
+  if (!connectionKey({ id: 'meta', presetId: 'meta' })) {
+    throw new Error(
+      'No Meta API key is resolvable (CONN_KEY_META or MODEL_API_KEY). ' +
+      'Put the key in the repo .env or the environment before running the benchmark.',
+    )
+  }
+  const conn = upsertConnection({ id: 'meta', presetId: 'meta', name: 'Meta', model })
+  activateConnection('meta')
+  if (!opencodeMappingOk(conn)) {
+    throw new Error(
+      'The Meta connection does not map onto the OpenCode engine ' +
+      '(its preset kind is not OpenAI-compatible, or its model/base URL is missing).',
+    )
   }
 }
 
@@ -150,12 +213,12 @@ interface DrivenTurn {
  * abort path); a turn that still has not settled after a grace period
  * throws, so the suite stops instead of letting a zombie turn write
  * into a later task's copy. */
-async function driveTurn(prompt: string, taskTimeoutMs: number): Promise<DrivenTurn> {
+async function driveTurn(prompt: string, taskTimeoutMs: number, engine: ChatEngine): Promise<DrivenTurn> {
   const res = new SseCapture()
   const req = makeStubReq()
   const started = Date.now()
   let timedOut = false
-  const pipe = pipeAgentChatStream([{ role: 'user', content: prompt }], res, req, 'files')
+  const pipe = chatPipeForEngine(engine)([{ role: 'user', content: prompt }], res, req, 'files')
   const settled = pipe.then(() => true, () => true)
   const timer = setTimeout(() => {
     timedOut = true
@@ -206,6 +269,10 @@ export interface BenchmarkRunOptions {
   reps?: number
   taskTimeoutMs?: number
   taskIds?: string[]
+  /** Chat engine for the run (see the module header): set into
+   * the chatEngine agent setting for the run and restored after;
+   * defaults to the setting's current value. */
+  engine?: ChatEngine
   onProgress?: (msg: string) => void
 }
 
@@ -220,12 +287,21 @@ export async function runBenchmark(opts: BenchmarkRunOptions = {}) {
   const startedAt = new Date()
   const runId = startedAt.toISOString().replace(/[:.]/g, '-')
 
-  await ensureBenchmarkConnection(model)
+  // Engine for the run: an explicit option is set into the
+  // chatEngine agent setting for the run's duration (restored in
+  // the finally below, like the fs root); without one, the
+  // setting's current value decides.
+  const prevEngine = currentAgentSettings().chatEngine
+  const engine: ChatEngine = opts.engine ?? prevEngine
+  const engineSetForRun = opts.engine !== undefined && opts.engine !== prevEngine
+  if (engineSetForRun) saveAgentSettings({ chatEngine: engine })
 
   const prevRoot = getFsRoot()
   const records: TaskRunRecord[] = []
   let stop = false
   try {
+    if (engine === 'opencode') await ensureOpencodeBenchmarkConnection(model)
+    else await ensureBenchmarkConnection(model)
     for (const task of tasks) {
       if (stop) break
       for (let rep = 1; rep <= reps; rep++) {
@@ -235,7 +311,7 @@ export async function runBenchmark(opts: BenchmarkRunOptions = {}) {
         opts.onProgress?.(`[${task.id} r${rep}] running…`)
         let driven: DrivenTurn
         try {
-          driven = await driveTurn(task.prompt, taskTimeoutMs)
+          driven = await driveTurn(task.prompt, taskTimeoutMs, engine)
         } catch (e) {
           records.push({
             taskId: task.id, title: task.title, rep,
@@ -261,12 +337,14 @@ export async function runBenchmark(opts: BenchmarkRunOptions = {}) {
     }
   } finally {
     setFsRoot(prevRoot)
+    if (engineSetForRun) saveAgentSettings({ chatEngine: prevEngine })
   }
 
   const summary = buildSummary({
     runId,
     startedAt: startedAt.toISOString(),
     model,
+    engine,
     suiteId: BASIC_SUITE.id,
     tasks,
     records,

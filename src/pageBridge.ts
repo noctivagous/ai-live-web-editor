@@ -37,6 +37,20 @@ export function livePageCount() {
   return clients.size
 }
 
+/**
+ * True when bridge clients can register with THIS process: it either
+ * serves the edited page itself (page owner — the plugin or an
+ * in-process Vite loaded it) or a page client has already connected
+ * here. In the standard two-process topology the editor process has
+ * neither: page clients register with the project's own server and
+ * pageCommand reaches the page only via the HTTP fallback — so
+ * anything that waits for a client to appear in this registry (check
+ * frames) would wait forever.
+ */
+export function canRegisterLocalClients(): boolean {
+  return pageOwner || clients.size > 0
+}
+
 /** Normal-dispatch clients: hidden check frames are addressed directly, never here. */
 function dispatchClients(): Client[] {
   return [...clients.values()].filter((c) => !c.check)

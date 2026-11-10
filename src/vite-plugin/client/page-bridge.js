@@ -17,14 +17,48 @@ function startPageBridge() {
   const check = checkMatch ? checkMatch[1] : ''
   let es
 
+  // Page-instance id: minted once per document so the host can tell a
+  // post-reload console buffer (whose seq restarts at 1) apart from the
+  // page it took its baseline watermark on. A reload re-runs this script
+  // and mints a fresh id; it is deliberately never persisted. Minting is
+  // wrapped so a failure here can never take the bridge down.
+  const pageInstance = (() => {
+    try {
+      return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+    } catch {
+      return 'p' + String(Date.now())
+    }
+  })()
+
   // Console ring buffer (P0-b console signal): records console.* calls and
   // uncaught errors with sequence numbers so the host can poll "since seq".
   const consoleBuffer = []
   let consoleSeq = 0
   const CONSOLE_CAP = 200
+  // Source attribution (slice C): an entry whose stack runs through a
+  // script the editor injected belongs to the editor, not the app —
+  // the marker list mirrors EDITOR_SCRIPT_MARKERS in
+  // src/verify/consoleSource.ts (this file is served standalone and
+  // cannot import it). Classification is stack-only and defensive:
+  // console.* entries carry no stack (capturing one per call is too
+  // costly) and default to 'app', and any failure here falls back to
+  // 'app' rather than throwing into the app's console path. This
+  // bridge logs nothing itself, so there are no bridge-internal calls
+  // to tag; agent-probe tagging happens server-side at read time.
+  const EDITOR_SRC_MARKERS = ['/@ai-live-editor/', '/live-edit/overlay.js']
+  function classifyConsoleSrc(stack) {
+    try {
+      if (!stack) return 'app'
+      const s = String(stack)
+      for (const marker of EDITOR_SRC_MARKERS) {
+        if (s.includes(marker)) return 'editor'
+      }
+    } catch { /* fall through to 'app' */ }
+    return 'app'
+  }
   function pushConsole(level, text, stack) {
     consoleSeq += 1
-    consoleBuffer.push({ seq: consoleSeq, level, text: String(text).slice(0, 2000), stack: stack ? String(stack).slice(0, 1000) : undefined, url: location.href, ts: Date.now() })
+    consoleBuffer.push({ seq: consoleSeq, level, text: String(text).slice(0, 2000), stack: stack ? String(stack).slice(0, 1000) : undefined, url: location.href, ts: Date.now(), src: classifyConsoleSrc(stack) })
     if (consoleBuffer.length > CONSOLE_CAP) consoleBuffer.splice(0, consoleBuffer.length - CONSOLE_CAP)
   }
   function hookConsole() {
@@ -103,7 +137,7 @@ function startPageBridge() {
     const levels = Array.isArray(payload.levels) && payload.levels.length ? new Set(payload.levels) : null
     const max = Math.max(1, Math.min(200, Number(payload.maxEntries || 100)))
     const entries = consoleBuffer.filter((e) => e.seq > since && (!levels || levels.has(e.level))).slice(-max)
-    return { ok: true, entries, latestSeq: consoleSeq, frame: frameKind() }
+    return { ok: true, entries, latestSeq: consoleSeq, instance: pageInstance, frame: frameKind() }
   }
 
   function frameKind() {

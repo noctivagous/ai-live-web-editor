@@ -193,6 +193,103 @@ mountMemoryApi(app)
     res.json(await runPoolOp('eval', req.body || {}))
   })
 
+  app.post('/api/page/tool', async (req, res) => {
+    // Page senses/actuation (slice 2) + wave-2 verify tools
+    // (slice 3) for the OpenCode plugin — the mirror of
+    // server.ts's route; both call the one dispatch in
+    // opencode/pageTools.ts + opencode/verifyTools.ts.
+    try {
+      const { PAGE_TOOL_NAMES, runPageTool } = await import('./opencode/pageTools.js')
+      const { VERIFY_TOOL_NAMES, runVerifyTool } = await import('./opencode/verifyTools.js')
+      const tool = typeof req.body?.tool === 'string' ? req.body.tool : ''
+      const input = req.body?.input && typeof req.body.input === 'object' ? req.body.input : {}
+      if (PAGE_TOOL_NAMES.includes(tool)) return res.json(await runPageTool(tool, input))
+      if (VERIFY_TOOL_NAMES.includes(tool)) return res.json(await runVerifyTool(tool, input))
+      return res.json({ ok: false, error: `unknown tool "${tool}". Available: ${[...PAGE_TOOL_NAMES, ...VERIFY_TOOL_NAMES].join(', ')}` })
+    } catch (e: any) { res.json({ ok: false, error: e.message }) }
+  })
+
+  app.post('/api/graph/tool', async (req, res) => {
+    // Feature-graph + userflow tools (slice 4) — the mirror of
+    // server.ts's route; both call the one dispatch in
+    // opencode/graphTools.ts.
+    try {
+      const { GRAPH_TOOL_NAMES, runGraphTool } = await import('./opencode/graphTools.js')
+      const tool = typeof req.body?.tool === 'string' ? req.body.tool : ''
+      const input = req.body?.input && typeof req.body.input === 'object' ? req.body.input : {}
+      if (GRAPH_TOOL_NAMES.includes(tool)) return res.json(await runGraphTool(tool, input))
+      return res.json({ ok: false, error: `unknown tool "${tool}". Available: ${GRAPH_TOOL_NAMES.join(', ')}` })
+    } catch (e: any) { res.json({ ok: false, error: e.message }) }
+  })
+
+  app.post('/api/project/tool', async (req, res) => {
+    // Project-shaped tools (slice 5, wave 4 group A) — the mirror of
+    // server.ts's route; both call the one dispatch in
+    // opencode/projectTools.ts.
+    try {
+      const { PROJECT_TOOL_NAMES, runProjectTool } = await import('./opencode/projectTools.js')
+      const tool = typeof req.body?.tool === 'string' ? req.body.tool : ''
+      const input = req.body?.input && typeof req.body.input === 'object' ? req.body.input : {}
+      if (PROJECT_TOOL_NAMES.includes(tool)) return res.json(await runProjectTool(tool, input))
+      return res.json({ ok: false, error: `unknown tool "${tool}". Available: ${PROJECT_TOOL_NAMES.join(', ')}` })
+    } catch (e: any) { res.json({ ok: false, error: e.message }) }
+  })
+
+  app.post('/api/fs/tool', async (req, res) => {
+    // ALE fs tools (slice 5, wave 4 group B) — the mirror of
+    // server.ts's route; both call the one dispatch in
+    // opencode/fsTools.ts. Registration is conditional on the
+    // aleFsTools override; the endpoint is always live.
+    try {
+      const { FS_TOOL_NAMES, runFsTool } = await import('./opencode/fsTools.js')
+      const tool = typeof req.body?.tool === 'string' ? req.body.tool : ''
+      const input = req.body?.input && typeof req.body.input === 'object' ? req.body.input : {}
+      if (FS_TOOL_NAMES.includes(tool)) return res.json(await runFsTool(tool, input))
+      return res.json({ ok: false, error: `unknown tool "${tool}". Available: ${FS_TOOL_NAMES.join(', ')}` })
+    } catch (e: any) { res.json({ ok: false, error: e.message }) }
+  })
+
+  app.post('/api/data/tool', async (req, res) => {
+    // Structured-content tools (slice 5, wave 4 group B) — the mirror
+    // of server.ts's route; both call the one dispatch in
+    // opencode/contentTools.ts.
+    try {
+      const { CONTENT_TOOL_NAMES, runContentTool } = await import('./opencode/contentTools.js')
+      const tool = typeof req.body?.tool === 'string' ? req.body.tool : ''
+      const input = req.body?.input && typeof req.body.input === 'object' ? req.body.input : {}
+      if (CONTENT_TOOL_NAMES.includes(tool)) return res.json(await runContentTool(tool, input))
+      return res.json({ ok: false, error: `unknown tool "${tool}". Available: ${CONTENT_TOOL_NAMES.join(', ')}` })
+    } catch (e: any) { res.json({ ok: false, error: e.message }) }
+  })
+
+  app.post('/api/web/tool', async (req, res) => {
+    // Web tools (slice 5, wave 4 group B) — the mirror of server.ts's
+    // route; both call the one dispatch in opencode/webTools.ts.
+    // Connection keys never cross this boundary.
+    try {
+      const { WEB_TOOL_NAMES, runWebTool } = await import('./opencode/webTools.js')
+      const tool = typeof req.body?.tool === 'string' ? req.body.tool : ''
+      const input = req.body?.input && typeof req.body.input === 'object' ? req.body.input : {}
+      if (WEB_TOOL_NAMES.includes(tool)) return res.json(await runWebTool(tool, input))
+      return res.json({ ok: false, error: `unknown tool "${tool}". Available: ${WEB_TOOL_NAMES.join(', ')}` })
+    } catch (e: any) { res.json({ ok: false, error: e.message }) }
+  })
+
+  app.post('/api/console/expect', async (req, res) => {
+    // Mirror of server.ts's route (slice 3): one console-expect
+    // declaration into the shared expectation registry.
+    const { declareConsoleExpectation } = await import('./verify/consoleExpectations.js')
+    res.json(declareConsoleExpectation(req.body?.text))
+  })
+
+  app.post('/api/opencode/tool-check', async (req, res) => {
+    // Mirror of server.ts's route (slice 7): the plugin's
+    // tool.execute.before backstop consults the per-turn policy
+    // registry (opencode/toolPolicy.ts).
+    const { handleToolCheck } = await import('./opencode/toolPolicy.js')
+    res.json(handleToolCheck(req.body))
+  })
+
   app.post('/api/fs/write', (req, res) => {
     try {
       const blocked = sketchWriteGuard()
@@ -272,6 +369,13 @@ mountMemoryApi(app)
   })
 
   app.post('/api/chat/stream', async (req, res) => {
+    // Chat engine flag, same rule as server.ts: read at turn start.
+    const { currentAgentSettings } = await import('./agentSettings.js')
+    if (currentAgentSettings().chatEngine === 'opencode') {
+      const { pipeOpencodeChatStream } = await import('./opencode/chat.js')
+      await pipeOpencodeChatStream(req.body?.messages, res, req, req.body?.workflow)
+      return
+    }
     await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow, { mcp: true })
   })
 

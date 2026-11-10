@@ -1,4 +1,5 @@
 /** Map Mastra fullStream chunks to compact SSE events for the chat UI. */
+import type { ExpectationResult } from './verify/consoleExpectations.js'
 
 export interface TurnUsage {
   input: number
@@ -20,6 +21,39 @@ export type VerifySummary = {
   unverified?: string[]
   followUp?: boolean
   skipped?: string
+  /** Console detail in the console arc's shape (errors/warnings/
+   * since-last-chat/expectations), produced by shapeTurnConsole
+   * Detail. Since slice 6 the OpenCode path fills the full detail
+   * exactly as the console arc's Mastra stream does; the groups a
+   * turn does not fill stay empty rather than fabricated. The
+   * rendering consumer is the console arc's TurnConsole, which
+   * reads exactly this shape. */
+  console?: TurnConsoleDetail
+}
+
+/** One entry in a TurnConsoleDetail list (text clipped host-side). */
+export interface ConsoleDetailEntry {
+  level: string
+  text: string
+  ts?: number
+  /** Repeat count when identical entries were deduped into one. */
+  count?: number
+}
+
+/** The console part of a turn's verify summary — field-for-field
+ * the shape the console arc's shapeTurnConsoleDetail produces and
+ * its footer model consumes (an expectations-only detail renders
+ * exactly the "Expected in console" group there). */
+export interface TurnConsoleDetail {
+  errors: ConsoleDetailEntry[]
+  errorTotal: number
+  warnings: ConsoleDetailEntry[]
+  warningTotal: number
+  sinceLastChat: ConsoleDetailEntry[]
+  sinceLastChatTotal: number
+  expectations: ExpectationResult[]
+  notes: string[]
+  editorCount: number
 }
 
 export type ChatStreamEvent =

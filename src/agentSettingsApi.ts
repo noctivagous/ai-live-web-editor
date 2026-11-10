@@ -15,6 +15,11 @@ export function mountAgentSettingsApi(app: Express): void {
     if ('defaultWorkflow' in body) patch.defaultWorkflow = body.defaultWorkflow
     if ('contextTrim' in body) patch.contextTrim = body.contextTrim
     if ('mapInjection' in body) patch.mapInjection = body.mapInjection
+    if ('chatEngine' in body) patch.chatEngine = body.chatEngine
+    if ('aleFsTools' in body) patch.aleFsTools = body.aleFsTools
+    if ('aleWebTools' in body) patch.aleWebTools = body.aleWebTools
+    if ('aleSkillTools' in body) patch.aleSkillTools = body.aleSkillTools
+    if ('consoleCheck' in body) patch.consoleCheck = body.consoleCheck
     res.json({ ok: true, settings: saveAgentSettings(patch) })
   })
 }

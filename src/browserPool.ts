@@ -10,6 +10,7 @@ import {
   type WireframeSnapshotOutput,
 } from './layout/layoutSnapshot.js'
 import { createRingBuffer, pushRing, readRing, type RingEntry } from './verify/ringBuffer.js'
+import { classifyCaptureSrc } from './verify/consoleSource.js'
 
 export type LayoutSnapshotParams = Parameters<typeof captureWireframeSnapshot>[0]['params']
 export type LayoutSvgOptions = Parameters<typeof renderSvgWireframe>[1]
@@ -26,11 +27,26 @@ export const poolActivity: PoolActivity[] = []
 const consoleBuffers = new Map<object, ReturnType<typeof createRingBuffer>>()
 const networkBuffers = new Map<object, ReturnType<typeof createRingBuffer>>()
 
+/**
+ * Ring generation per page, bumped every time a fresh console ring is
+ * created for a (replacement) page object. Playwright listeners survive
+ * in-place reloads, so the ring — and its seq — normally outlives HMR;
+ * the generation only changes when the page itself is replaced (tab
+ * closed, browser restarted), which is the one case where a baseline
+ * seq watermark would silently stop meaning anything. Surfaced as the
+ * console read's `instance`, the pool counterpart of the bridge's
+ * page-instance id.
+ */
+const bufferGenerations = new Map<object, number>()
+let nextBufferGeneration = 0
+
 function pageBuffers(page: object) {
   let c = consoleBuffers.get(page)
   if (!c) {
     c = createRingBuffer(200)
     consoleBuffers.set(page, c)
+    nextBufferGeneration += 1
+    bufferGenerations.set(page, nextBufferGeneration)
   }
   let n = networkBuffers.get(page)
   if (!n) {
@@ -46,10 +62,27 @@ function hookPageCapture(page: any) {
   const { c, n } = pageBuffers(page)
   try {
     page.on('console', (msg: any) => {
-      try { pushRing(c, { level: String(msg.type()), text: String(msg.text()).slice(0, 2000), url: page.url?.() }) } catch { /* ignore */ }
+      try {
+        // Source attribution (slice C): Playwright knows which script
+        // logged — msg.location() — so an entry from one of the
+        // editor's injected clients (the plugin's bridge / chat
+        // overlay on a plugin-served page) is tagged 'editor' here
+        // instead of masquerading as an app error downstream. The
+        // pool's own evaluated scripts (patch/snapshot engines) have
+        // no URL: their failures reach the evaluate caller as promise
+        // rejections, not ring entries, and anything that does land
+        // here from them carries no editor marker and stays 'app' —
+        // a stated limit, not a silent one.
+        let locUrl: string | undefined
+        try { locUrl = msg.location?.()?.url } catch { /* location is best-effort */ }
+        pushRing(c, { level: String(msg.type()), text: String(msg.text()).slice(0, 2000), url: page.url?.(), src: classifyCaptureSrc({ url: locUrl }) })
+      } catch { /* ignore */ }
     })
     page.on('pageerror', (err: any) => {
-      try { pushRing(c, { level: 'pageerror', text: String(err?.message || err).slice(0, 2000), stack: String(err?.stack || '').slice(0, 1000), url: page.url?.() }) } catch { /* ignore */ }
+      try {
+        const stack = String(err?.stack || '').slice(0, 1000)
+        pushRing(c, { level: 'pageerror', text: String(err?.message || err).slice(0, 2000), stack, url: page.url?.(), src: classifyCaptureSrc({ stack }) })
+      } catch { /* ignore */ }
     })
     page.on('requestfailed', (req: any) => {
       try { pushRing(n, { level: 'requestfailed', kind: 'requestfailed', text: `${req.method?.() || ''} ${req.url?.() || ''} ${req.failure?.()?.errorText || ''}`.slice(0, 2000), url: page.url?.() }) } catch { /* ignore */ }
@@ -65,13 +98,14 @@ function hookPageCapture(page: any) {
     page.on('close', () => {
       consoleBuffers.delete(page)
       networkBuffers.delete(page)
+      bufferGenerations.delete(page)
     })
   } catch { /* ignore */ }
 }
 
 export function readPoolConsole(page: object, opts: { sinceSeq?: number, levels?: string[], maxEntries?: number } = {}) {
   const buf = pageBuffers(page).c
-  return { ok: true, ...readRing(buf, opts) }
+  return { ok: true, instance: bufferGenerations.get(page), ...readRing(buf, opts) }
 }
 
 export function readPoolNetwork(page: object, opts: { sinceSeq?: number, maxEntries?: number } = {}) {

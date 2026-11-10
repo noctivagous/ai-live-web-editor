@@ -20,6 +20,12 @@
  * When the flag is off the recorder is a strict no-op: it keeps no
  * records and never touches the filesystem. Every recorder method
  * swallows its own errors — a debug aid must never break a turn.
+ *
+ * Slice 9 extends the same file and flag to the OpenCode path:
+ * the translator's turns are recorded through the same recorder
+ * (engine: 'opencode' marks them), and tool executions arriving
+ * through the host dispatch endpoints append per-tool records
+ * (kind: 'tool-call') — see recordDispatchToolCall below.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -27,6 +33,7 @@ import { fileURLToPath } from 'node:url'
 import { isWriteTool } from './agentTools.js'
 import { resolveProjectPath } from './projectPath.js'
 import { getFsRoot, listProjects } from './launcher.js'
+import { countLines } from './mastra/tools/fsEdit.js'
 import type { ChatStreamEvent, TurnUsage, VerifySummary } from './chatStream.js'
 
 export function chatDebugEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -69,6 +76,10 @@ export interface DebugWriteClaim {
 
 export interface ChatDebugTurnRecord {
   kind: 'chat-turn'
+  /** Serving engine, present only when the recorder was created
+   * with one (the OpenCode translator passes 'opencode'). Mastra
+   * records omit the field — their shape is unchanged. */
+  engine?: string
   ts: string
   endedAt: string
   durationMs: number
@@ -101,6 +112,15 @@ export interface ChatDebugOptions {
   projectId?: string
   env?: NodeJS.ProcessEnv
   now?: () => number
+  /** Engine marker stamped onto the turn record (see
+   * ChatDebugTurnRecord.engine). Absent = no marker. */
+  engine?: string
+  /** Extra tool names counted as writes for the record's write
+   * claims, beyond agentTools' WRITE_TOOLS. The OpenCode
+   * translator passes its native write tools (edit/write/
+   * apply_patch) — names the Mastra path never sees, so its
+   * records are unaffected. */
+  extraWriteTools?: ReadonlySet<string>
 }
 
 type LooseRecord = Record<string, unknown>
@@ -258,7 +278,8 @@ export class ChatDebugTurn {
   private buildWrites(projectRoot: string | null): DebugWriteClaim[] {
     const claims: DebugWriteClaim[] = []
     for (const ev of this.events) {
-      if (ev.type !== 'tool-result' || !ev.ok || !isWriteTool(ev.name)) continue
+      if (ev.type !== 'tool-result' || !ev.ok) continue
+      if (!isWriteTool(ev.name) && !this.opts.extraWriteTools?.has(ev.name)) continue
       const stash = this.chunkPaths.get(ev.id) ?? {}
       const paths: { claimedPath: string | null; claimSource: DebugWriteClaim['claimSource'] }[] = []
       if (stash.resultPath) paths.push({ claimedPath: stash.resultPath, claimSource: 'result' })
@@ -308,6 +329,7 @@ export class ChatDebugTurn {
       }
       const record: ChatDebugTurnRecord = {
         kind: 'chat-turn',
+        ...(this.opts.engine ? { engine: this.opts.engine } : {}),
         ts: new Date(this.startedAt).toISOString(),
         endedAt: new Date(endedAtMs).toISOString(),
         durationMs: Math.max(0, Math.round(endedAtMs - this.startedAt)),
@@ -344,4 +366,139 @@ export class ChatDebugTurn {
 
 export function createChatDebugTurn(opts: ChatDebugOptions = {}): ChatDebugTurn {
   return new ChatDebugTurn(opts)
+}
+
+/* ------------------------------------------------------------------ */
+/* Per-tool dispatch records (re-platform slice 9)                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One host-dispatch tool execution, recorded in the same JSONL
+ * file as the turn records (kind: 'tool-call'). This closes the
+ * withToolLog gap on the OpenCode path: the Mastra module wraps
+ * its fs tools so every execution lands in the server log
+ * (serverLog's ToolCallEntry — tool, canonical path, line range,
+ * the file's actual line count, outcome; counts and ranges only,
+ * never contents), but the ported host functions behind the
+ * plugin's dispatch endpoints deliberately skipped that side
+ * effect in slice 5. Here every execution through the dispatch
+ * endpoints (page/graph/project/fs/data/web) gets the equivalent
+ * record — gated on AI_LIVE_CHAT_DEBUG like the rest of this
+ * module: with the flag off nothing is written and the wrapper
+ * below adds no bookkeeping at all. The fact extraction mirrors
+ * withToolLog's field-for-field.
+ */
+export interface ChatDebugToolCallRecord {
+  kind: 'tool-call'
+  engine: 'opencode'
+  ts: string
+  tool: string
+  ok: boolean
+  elapsedMs: number
+  /** Canonical /… project path when the call targets one. */
+  path?: string
+  /** Requested or applied 1-based line range. */
+  range?: [number, number]
+  /** Actual file line count observed at call time. */
+  fileLines?: number
+  /** str-replace / grep match count. */
+  matches?: number
+  /** write-real-file created flag. */
+  created?: boolean
+  /** Failure message only — never file contents or edit bodies. */
+  error?: string
+}
+
+/** Cap for the line-count re-read (mirrors withToolLog's). */
+const DISPATCH_LOG_READ_CAP = 1_000_000
+
+/** Best-effort current line count for a canonical project path
+ * (the same guarded re-read withToolLog performs when a result
+ * carries a path but no line count of its own). */
+function dispatchLiveLineCount(canonicalPath: string): number | undefined {
+  try {
+    const r = resolveProjectPath(getFsRoot(), canonicalPath)
+    if (r.ok === false) return undefined
+    const st = fs.statSync(r.full)
+    if (!st.isFile() || st.size > DISPATCH_LOG_READ_CAP) return undefined
+    const buf = fs.readFileSync(r.full)
+    if (buf.subarray(0, 8192).includes(0)) return undefined
+    return countLines(buf.toString('utf-8'))
+  } catch { return undefined }
+}
+
+/**
+ * Append one dispatch record for a finished tool execution.
+ * Returns true when a line was written. A strict no-op (false)
+ * when debug is off; swallows its own errors like the recorder.
+ */
+export function recordDispatchToolCall(
+  entry: { tool: string; input?: unknown; result?: unknown; thrown?: string | null; elapsedMs: number },
+  opts: { env?: NodeJS.ProcessEnv; file?: string } = {},
+): boolean {
+  const env = opts.env ?? process.env
+  if (!chatDebugEnabled(env)) return false
+  try {
+    const rec = asRecord(entry.result)
+    const input = asRecord(entry.input)
+    const error = entry.thrown ?? (typeof rec.error === 'string' ? rec.error : null)
+    const record: ChatDebugToolCallRecord = {
+      kind: 'tool-call',
+      engine: 'opencode',
+      ts: new Date().toISOString(),
+      tool: entry.tool,
+      ok: !error,
+      elapsedMs: Math.max(0, Math.round(entry.elapsedMs)),
+    }
+    if (error) record.error = error
+    const p = typeof rec.path === 'string' ? rec.path
+      : typeof rec.to === 'string' ? rec.to
+      : typeof rec.from === 'string' ? rec.from
+      : typeof input.path === 'string' ? input.path : undefined
+    if (p) record.path = p
+    if (typeof rec.matches === 'number') record.matches = rec.matches
+    if (typeof rec.created === 'boolean') record.created = rec.created
+    if (Array.isArray(rec.range) && rec.range.length === 2 && typeof rec.range[0] === 'number' && typeof rec.range[1] === 'number') {
+      record.range = [rec.range[0], rec.range[1]]
+    } else if (typeof rec.startLine === 'number' && typeof rec.endLine === 'number') {
+      record.range = [rec.startLine, rec.endLine]
+    }
+    if (typeof rec.totalLines === 'number') record.fileLines = rec.totalLines
+    else if (typeof rec.fileLines === 'number') record.fileLines = rec.fileLines
+    else if (record.path) {
+      const live = dispatchLiveLineCount(record.path)
+      if (typeof live === 'number') record.fileLines = live
+    }
+    const file = opts.file ?? chatDebugFile(env)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.appendFileSync(file, JSON.stringify(record) + '\n')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Wrap one host-dispatch tool execution (opencode/*Tools run*
+ * functions) with its debug record. When AI_LIVE_CHAT_DEBUG is
+ * off the wrapped call runs exactly as before — no timing, no
+ * extraction, no file access. When on, the result (or throw)
+ * passes through unchanged and the record is appended after the
+ * execution settles.
+ */
+export async function withDispatchDebugLog<T>(
+  tool: string,
+  input: unknown,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!chatDebugEnabled()) return run()
+  const t0 = Date.now()
+  try {
+    const result = await run()
+    recordDispatchToolCall({ tool, input, result, elapsedMs: Date.now() - t0 })
+    return result
+  } catch (e) {
+    recordDispatchToolCall({ tool, input, thrown: e instanceof Error ? e.message : String(e), elapsedMs: Date.now() - t0 })
+    throw e
+  }
 }

@@ -4,6 +4,7 @@
  * and console errors itself and folds NEW findings back into the turn.
  */
 import { isWriteTool } from '../agentTools.js'
+import { dedupeConsoleEntries, isAppEntry, type ConsoleSrc } from './consoleSource.js'
 
 export type LayoutFinding = {
   key: string
@@ -21,6 +22,11 @@ export type ConsoleEntry = {
   stack?: string
   url?: string
   ts?: number
+  /** Source attribution (slice C): whose code produced the entry.
+   * Absent on pre-slice-C entries, where it means 'app'. */
+  src?: ConsoleSrc
+  /** Repeat count when a read window was deduped (slice C). */
+  count?: number
 }
 
 /** Gate trigger: a Files-mode turn whose tool trace wrote files.
@@ -30,17 +36,39 @@ export function shouldTriggerGate(mode: string, toolNames: string[]): boolean {
   return toolNames.some((n) => isWriteTool(n))
 }
 
+/** Console levels that count as failures. Warnings are reported on
+ * the turn (footer/summary) but never chased (slice B). */
+export function isErrorLevel(level: string): boolean {
+  return level === 'error' || level === 'pageerror'
+}
+
+/** The error-level subset of a console entry list, app entries
+ * only: an editor-injected client's error (or an agent probe's) is
+ * not an app error, however loud it is (slice C). */
+export function consoleErrorEntries<T extends { level: string, src?: ConsoleSrc }>(entries: T[]): T[] {
+  return entries.filter((e) => isErrorLevel(e.level) && isAppEntry(e))
+}
+
 /**
  * Follow-up decision: the gate's model stream exists to fix findings,
  * so it runs only when the gate produced something fixable — a new
- * layout or console finding. An unverified-only result means nothing
- * failed; some checks could not run (no live page, a frame gone). A
- * blind model pass cannot check what the host itself could not, and
- * it used to re-read — sometimes re-write — the turn's files. The
- * unverified notes still reach the client in the verify summary.
+ * layout finding, a new console ERROR (warnings are reported, never
+ * chased), or a console expectation the agent declared this turn that
+ * did not appear (the agent explicitly asked for that signal, so its
+ * absence is fixable context). An unverified-only result means
+ * nothing failed; some checks could not run (no live page, a frame
+ * gone). A blind model pass cannot check what the host itself could
+ * not, and it used to re-read — sometimes re-write — the turn's
+ * files. The unverified notes still reach the client in the verify
+ * summary.
  */
-export function gateNeedsFollowUp(result: { layout: unknown[]; console: unknown[] }): boolean {
-  return result.layout.length > 0 || result.console.length > 0
+export function gateNeedsFollowUp(
+  result: { layout: unknown[]; console: ConsoleEntry[] },
+  missingExpectations = 0,
+): boolean {
+  return result.layout.length > 0
+    || result.console.some((e) => isErrorLevel(e.level) && isAppEntry(e))
+    || missingExpectations > 0
 }
 
 /**
@@ -91,12 +119,73 @@ export function diffFindings(before: LayoutFinding[], after: LayoutFinding[]): L
   return after.filter((f) => !base.has(f.key))
 }
 
-/** Console signal: entries at/after the baseline seq that look like failures. */
+/**
+ * Identifies one console buffer's lifetime: the bridge page instance
+ * (a string minted per document) or the pool ring generation (a number,
+ * bumped when the pool page object is replaced). Seq numbers are only
+ * comparable within one instance — a reload restarts the bridge seq
+ * at 1, so diffing a new page's entries against the old page's
+ * watermark would suppress exactly the errors the gate exists to catch.
+ */
+export type ConsoleInstance = string | number
+
+export type ConsoleWatermark = { seq: number, instance?: ConsoleInstance }
+
+/** A watermark probe result: `connected` says the channel answered at
+ * all (a disconnected bridge also reports seq 0, so seq alone cannot
+ * distinguish "quiet page" from "no page"). */
+export type ConsoleChannelMark = ConsoleWatermark & { connected: boolean }
+
+function isInstance(v: unknown): v is ConsoleInstance {
+  return (typeof v === 'string' && v.length > 0) || (typeof v === 'number' && Number.isFinite(v))
+}
+
+/** Pull a console response's instance token, tolerating old clients
+ * (pre-epoch bridge pages report none — seq semantics then apply). */
+export function consoleInstanceOf(raw: unknown): ConsoleInstance | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const v = (raw as Record<string, unknown>).instance
+  return isInstance(v) ? v : undefined
+}
+
+/**
+ * Epoch decision for a post-turn console read. Same instance → the
+ * baseline watermark still means something: read after it. A different
+ * instance (or a baseline that predates any instance while the page
+ * now reports one — the page that answered at baseline is gone either
+ * way) → the page reloaded: read from seq 0 and say so. No instance
+ * from the current page (old client) → fall back to seq semantics.
+ */
+export function consoleEpochPlan(
+  baseline: ConsoleWatermark,
+  currentInstance: ConsoleInstance | undefined,
+): { sinceSeq: number, reloaded: boolean } {
+  if (currentInstance === undefined) return { sinceSeq: baseline.seq, reloaded: false }
+  if (baseline.instance !== undefined && String(baseline.instance) === String(currentInstance)) {
+    return { sinceSeq: baseline.seq, reloaded: false }
+  }
+  return { sinceSeq: 0, reloaded: true }
+}
+
+/** Unverified note recorded when the bridge page reloaded mid-turn. */
+export const PAGE_RELOADED_NOTE = 'page reloaded during the turn — console read from the new page load'
+
+/** Unverified note recorded when the pool page object was replaced mid-turn. */
+export const POOL_PAGE_REPLACED_NOTE = 'pool page replaced during the turn — pool console read from the new page'
+
+/** Console signal: entries at/after the baseline seq that look like failures.
+ * App entries only (slice C): the editor's own injected clients must
+ * never surface as the app's findings. Probe entries are tagged at
+ * read time in the chat stream, after the gate has read; the entries
+ * the gate itself produces can therefore only carry capture-time
+ * tags — but the app-only rule is stated here so no caller can
+ * re-introduce editor noise by feeding pre-tagged entries back in. */
 export function consoleFindings(entries: ConsoleEntry[], sinceSeq: number): ConsoleEntry[] {
   return entries.filter(
     (e) =>
       e.seq > sinceSeq &&
       (e.level === 'error' || e.level === 'pageerror' || e.level === 'warn') &&
+      isAppEntry(e) &&
       !/^\s*$/.test(e.text || ''),
   )
 }
@@ -128,6 +217,9 @@ export function formatGatePrompt(args: {
   console: ConsoleEntry[]
   unverified: string[]
   expected?: LayoutFinding[]
+  /** Console expectations the agent declared this turn that never
+   * appeared — the code path they probe may not have run. */
+  missingExpectations?: string[]
 }): string {
   const lines = [
     'Automatic verification found new issues after your edits. Fix each one or explicitly waive it with a one-line reason.',
@@ -140,11 +232,19 @@ export function formatGatePrompt(args: {
     if (args.layout.length > 12) lines.push(`- …and ${args.layout.length - 12} more (see layout-snapshot)`)
   }
   if (args.console.length) {
+    // Identical repeats collapse to one line with a ×N suffix
+    // (slice C) — the fixing model needs the signal, not seven
+    // copies of it. The cap applies after dedupe.
+    const deduped = dedupeConsoleEntries(args.console)
     lines.push('Console (new since before your edits):')
-    for (const e of args.console.slice(0, 12)) {
-      lines.push(`- [${e.level}] ${e.text.slice(0, 220)}`)
+    for (const e of deduped.slice(0, 12)) {
+      lines.push(`- [${e.level}] ${e.text.slice(0, 220)}${e.count > 1 ? ` ×${e.count}` : ''}`)
     }
-    if (args.console.length > 12) lines.push(`- …and ${args.console.length - 12} more (see get-console)`)
+    if (deduped.length > 12) lines.push(`- …and ${deduped.length - 12} more (see get-console)`)
+  }
+  if (args.missingExpectations?.length) {
+    lines.push('Expected in console (you declared these with console-expect; none appeared — the code path they probe may not have run):')
+    for (const m of args.missingExpectations.slice(0, 12)) lines.push(`- "${m}"`)
   }
   if (args.unverified.length) {
     lines.push('Could not verify (treat as unverified, not clean):')

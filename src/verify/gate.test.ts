@@ -2,11 +2,15 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   applyFormatToFindings,
+  consoleEpochPlan,
+  consoleErrorEntries,
   consoleFindings,
+  consoleInstanceOf,
   diffFindings,
   findingKey,
   formatGatePrompt,
   gateNeedsFollowUp,
+  PAGE_RELOADED_NOTE,
   shouldTriggerGate,
   toLayoutFindings,
   type ConsoleEntry,
@@ -65,6 +69,41 @@ describe('gateNeedsFollowUp', () => {
     assert.equal(gateNeedsFollowUp(result({})), false)
   })
 
+  it('slice B: warnings alone never trigger a follow-up (reported, not chased)', () => {
+    const warn: ConsoleEntry = { seq: 3, level: 'warn', text: 'careful now' }
+    assert.equal(gateNeedsFollowUp(result({ console: [warn] })), false)
+    assert.equal(gateNeedsFollowUp(result({ console: [warn], unverified: ['x'] })), false)
+  })
+
+  it('slice B: pageerror counts as an error for the follow-up', () => {
+    const pageerror: ConsoleEntry = { seq: 3, level: 'pageerror', text: 'uncaught' }
+    assert.equal(gateNeedsFollowUp(result({ console: [pageerror] })), true)
+  })
+
+  it('slice B: a missing console expectation alone triggers the follow-up on a write turn', () => {
+    assert.equal(gateNeedsFollowUp(result({}), 1), true)
+    assert.equal(gateNeedsFollowUp(result({ console: [{ seq: 1, level: 'warn', text: 'w' }] }), 2), true)
+    assert.equal(gateNeedsFollowUp(result({}), 0), false)
+  })
+
+  it('slice C: an editor-attributed error alone never triggers a follow-up', () => {
+    const editorError: ConsoleEntry = { seq: 4, level: 'error', text: 'chat overlay blew up', src: 'editor' }
+    const editorCrash: ConsoleEntry = { seq: 5, level: 'pageerror', text: 'overlay crashed', src: 'editor' }
+    assert.equal(gateNeedsFollowUp(result({ console: [editorError] })), false)
+    assert.equal(gateNeedsFollowUp(result({ console: [editorCrash] })), false)
+    assert.equal(gateNeedsFollowUp(result({ console: [editorError], unverified: ['x'] })), false)
+  })
+
+  it('slice C: an agent-probe error alone never triggers a follow-up', () => {
+    const probe: ConsoleEntry = { seq: 4, level: 'error', text: 'PROBE-ERR exploded', src: 'agent-probe' }
+    assert.equal(gateNeedsFollowUp(result({ console: [probe] })), false)
+  })
+
+  it('slice C: an app error still triggers alongside editor noise', () => {
+    const editorError: ConsoleEntry = { seq: 4, level: 'error', text: 'chat overlay blew up', src: 'editor' }
+    assert.equal(gateNeedsFollowUp(result({ console: [editorError, entry] })), true)
+  })
+
   it('wiring: unverified-only is exactly where gatePrompt used to send a follow-up', () => {
     // Before this decision existed, chatStream ran the follow-up
     // whenever gatePrompt returned text — which includes unverified-only.
@@ -79,6 +118,48 @@ describe('gateNeedsFollowUp', () => {
     const real = result({ layout: [finding], unverified: ['no live page'] })
     assert.notEqual(gatePrompt(real), null)
     assert.equal(gateNeedsFollowUp(real), true)
+  })
+})
+
+describe('consoleEpochPlan (page-instance epoch)', () => {
+  it('same instance keeps the baseline watermark', () => {
+    assert.deepEqual(consoleEpochPlan({ seq: 47, instance: 'abc' }, 'abc'), { sinceSeq: 47, reloaded: false })
+  })
+
+  it('a different instance means the page reloaded: read from seq 0', () => {
+    assert.deepEqual(consoleEpochPlan({ seq: 47, instance: 'abc' }, 'xyz'), { sinceSeq: 0, reloaded: true })
+  })
+
+  it('a baseline without an instance still counts as a reload when the page now reports one', () => {
+    assert.deepEqual(consoleEpochPlan({ seq: 47 }, 'xyz'), { sinceSeq: 0, reloaded: true })
+    assert.deepEqual(consoleEpochPlan({ seq: 0 }, 'xyz'), { sinceSeq: 0, reloaded: true })
+  })
+
+  it('no instance from the current page (old client) falls back to seq semantics', () => {
+    assert.deepEqual(consoleEpochPlan({ seq: 47, instance: 'abc' }, undefined), { sinceSeq: 47, reloaded: false })
+    assert.deepEqual(consoleEpochPlan({ seq: 47 }, undefined), { sinceSeq: 47, reloaded: false })
+  })
+
+  it('pool generations (numbers) compare the same way', () => {
+    assert.deepEqual(consoleEpochPlan({ seq: 12, instance: 3 }, 3), { sinceSeq: 12, reloaded: false })
+    assert.deepEqual(consoleEpochPlan({ seq: 12, instance: 3 }, 4), { sinceSeq: 0, reloaded: true })
+  })
+
+  it('the reload note alone never triggers a follow-up', () => {
+    const r: GateResult = { ran: true, layout: [], expected: [], console: [], unverified: [PAGE_RELOADED_NOTE] }
+    assert.equal(gateNeedsFollowUp(r), false)
+  })
+})
+
+describe('consoleInstanceOf', () => {
+  it('extracts string and number instances, rejects everything else', () => {
+    assert.equal(consoleInstanceOf({ instance: 'abc' }), 'abc')
+    assert.equal(consoleInstanceOf({ instance: 7 }), 7)
+    assert.equal(consoleInstanceOf({ instance: '' }), undefined)
+    assert.equal(consoleInstanceOf({ instance: null }), undefined)
+    assert.equal(consoleInstanceOf({}), undefined)
+    assert.equal(consoleInstanceOf(null), undefined)
+    assert.equal(consoleInstanceOf('nope'), undefined)
   })
 })
 
@@ -132,6 +213,18 @@ describe('consoleFindings', () => {
     const found = consoleFindings(entries, 5)
     assert.deepEqual(found.map((e) => e.seq), [6, 7, 8])
   })
+
+  it('slice C: editor-attributed entries are not findings, however loud', () => {
+    const entries: ConsoleEntry[] = [
+      { seq: 6, level: 'error', text: 'app boom' },
+      { seq: 7, level: 'error', text: 'overlay exploded', src: 'editor' },
+      { seq: 8, level: 'pageerror', text: 'chat crashed', src: 'editor' },
+      { seq: 9, level: 'warn', text: 'overlay grumble', src: 'editor' },
+      { seq: 10, level: 'warn', text: 'app hmm' },
+    ]
+    const found = consoleFindings(entries, 5)
+    assert.deepEqual(found.map((e) => e.seq), [6, 10])
+  })
 })
 
 describe('formatGatePrompt', () => {
@@ -145,6 +238,38 @@ describe('formatGatePrompt', () => {
     assert.ok(prompt.includes('[error] boom'))
     assert.ok(prompt.includes('Could not verify'))
     assert.ok(prompt.includes('waive'))
+  })
+
+  it('slice C: the prompt’s console section carries app errors only, repeats collapsed', () => {
+    const mixed: ConsoleEntry[] = [
+      { seq: 2, level: 'error', text: 'overlay exploded', src: 'editor' },
+      { seq: 3, level: 'error', text: 'app boom' },
+      { seq: 4, level: 'error', text: 'app boom' },
+      { seq: 5, level: 'error', text: 'app boom' },
+    ]
+    const prompt = formatGatePrompt({
+      layout: [],
+      console: consoleErrorEntries(mixed),
+      unverified: [],
+    })
+    assert.ok(prompt.includes('[error] app boom ×3'), 'identical repeats render once with a ×N suffix')
+    assert.ok(!prompt.includes('overlay exploded'), 'the editor’s own error is not the app’s to fix')
+    assert.equal(prompt.split('app boom').length - 1, 1, 'the repeated line appears exactly once')
+  })
+
+  it('slice B: missing expectations join the prompt as their own section', () => {
+    const prompt = formatGatePrompt({
+      layout: [],
+      console: [],
+      unverified: [],
+      missingExpectations: ['PROBE-READY', 'PROBE-SAVED'],
+    })
+    assert.ok(prompt.includes('Expected in console'))
+    assert.ok(prompt.includes('"PROBE-READY"'))
+    assert.ok(prompt.includes('"PROBE-SAVED"'))
+    // And without them the section is absent (older callers unaffected).
+    const plain = formatGatePrompt({ layout: [], console: [], unverified: [] })
+    assert.ok(!plain.includes('Expected in console'))
   })
 })
 

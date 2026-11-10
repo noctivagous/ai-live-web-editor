@@ -29,7 +29,15 @@ import { docAddBlockTool, docFindTool, docGetTool, docInspectTool, docRemoveBloc
 import { skillIndexText } from '../../skills/skills.js'
 import { editorMemory } from '../memory.js'
 
-const BASE_INSTRUCTIONS = `
+/**
+ * The editor agent's instruction text — ONE source of truth for
+ * both engines: the Mastra agent below composes it with the skill
+ * index, and the OpenCode path (opencode/agents.ts) derives its
+ * per-workflow agent systems from this same text at config
+ * generation time. Exported for that derivation only; the Mastra
+ * agent's behaviour is unchanged.
+ */
+export const BASE_INSTRUCTIONS = `
 You are a live code editor. You write real files on disk under the active Vite project.
 The running app is the Vite page (typically :5173).
 

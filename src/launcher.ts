@@ -4,6 +4,7 @@ import { execSync, spawn, type ChildProcess } from 'child_process'
 import { fileURLToPath } from 'url'
 import { classifyProject, type ProjectSetup } from './projectDetect.js'
 import { ensureProjectPlugin, findViteConfig, writeStandalonePluginConfig } from './pluginEnsure.js'
+import { stopOpencodeServer } from './opencode/supervisor.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const WORKSPACE_ROOT = path.resolve(__dirname, '../projects')
@@ -192,6 +193,10 @@ export function selectProject(id: string): ProjectInfo {
   const found = listProjects().find((p) => p.id === id)
   if (!found) throw new Error(`No folder named "${id}" in the workspace`)
   setFsRoot(found.root)
+  // OpenCode sidecar (chat slice 1): its server is per-project —
+  // a switch stops the previous project's server; the next
+  // opencode-engine turn lazily spawns one for the new project.
+  try { stopOpencodeServer() } catch { /* best-effort */ }
   // Bridge guarantee (plugin auto-ensure, slice 1): detect the
   // editor plugin's registration and add it (visibly, revertably)
   // when missing — BEFORE the dev server starts, so the fresh spawn
@@ -440,6 +445,6 @@ export function ensureFsRoot() {
   return ensureWorkspace()
 }
 
-process.on('exit', stopVite)
-process.on('SIGINT', () => { stopVite(); process.exit(0) })
-process.on('SIGTERM', () => { stopVite(); process.exit(0) })
+process.on('exit', () => { stopVite(); stopOpencodeServer() })
+process.on('SIGINT', () => { stopVite(); stopOpencodeServer(); process.exit(0) })
+process.on('SIGTERM', () => { stopVite(); stopOpencodeServer(); process.exit(0) })

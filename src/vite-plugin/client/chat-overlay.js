@@ -341,7 +341,12 @@ async function installAnnotateToolbar() {
     try {
       const src = await fetchOverlaySource()
       const script = document.createElement('script')
-      script.textContent = src
+      // sourceURL names the inline-injected overlay after its served
+      // route, so errors thrown inside overlay code carry that path
+      // in their stacks — which is what lets the console capture
+      // attribute them to the editor (src: 'editor') instead of the
+      // app (slice C).
+      script.textContent = `${src}\n//# sourceURL=/live-edit/overlay.js`
       document.documentElement.appendChild(script)
       if (!(window.__AI_LIVE_EDIT__ && window.__AI_LIVE_EDIT__.installed)) {
         // A 200 that wasn't the overlay (an SPA fallback page, say):

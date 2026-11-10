@@ -81,11 +81,12 @@ aiLiveEditor({
 
 ## What it is
 
-- **4112 launcher** — `src/server.ts`: UI, FS API, config, Mastra chat, project switcher, Vite child
+- **4112 launcher** — `src/server.ts`: UI, FS API, config, chat, project switcher, Vite child
 - **Vite plugin** `aiLiveEditor` — overlays + `/api` on the app origin (`src/vite-plugin/aiLiveEditor.ts`)
 - **Two servers, one surface** — 4112 is the editor: the agent, the filesystem, the UI, the chat, project switching, dev-server restarts, saved state. 5173 is the project's own Vite — its framework, its plugins, its `npm run dev` flags, its HMR — started exactly as the project defines it; the editor never serves the app itself. You work with the app framed in the Preview pane: one surface, two processes. The plugin is how the two talk (it injects the page bridge and source stamps into the app), and the Preview header's **Bridged** chip shows whether that connection is live. The other channel is the **Playwright pool**: the editor's own Chromium, which needs no plugin in the project and sees browser-level signals (console, network). It is off by default; turn it on in Settings. Live editing and annotations ride the plugin setup and are on by default.
 - **Mastra `editorAgent`** — files (`list` / `read` / `write`) plus live-page `inspect-dom` / `patch-dom` / `eval-js` on the Vite app via a same-origin page bridge. Optional **Playwright pool** (Settings, `npm run dev:pool`, or `PLAYWRIGHT_POOL=1`) for other URLs and `layout-snapshot`.
 - **Chat memory** — conversations persist server-side (Mastra Memory on a LibSQL store at `.ai-live/mastra.db`, one thread per project root, with a per-thread working set of goal / files touched / decisions / open questions). The agent recalls earlier turns even from a fresh browser; `AI_LIVE_STORAGE` moves the database file. Settings → Privacy & Data → Clear saved chat sessions clears both the device copy and the server threads.
+- **Chat engines** — two engines can answer chat turns. **OpenCode** is the default: the launcher runs an OpenCode server beside the editor, with the editor's own tools, verify gate and console checks attached, and its conversations kept in OpenCode's session store. **Mastra**, the editor's built-in agent, stays available. Switch under Settings → Agent & Chat → **Chat engine**; the switch takes effect on the next turn. That section's **Advanced** switches put the editor's file, web and skill tools in place of OpenCode's built-ins — all start off, so OpenCode works as itself until you turn one on.
 - **OpenAI-compatible keys** — `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
 
 ## Commands

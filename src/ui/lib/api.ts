@@ -935,6 +935,11 @@ export interface AgentSettings {
   defaultWorkflow: 'files' | 'sketch'
   contextTrim: boolean
   mapInjection: 'auto' | 'always' | 'off'
+  chatEngine: 'mastra' | 'opencode'
+  consoleCheck: boolean
+  aleFsTools: boolean
+  aleWebTools: boolean
+  aleSkillTools: boolean
 }
 
 export async function getAgentSettings(): Promise<AgentSettings> {

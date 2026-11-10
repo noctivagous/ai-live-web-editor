@@ -5,7 +5,7 @@
  * check widths. Each frame's bridge identifies itself with #ai-check-<w>
  * and is excluded from normal dispatch — the gate addresses frames directly.
  */
-import { checkClients, pageCommand, pageCommandCheck } from '../pageBridge.js'
+import { canRegisterLocalClients, checkClients, pageCommand, pageCommandCheck } from '../pageBridge.js'
 import { toLayoutFindings, type LayoutFinding } from './gate.js'
 import { readProjectConfig, targetWidths } from '../projectConfig.js'
 
@@ -50,18 +50,40 @@ const DESTROY_CODE = `(() => {
   return { ok: true, removed: gone };
 })()`
 
-export async function ensureCheckFrames(widths: number[] = CHECK_WIDTHS, timeoutMs = 15000): Promise<string[]> {
+/** Unverified note for the cross-process topology: the frames mount in
+ * the page, but their bridges register with the page's own server, so
+ * this process can never address them. Recorded instead of silently
+ * skipping the per-width checks. */
+export const FRAMES_REMOTE_NOTE = "per-width checks unavailable — check frames register with the page's own server"
+
+/**
+ * Fail-fast decision, made before any waiting: the mount eval reached
+ * a page, but if no bridge client can register with this process the
+ * frames will never appear in the local registry — waiting out the
+ * full timeout would only tax the turn. Returns the note to record,
+ * or null when frames genuinely can register and waiting is honest.
+ */
+export function framesSkipNote(evalReachedPage: boolean, canRegister: boolean): string | null {
+  if (!evalReachedPage || canRegister) return null
+  return FRAMES_REMOTE_NOTE
+}
+
+export type EnsureCheckFramesResult = { markers: string[], skipped?: string }
+
+export async function ensureCheckFrames(widths: number[] = CHECK_WIDTHS, timeoutMs = 15000): Promise<EnsureCheckFramesResult> {
   const raw = await pageCommand('eval', { code: ensureCode(widths) }, timeoutMs) as any
-  if (!raw || raw.ok === false || raw.error) return []
+  if (!raw || raw.ok === false || raw.error) return { markers: [] }
+  const skip = framesSkipNote(true, canRegisterLocalClients())
+  if (skip) return { markers: [], skipped: skip }
   const t0 = Date.now()
   const want = new Set(widths.map(String))
   while (Date.now() - t0 < timeoutMs) {
     const have = new Set(checkClients().map((c) => String(c.check)))
-    if (widths.every((w) => have.has(String(w)))) return [...want]
-    if (!have.size && !want.size) return []
+    if (widths.every((w) => have.has(String(w)))) return { markers: [...want] }
+    if (!have.size && !want.size) return { markers: [] }
     await new Promise((r) => setTimeout(r, 500))
   }
-  return checkClients().map((c) => String(c.check)).filter((m) => want.has(m))
+  return { markers: checkClients().map((c) => String(c.check)).filter((m) => want.has(m)) }
 }
 
 export async function destroyCheckFrames(): Promise<void> {

@@ -58,7 +58,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
   { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
   { id: 'shortcuts', title: 'Keyboard Shortcuts', scope: 'device', custom: 'shortcuts', keywords: 'keys hotkeys bindings rebind f2 delete deck shortcuts' },
-  { id: 'agent', title: 'Agent & Chat', scope: 'global', keywords: 'agent chat default workflow sketch context trimming codebase map injection tokens' },
+  { id: 'agent', title: 'Agent & Chat', scope: 'global', keywords: 'agent chat default workflow sketch context trimming codebase map injection tokens chat engine opencode advanced overrides' },
   { id: 'mcp', title: 'MCP', scope: 'global', custom: 'mcp', keywords: 'mcp servers tools protocol model context protocol chat integration handshake' },
   { id: 'project', title: 'Project', scope: 'project', keywords: 'type format device targets style appkit catalog manifest' },
   { id: 'plans', title: 'Plans & Workflow', scope: 'project', keywords: 'plan level mutability default planning' },
@@ -86,6 +86,32 @@ export const SETTING_FIELDS: SettingField[] = [
     hint: 'Adds the generated codebase map (files, imports, component signatures) to Files turns. Auto adds it only for projects with 15 or more files.',
     options: [{ value: 'auto', label: 'Auto (15+ files)' }, { value: 'always', label: 'Always' }, { value: 'off', label: 'Off' }],
     keywords: 'tokens index signatures codebase map',
+  },
+  {
+    id: 'chatEngine', section: 'agent', label: 'Chat engine', control: 'select', store: 'agent',
+    hint: 'Which engine answers chat turns. OpenCode (the default) runs the OpenCode server with the editor’s tools, verify gate and console checks attached. Mastra is the editor’s built-in agent. Switching takes effect on the next turn.',
+    options: [{ value: 'opencode', label: 'OpenCode' }, { value: 'mastra', label: 'Mastra' }],
+    keywords: 'engine opencode mastra sidecar chat backend',
+  },
+  // Advanced — ALE tool overrides for the OpenCode engine. Each
+  // switch swaps one group of the editor's tools in over an
+  // OpenCode built-in that does the same job; all start off, so
+  // OpenCode works as itself until you turn one on. They have no
+  // effect on Mastra chats, which always use the editor's tools.
+  {
+    id: 'aleFsTools', section: 'agent', group: 'Advanced', label: 'ALE file tools (override OpenCode’s)', control: 'toggle', store: 'agent',
+    hint: 'In OpenCode chats, use the editor’s file tools — grep, read-real-file, str-replace, write-real-file, delete-file, rename-file, make-dir, list-real-files, run-project-check — instead of OpenCode’s built-in file tools.',
+    keywords: 'opencode advanced override fs files grep str-replace native',
+  },
+  {
+    id: 'aleWebTools', section: 'agent', group: 'Advanced', label: 'ALE web tools (override OpenCode’s)', control: 'toggle', store: 'agent',
+    hint: 'In OpenCode chats, use the editor’s web tools — web-search, fetch-page and research, served by the search backend chosen in Search & Research — instead of OpenCode’s built-in web search and fetch.',
+    keywords: 'opencode advanced override web search fetch research native websearch webfetch',
+  },
+  {
+    id: 'aleSkillTools', section: 'agent', group: 'Advanced', label: 'ALE skill tool (override OpenCode’s)', control: 'toggle', store: 'agent',
+    hint: 'In OpenCode chats, add the editor’s read-skill tool alongside OpenCode’s built-in skill tool. Both read the same skills folder; read-skill is the editor’s own loader.',
+    keywords: 'opencode advanced override skill read-skill native',
   },
   // Appearance — device prefs (uiPrefs instance).
   {

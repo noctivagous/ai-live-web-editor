@@ -1210,8 +1210,11 @@ export interface MuseCodeAvailability {
   binPath: string | null
 }
 
-export async function getMuseCodeAvailability(): Promise<MuseCodeAvailability> {
-  const r = await fetch('/api/musecode/availability')
+/** `fresh` bypasses the host's short availability cache — the
+ * requirement note's Refresh asks for it, so a Muse Code install
+ * that just finished is seen on the click, not up to 30s later. */
+export async function getMuseCodeAvailability(fresh = false): Promise<MuseCodeAvailability> {
+  const r = await fetch(`/api/musecode/availability${fresh ? '?fresh=1' : ''}`)
   const j = await r.json() as { ok: boolean, availability: MuseCodeAvailability }
   return j.availability
 }
@@ -1237,8 +1240,8 @@ export interface MuseCodeHealth {
   sandboxProbe: SandboxProbeResult | null
 }
 
-export async function getMuseCodeHealth(): Promise<MuseCodeHealth> {
-  const r = await fetch('/api/musecode/health')
+export async function getMuseCodeHealth(fresh = false): Promise<MuseCodeHealth> {
+  const r = await fetch(`/api/musecode/health${fresh ? '?fresh=1' : ''}`)
   const j = await r.json() as { ok: boolean, health: MuseCodeHealth }
   return j.health
 }

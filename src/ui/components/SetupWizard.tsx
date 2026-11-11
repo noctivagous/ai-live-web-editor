@@ -3,6 +3,7 @@ import { getAgentSettings, getMuseCodeAvailability, listFiles, postAgentSettings
 import { ModalityPanel, ProviderSetup, hasValidConnection, useConnections } from './ProviderSetup'
 import { SearchSetup } from './SearchSetup'
 import { MuseSandboxSection } from './MuseSandboxSection'
+import { MuseRequirementNote } from './MuseRequirementNote'
 import { MODALITY_LABELS, type Modality } from '../../providerPresets'
 
 /**
@@ -79,6 +80,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
    * choice stays exactly as it was. */
   const [savedEngine, setSavedEngine] = useState<string | null>(null)
   const [availability, setAvailability] = useState<MuseCodeAvailability | null>(null)
+  const [refreshingAvailability, setRefreshingAvailability] = useState(false)
   const { payload, reload } = useConnections()
   const [fsCheck, setFsCheck] = useState<Check>({ state: 'wait', detail: 'Checking…' })
   const [hmrCheck, setHmrCheck] = useState<Check>({ state: 'wait', detail: 'Checking…' })
@@ -103,6 +105,18 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
     void getMuseCodeAvailability().then(a => { if (live) setAvailability(a) }).catch(() => { /* unknown — the Specialized card stays enabled, the Permissions step reports what it finds */ })
     return () => { live = false }
   }, [])
+
+  // The requirement note's Refresh: a FRESH availability check
+  // (the host's cache is bypassed), in place — when it finds the
+  // binary, availability flips, the note shows satisfied, and the
+  // Specialized card enables, all without leaving this step.
+  const refreshAvailability = () => {
+    setRefreshingAvailability(true)
+    void getMuseCodeAvailability(true)
+      .then(a => setAvailability(a))
+      .catch(() => { /* still unknown — the note keeps its state */ })
+      .finally(() => setRefreshingAvailability(false))
+  }
 
   const choosePath = (path: AiPath) => {
     setPathChoice(path)
@@ -235,6 +249,11 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
                 </span>
               </button>
             </div>
+            {availability !== null && (
+              <div style={{ marginTop: 12 }}>
+                <MuseRequirementNote availability={availability} onRefresh={refreshAvailability} refreshing={refreshingAvailability} />
+              </div>
+            )}
           </div>
         )}
 

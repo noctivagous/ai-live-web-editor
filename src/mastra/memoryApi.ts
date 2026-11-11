@@ -16,8 +16,9 @@ export function mountMemoryApi(app: Express) {
   })
   // Project-scoped clear — the server half of the chat Clear
   // button. Drops the active project's Mastra thread AND its cached
-  // OpenCode session, whichever engine served past turns, so the
-  // next turn starts with no recalled history on either engine.
+  // OpenCode session AND its Muse Code session, whichever engine
+  // served past turns, so the next turn starts with no recalled
+  // history on any engine.
   // Best-effort per store: one engine failing never blocks the other.
   app.post('/api/chat/clear', async (_req, res) => {
     try {
@@ -31,6 +32,10 @@ export function mountMemoryApi(app: Express) {
         const { clearOpencodeSession } = await import('../opencode/chat.js')
         session = clearOpencodeSession()
       } catch { /* sidecar modules unavailable — nothing cached */ }
+      try {
+        const { clearMusecodeSession } = await import('../musecode/supervisor.js')
+        session = clearMusecodeSession(getFsRoot()) || session
+      } catch { /* musecode modules unavailable — nothing cached */ }
       res.json({ ok: true, thread, session })
     } catch (e: unknown) {
       res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) })

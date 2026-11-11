@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { classifyProject, type ProjectSetup } from './projectDetect.js'
 import { ensureProjectPlugin, findViteConfig, writeStandalonePluginConfig } from './pluginEnsure.js'
 import { stopOpencodeServer } from './opencode/supervisor.js'
+import { stopMusecodeHosts } from './musecode/supervisor.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const WORKSPACE_ROOT = path.resolve(__dirname, '../projects')
@@ -197,6 +198,10 @@ export function selectProject(id: string): ProjectInfo {
   // a switch stops the previous project's server; the next
   // opencode-engine turn lazily spawns one for the new project.
   try { stopOpencodeServer() } catch { /* best-effort */ }
+  // Muse Code hosts are per-project too (posture + trust are
+  // host-fixed): a switch stops them; durable sessions resume on
+  // the next musecode turn for the new project.
+  try { stopMusecodeHosts() } catch { /* best-effort */ }
   // Bridge guarantee (plugin auto-ensure, slice 1): detect the
   // editor plugin's registration and add it (visibly, revertably)
   // when missing — BEFORE the dev server starts, so the fresh spawn
@@ -445,6 +450,6 @@ export function ensureFsRoot() {
   return ensureWorkspace()
 }
 
-process.on('exit', () => { stopVite(); stopOpencodeServer() })
-process.on('SIGINT', () => { stopVite(); stopOpencodeServer(); process.exit(0) })
-process.on('SIGTERM', () => { stopVite(); stopOpencodeServer(); process.exit(0) })
+process.on('exit', () => { stopVite(); stopOpencodeServer(); stopMusecodeHosts() })
+process.on('SIGINT', () => { stopVite(); stopOpencodeServer(); stopMusecodeHosts(); process.exit(0) })
+process.on('SIGTERM', () => { stopVite(); stopOpencodeServer(); stopMusecodeHosts(); process.exit(0) })

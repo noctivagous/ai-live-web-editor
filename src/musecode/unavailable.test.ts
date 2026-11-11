@@ -7,7 +7,10 @@ describe('musecodeUnavailableMessage', () => {
   it('names the missing binary when Muse Code is not on this machine', () => {
     const msg = musecodeUnavailableMessage(false)
     assert.match(msg, /not available on this machine/)
-    assert.match(msg, /Install Muse Code/)
+    // The install guidance rides along as text: the requirement
+    // label and the product page (setup polish).
+    assert.match(msg, /Requirement: Muse Code/)
+    assert.match(msg, /https:\/\/dev\.meta\.ai\/products\/muse-code/)
   })
   it('names the not-ready engine when the binary is present', () => {
     const msg = musecodeUnavailableMessage(true)

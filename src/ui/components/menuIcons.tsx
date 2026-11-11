@@ -133,3 +133,24 @@ export function HelpIcon(props: MenuIconProps) {
     </>
   ))
 }
+
+/** Refresh — a circular arrow, nearly closed, head at the top. */
+export function RefreshIcon(props: MenuIconProps) {
+  return frame(props, (
+    <>
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </>
+  ))
+}
+
+/** Install — a down arrow landing in a tray. */
+export function InstallIcon(props: MenuIconProps) {
+  return frame(props, (
+    <>
+      <path d="M12 3v11" />
+      <path d="m6.5 9.5 5.5 5.5 5.5-5.5" />
+      <path d="M4 17v1.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V17" />
+    </>
+  ))
+}

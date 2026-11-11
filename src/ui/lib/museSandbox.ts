@@ -113,3 +113,9 @@ export function museRunConfig(
     }
   }
 }
+
+/** Where to get Muse Code: its product page. The one URL every
+ * "Requirement: Muse Code" note points at (the requirement note
+ * shows it inside its Install… dialog; the chat's plain-text
+ * not-available message carries it as text). */
+export const MUSE_CODE_PRODUCT_URL = 'https://dev.meta.ai/products/muse-code'

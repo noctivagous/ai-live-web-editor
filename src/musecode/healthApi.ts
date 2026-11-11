@@ -6,11 +6,14 @@
  * the body asks to force it).
  */
 import type { Express } from 'express'
-import { getMuseCodeAvailability } from './availability.js'
+import { getMuseCodeAvailability, resetMuseCodeAvailabilityCache } from './availability.js'
 import { getMuseCodeHealth, probeSandbox } from './health.js'
 
 export function mountMuseCodeHealthApi(app: Express): void {
-  app.get('/api/musecode/health', async (_req, res) => {
+  app.get('/api/musecode/health', async (req, res) => {
+    // ?fresh=1: same rule as the availability API — a Refresh in
+    // the sandbox surface re-detects the binary, cache dropped.
+    if (req.query.fresh === '1') resetMuseCodeAvailabilityCache()
     res.json({ ok: true, health: await getMuseCodeHealth() })
   })
   app.post('/api/musecode/health/probe', async (req, res) => {

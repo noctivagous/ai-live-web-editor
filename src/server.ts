@@ -674,9 +674,10 @@ app.post('/api/chat/stream', async (req, res) => {
   // Chat engine flag (agent settings, read at turn start): the
   // OpenCode sidecar serves the turn through its translator, which
   // emits the same event vocabulary — the UI is unchanged either
-  // way. Resolution is explicit per engine: 'musecode' gets the
-  // plain not-available answer (its supervisor lands in a later
-  // slice), never a fall through to the Mastra path.
+  // way. Resolution is explicit per engine: 'musecode' runs
+  // through its supervisor + translator (musecode/chat.ts), which
+  // answers with the plain not-available message when no binary
+  // is installed — never a fall through to the Mastra path.
   const { currentAgentSettings } = await import('./agentSettings.js')
   const engine = currentAgentSettings().chatEngine
   if (engine === 'opencode') {
@@ -685,8 +686,8 @@ app.post('/api/chat/stream', async (req, res) => {
     return
   }
   if (engine === 'musecode') {
-    const { pipeMusecodeUnavailable } = await import('./musecode/unavailable.js')
-    await pipeMusecodeUnavailable(res, req)
+    const { pipeMusecodeChatStream } = await import('./musecode/chat.js')
+    await pipeMusecodeChatStream(req.body?.messages, res, req, req.body?.workflow)
     return
   }
   await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow, { mcp: true })

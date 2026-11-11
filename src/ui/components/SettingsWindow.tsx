@@ -25,6 +25,7 @@ import { SearchSetup } from './SearchSetup'
 import { FacetsSettingsSection } from './FacetsSettingsSection'
 import { McpSettingsSection } from './McpSettingsSection'
 import { MuseSandboxSection } from './MuseSandboxSection'
+import { MuseRequirementNote } from './MuseRequirementNote'
 
 /* The Settings window: a left rail of sections over one content area.
    Declarative sections render generically from the settings model
@@ -58,6 +59,18 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
    * engine picker marks its Muse Code option with it. Null while
    * unknown — the option then renders plain. */
   const [museAvailability, setMuseAvailability] = useState<MuseCodeAvailability | null>(null)
+  const [museRefreshing, setMuseRefreshing] = useState(false)
+
+  // The requirement note's Refresh (fresh check, cache bypassed):
+  // on success the note flips to satisfied and the Muse Code
+  // engine option enables in the same render.
+  const refreshMuseAvailability = useCallback(() => {
+    setMuseRefreshing(true)
+    void getMuseCodeAvailability(true)
+      .then(a => setMuseAvailability(a))
+      .catch(() => { /* still unknown — the note keeps its state */ })
+      .finally(() => setMuseRefreshing(false))
+  }, [])
   const [searchSnap, setSearchSnap] = useState<{ backend: SearchBackendId, options: SearchOption[] } | null>(null)
 
   const refreshSearchSnap = useCallback(async () => {
@@ -216,7 +229,8 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const fieldRow = (f: SettingField) => {
     const v = displayValue(f)
     return (
-      <div className="set-row" key={`${f.store}:${f.id}`}>
+      <React.Fragment key={`${f.store}:${f.id}`}>
+      <div className="set-row">
         <div className="set-row-text">
           <label className="set-row-label" htmlFor={`set-${f.id}`}>{f.label}</label>
           {f.hint && <div className="field-hint">{f.hint}</div>}
@@ -288,6 +302,12 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
           )}
         </div>
       </div>
+      {f.id === 'chatEngine' && museAvailability !== null && (
+        <div style={{ padding: '10px 0 4px' }}>
+          <MuseRequirementNote availability={museAvailability} onRefresh={refreshMuseAvailability} refreshing={museRefreshing} />
+        </div>
+      )}
+      </React.Fragment>
     )
   }
 

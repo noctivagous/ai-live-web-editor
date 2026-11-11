@@ -7,6 +7,7 @@ import { loadUiPrefs, saveUiPrefs, type UiPrefs } from '../lib/uiPrefs'
 import {
   museRunConfig, resolveSandboxPosture, type SandboxPosture,
 } from '../lib/museSandbox'
+import { MuseRequirementNote } from './MuseRequirementNote'
 
 /**
  * The Muse Code sandbox surface (Muse Code design §5.2): one
@@ -67,6 +68,7 @@ export function MuseSandboxSection() {
   const [health, setHealth] = useState<MuseCodeHealth | null>(null)
   const [probe, setProbe] = useState<SandboxProbeResult | null>(null)
   const [probing, setProbing] = useState(false)
+  const [refreshingHealth, setRefreshingHealth] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -90,6 +92,16 @@ export function MuseSandboxSection() {
     void postProjectConfig({ museSandboxPosture: value === 'default' ? null : value })
       .then(r => setProjectCfg(r.config))
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
+  }
+
+  // The requirement note's Refresh: a fresh health read (the
+  // host re-detects the binary, cache bypassed), in place.
+  const refreshHealth = () => {
+    setRefreshingHealth(true)
+    void getMuseCodeHealth(true)
+      .then(h => { setHealth(h); setProbe(h.sandboxProbe) })
+      .catch(() => { /* host unreachable — the rows keep their state */ })
+      .finally(() => setRefreshingHealth(false))
   }
 
   const runProbe = (force: boolean) => {
@@ -136,17 +148,22 @@ export function MuseSandboxSection() {
         </div>
       )}
       {availability && !availability.available && (
-        <div className="check-row bad">
-          <span className="mark">!</span>
-          <div>
-            Muse Code is not available on this machine
-            <small>
-              {availability.binPath
-                ? 'The muse program was found but did not answer — it may be mid-update or damaged. Restart the editor and check again.'
-                : 'Install Muse Code, then restart the editor and come back to this step. Until then, chats on the Muse Code engine can’t run — the Open path works with your own provider keys.'}
-            </small>
+        <>
+          <div className="check-row bad">
+            <span className="mark">!</span>
+            <div>
+              Muse Code is not available on this machine
+              <small>
+                {availability.binPath
+                  ? 'The muse program was found but did not answer — it may be mid-update or damaged. Check again below.'
+                  : 'Until it is installed, chats on the Muse Code engine can’t run — the Open path works with your own provider keys.'}
+              </small>
+            </div>
           </div>
-        </div>
+          <div style={{ margin: '0 0 10px' }}>
+            <MuseRequirementNote availability={availability} onRefresh={refreshHealth} refreshing={refreshingHealth} />
+          </div>
+        </>
       )}
 
       {health && (

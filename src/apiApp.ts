@@ -386,8 +386,8 @@ mountMemoryApi(app)
 
   app.post('/api/chat/stream', async (req, res) => {
     // Chat engine flag, same rule as server.ts: read at turn start.
-    // Resolution is explicit per engine — a 'musecode' turn gets
-    // the plain not-available answer, never a fall through to
+    // Resolution is explicit per engine — a 'musecode' turn runs
+    // through its supervisor + translator, never a fall through to
     // another engine.
     const { currentAgentSettings } = await import('./agentSettings.js')
     const engine = currentAgentSettings().chatEngine
@@ -397,8 +397,8 @@ mountMemoryApi(app)
       return
     }
     if (engine === 'musecode') {
-      const { pipeMusecodeUnavailable } = await import('./musecode/unavailable.js')
-      await pipeMusecodeUnavailable(res, req)
+      const { pipeMusecodeChatStream } = await import('./musecode/chat.js')
+      await pipeMusecodeChatStream(req.body?.messages, res, req, req.body?.workflow)
       return
     }
     await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow, { mcp: true })

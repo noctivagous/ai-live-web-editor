@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pipeAgentChatStream } from '../chatStream.js'
 import { pipeOpencodeChatStream } from '../opencode/chat.js'
+import { pipeMusecodeChatStream } from '../musecode/chat.js'
 import { BASIC_SUITE, EMPTY_FACTS, type TurnFacts } from './suite.js'
 import { buildSummary, median, renderReport, writeRunReport, type TaskRunRecord } from './report.js'
 import { FIXTURE_DIR, chatPipeForEngine, copyFixture } from './runner.js'
@@ -206,6 +207,7 @@ describe('engine selection (slice 9)', () => {
   it('the pipe for an engine is that engine\u2019s chat-stream function', () => {
     assert.equal(chatPipeForEngine('opencode'), pipeOpencodeChatStream)
     assert.equal(chatPipeForEngine('mastra'), pipeAgentChatStream)
+    assert.equal(chatPipeForEngine('musecode'), pipeMusecodeChatStream)
   })
 
   it('an opencode run\u2019s summary names the engine; its report keeps the Mastra anchor with the keyed-run caveat', () => {

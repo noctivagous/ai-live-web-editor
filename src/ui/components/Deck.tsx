@@ -14,6 +14,7 @@ import { effectiveCombo, matchShortcut } from '../lib/shortcuts'
 import { ChatComposer, ChatHeader, SketchPanel } from './chatChrome'
 import { Markdown } from './Markdown'
 import { FailureDetailsDialog, errorFailureReport, stepFailureReport } from './Modal'
+import { FixWithMusecodeButton } from './FixWithMusecode'
 import type { ChatWorkflow, SearchBackendId, WorkflowSnapshot } from '../lib/api'
 import type { AnnotationDigest } from '../lib/annotationSync'
 
@@ -162,6 +163,16 @@ export function DeckCardView({ card, onNeedSetup, embed, turn }: {
     case 'system':
       if (!card.text) return null
       return <div className="dcard-system">{card.text}</div>
+    case 'fix':
+      return (
+        <div className="dcard dcard-error">
+          <div className="dcard-label error">Gate verdict</div>
+          <pre className="dcard-pre plain">{card.evidence}</pre>
+          <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+            <FixWithMusecodeButton title={card.title} evidence={card.evidence} source="gate" />
+          </div>
+        </div>
+      )
     case 'skills': {
       const why = card.skills.map(s => `${s.name} (${s.via === 'trigger' ? 'your ask matched' : s.via === 'dependency' ? 'the project uses its library' : 'the project type matches'})`).join(' · ')
       return (

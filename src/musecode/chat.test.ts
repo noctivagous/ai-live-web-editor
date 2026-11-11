@@ -6,6 +6,8 @@ import { afterEach, describe, it } from 'node:test'
 import { EXPECTED_SCHEMA_FINGERPRINT, type MuseClient } from '@muse-code/sdk'
 import type { ChatSseResponse, ChatStreamEvent } from '../chatStream.js'
 import { setFsRoot } from '../launcher.js'
+import { setAgentSettingsPath } from '../agentSettings.js'
+import { setAleSkillInstallRunner } from '../mcpserver/skills.js'
 import { resetMuseCodeAvailabilityCache } from './availability.js'
 import { musecodeHostSlots, pipeMusecodeChatStream, setMusecodeHostSlots } from './chat.js'
 import { resetMusecodeSupervisor, setMusecodeSpawner } from './supervisor.js'
@@ -31,6 +33,13 @@ function fakeRes(): { res: ChatSseResponse; events: () => ChatStreamEvent[] } {
  * path (availability → posture → session → translator → done)
  * with no model call. */
 function fakeTurnSpawner(): void {
+  // The pipe's lazy skill install (§12) must not shell out to
+  // the real Muse CLI from tests: a no-op runner that reports
+  // every skill installed.
+  setAleSkillInstallRunner(async () => ({ stdout: JSON.stringify({ installed: { id: 'stub' } }), stderr: '' }))
+  // The install pass writes its hash manifest beside the agent
+  // settings — keep test runs out of the repo tree.
+  setAgentSettingsPath(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ale-muse-settings-')), 'agent-settings.json'))
   setMusecodeSpawner({
     spawn: async () => {
       const session = {
@@ -77,6 +86,7 @@ describe('musecode host slots', () => {
 describe('pipeMusecodeChatStream', () => {
   afterEach(() => {
     setMusecodeSpawner(null)
+    setAleSkillInstallRunner(null)
     resetMusecodeSupervisor()
   })
 

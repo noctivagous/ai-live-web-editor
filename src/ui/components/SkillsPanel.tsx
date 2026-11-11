@@ -5,6 +5,7 @@ import {
   type CriterionResult, type SkillEntry, type SkillFieldsInput, type SkillsState,
 } from '../lib/skills'
 import { Markdown } from './Markdown'
+import { FixWithMusecodeButton } from './FixWithMusecode'
 
 /**
  * The Skills panel.
@@ -349,6 +350,16 @@ export function SkillsPanel() {
                             {result && <span className="skills-check-evidence">{result.evidence}</span>}
                             {result?.details && result.details.length > 1 && (
                               <span className="skills-check-evidence">{result.details.join(' · ')}</span>
+                            )}
+                            {result?.verdict === 'fail' && (
+                              <span style={{ marginTop: 6, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                                <FixWithMusecodeButton
+                                  title={`Fix the failing check: ${c.say}`}
+                                  evidence={[result.evidence, ...(result.details ?? [])].join('\n')}
+                                  criteria={[c.say]}
+                                  source="criteria"
+                                />
+                              </span>
                             )}
                           </div>
                           {result

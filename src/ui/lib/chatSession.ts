@@ -16,6 +16,9 @@ export type LogItem =
   | { role: 'system' | 'user' | 'ai' | 'error' | 'think', text: string, usage?: TurnUsage }
   | { role: 'tools', steps: ToolStep[], usage?: TurnUsage }
   | { role: 'skills', skills: { name: string, via: string }[] }
+  /** A turn whose gate verdict came back unclean — carries the
+   * "Fix with Muse Code" dispatch entry point (§13). */
+  | { role: 'fix', title: string, evidence: string }
 
 export type ChatShared = {
   v: 1
@@ -42,7 +45,7 @@ export function chatStorageKey(projectId: string) {
 
 function clipLog(log: LogItem[]): LogItem[] {
   const next = log.slice(-LOG_CAP).map((item) => {
-    if (item.role === 'tools' || item.role === 'skills') return item
+    if (item.role === 'tools' || item.role === 'skills' || item.role === 'fix') return item
     return { ...item, text: item.text.slice(0, item.role === 'think' ? 4000 : 8000) }
   })
   return next.length ? next : DEFAULT_CHAT_LOG

@@ -1,6 +1,6 @@
 /**
  * Token benchmark CLI — `npm run benchmark [-- --model <id>] [-- --reps <n>]
- * [-- --taskTimeoutMs <ms>] [-- --tasks <id,id>] [-- --engine <mastra|opencode>]`.
+ * [-- --taskTimeoutMs <ms>] [-- --tasks <id,id>] [-- --engine <mastra|opencode|musecode>]`.
  *
  * Runs the basic suite against fresh fixture copies with real chat
  * turns and writes .ai-live/benchmark-runs/<runId>/report.md +
@@ -20,8 +20,8 @@ function arg(name: string): string | undefined {
 
 const tasksArg = arg('tasks')
 const engineArg = arg('engine')
-if (engineArg !== undefined && engineArg !== 'mastra' && engineArg !== 'opencode') {
-  console.error(`Benchmark failed: --engine must be "mastra" or "opencode" (got "${engineArg}")`)
+if (engineArg !== undefined && engineArg !== 'mastra' && engineArg !== 'opencode' && engineArg !== 'musecode') {
+  console.error(`Benchmark failed: --engine must be "mastra", "opencode" or "musecode" (got "${engineArg}")`)
   process.exit(1)
 }
 try {

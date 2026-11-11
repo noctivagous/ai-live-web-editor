@@ -21,10 +21,11 @@ export type MapInjectionMode = 'auto' | 'always' | 'off'
 export type ChatEngine = 'musecode' | 'opencode' | 'mastra'
 
 /** The engine a fresh state (nothing saved) resolves to. The
- * Muse Code design (§4) flips this to 'musecode' only in the
- * final slice, after the parity run; until then the standing
- * default is 'opencode'. */
-export const DEFAULT_CHAT_ENGINE: ChatEngine = 'opencode'
+ * Muse Code design (§4) flipped this to 'musecode' in the
+ * final slice, after the parity run (benchmarks 5/5 through
+ * the Muse Code path); the legacy engines stay reachable by
+ * an explicitly saved value. */
+export const DEFAULT_CHAT_ENGINE: ChatEngine = 'musecode'
 
 /** Explicit per-value engine resolution (Muse Code design §4 —
  * the old "anything not mastra becomes opencode" fall-through is
@@ -50,8 +51,8 @@ export interface AgentSettings {
   /** Chat engine for streamed turns. Resolution is explicit per
    * value (resolveChatEngine): a saved 'musecode', 'opencode' or
    * 'mastra' resolves to itself; unset/fresh state resolves to
-   * DEFAULT_CHAT_ENGINE ('opencode' until the Muse Code final
-   * slice flips it, after the parity run). */
+   * DEFAULT_CHAT_ENGINE ('musecode' since the final Muse Code
+   * slice flipped it, after the parity run). */
   chatEngine: ChatEngine
   /** Check the page console around every chat turn (turn-start
    * capture + post-turn findings/footer detail, both engines). Off =

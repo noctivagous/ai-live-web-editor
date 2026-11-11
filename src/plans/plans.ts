@@ -51,6 +51,16 @@ export interface PlanTask {
   nodeId?: string
 }
 
+/** Where a plan came from when it was imported rather than
+ * drafted in ALE (Muse Code design §10): a Muse planner
+ * document (/plan, /grill) imported explicitly, stamped at
+ * import so the record never pretends ALE drafted it. */
+export interface PlanProvenance {
+  source: string
+  sessionId?: string
+  at: number
+}
+
 export interface PlanDoc {
   slug: string
   title: string
@@ -58,6 +68,11 @@ export interface PlanDoc {
   level: PlanLevel
   status: PlanStatus
   goal: string
+  /** Import provenance (§10); absent on ALE-drafted plans. */
+  provenance?: PlanProvenance
+  /** Checkable statements the finished work is judged against,
+   * attached via the plan tools (§10); absent until attached. */
+  criteria?: string[]
   mutability?: { goal: number; steps: number; methods: number }
   considerations: PlanConsideration[]
   questions: PlanQuestion[]

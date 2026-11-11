@@ -143,6 +143,9 @@ export default function App() {
   // New/Import/Open/Save live in one dropdown instead of four buttons.
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [wizard, setWizard] = useState<string | null>(null)
+  /** An agent-opened wizard (ale_open_wizard, slice 8): the
+   * completion id the waiting tool call resolves against. */
+  const [agentWizard, setAgentWizard] = useState<{ completionId: string } | null>(null)
   // Context palette (slice 4): the preview mark lives in the launcher
   // workflow state; App mirrors it so page-context actions know
   // whether a page is in the preview. undefined = not known yet.
@@ -1193,6 +1196,22 @@ export default function App() {
     return () => es.close()
   }, [])
 
+  // Agent-opened wizards (slice 8): the server pushes an open
+  // event when an agent's ale_open_wizard call lands; the
+  // wizard renders with its completion id so finishing or
+  // cancelling reports back to the waiting tool call.
+  useEffect(() => {
+    const es = new EventSource('/api/wizards/events')
+    es.addEventListener('wizard-open', (e) => {
+      try {
+        const open = JSON.parse((e as MessageEvent).data) as { completionId: string, wizardId: string }
+        setAgentWizard({ completionId: open.completionId })
+        setWizard(open.wizardId)
+      } catch { /* a malformed event opens nothing */ }
+    })
+    return () => es.close()
+  }, [])
+
   // The one context every action surface reads (slices 1–4): project,
   // open file, feature-graph presence, and whether a page is marked
   // for preview (the mark, or the start page it seeds from).
@@ -1621,8 +1640,9 @@ export default function App() {
         )}
         {wizard === 'add-feature' && (
           <AddFeatureWizard
-            onClose={() => setWizard(null)}
+            onClose={() => { setWizard(null); setAgentWizard(null) }}
             onNotice={setNotice}
+            agentCompletionId={agentWizard?.completionId}
           />
         )}
         {/* Workbench panes: display:contents keeps the flex row exact

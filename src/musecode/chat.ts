@@ -32,13 +32,16 @@
 import { createChatDebugTurn } from '../chatDebug.js'
 import {
   abortSignalFromReq, beginChatSse,
-  type ChatSseResponse, type ChatStreamEvent, type ChatStreamReq,
+  type ChatSseResponse, type ChatStreamEvent, type ChatStreamReq, type VerifySummary,
 } from '../chatStream.js'
 import { getFsRoot } from '../launcher.js'
 import { logServerError } from '../serverLog.js'
 import { getSketchMode, parseSketchMode, setSketchMode, SKETCH_TURN_PREAMBLE } from '../sketchSession.js'
 import { buildTurnContext, latestUserText } from '../turnContext.js'
 import { FILES_ROUTED_PREAMBLE, routeChatTurn, SKETCH_MIXED_PREAMBLE } from '../workflowRoute.js'
+import { aleMcpState, waitForAleToolsListed } from '../mcpserver/server.js'
+import { ensureAleSkillsInstalled } from '../mcpserver/skills.js'
+import { ensureGateHookFiles, waitForGateVerdict } from './gateHook.js'
 import { getMuseCodeAvailability } from './availability.js'
 import {
   getOrStartMusecodeSession, type MusecodeSessionSlots,
@@ -108,6 +111,16 @@ export async function pipeMusecodeChatStream(
       return
     }
 
+    // §12 skills (slice 6): ALE's skills are installed into
+    // Muse Code's discovery root lazily on this path (memoised
+    // per process, hash-idempotent). Bounded wait: a slow or
+    // failed install pass never holds a turn hostage — the
+    // session simply starts without fresh skills this time.
+    await Promise.race([
+      ensureAleSkillsInstalled(),
+      new Promise((r) => setTimeout(r, 20_000)),
+    ]).catch(() => { /* records carry the outcome; the turn proceeds */ })
+
     // Per-turn brief: the same content assembly the other
     // engines perform — route preamble, turn context parts,
     // user text (see the module header for why the preamble is
@@ -129,11 +142,36 @@ export async function pipeMusecodeChatStream(
       .filter((p): p is string => typeof p === 'string' && p.length > 0)
       .join('\n\n')
 
+    // §11 managed hook (slice 9): the generated Stop-hook file
+    // rides the supervisor's spawn slot, so it must be in the
+    // slots before the host spawns. Content is port-addressed
+    // and stable, so this never churns the host fingerprint.
+    const hooksPath = ensureGateHookFiles()
+    if (hooksPath && musecodeHostSlots().managedHooksPath !== hooksPath) {
+      setMusecodeHostSlots({ ...musecodeHostSlots(), managedHooksPath: hooksPath })
+    }
+
     const projectRoot = getFsRoot()
+    // §7 assertion (slice 5, spike item 2's lesson mechanised):
+    // the ALE MCP server records what hosts actually did — after
+    // the session starts, its tools must have been LISTED by this
+    // host. An untrusted session never connects at all and no
+    // error is raised anywhere; the model's own say-so about its
+    // tools is never the evidence.
+    const listCountBefore = aleMcpState().toolsListCount
     const { session, record } = await getOrStartMusecodeSession(projectRoot, musecodeHostSlots())
     console.log(
       `[musecode] turn on session ${record.sessionId} (posture ${record.posture}, muse ${record.binaryVersion}${record.resumed ? ', resumed' : ''})`,
     )
+    if (musecodeHostSlots().mcpServers) {
+      const confirmed = record.resumed && listCountBefore > 0
+        ? true
+        : await waitForAleToolsListed(listCountBefore, record.resumed ? 3_000 : 6_000)
+      if (!confirmed) {
+        console.log(`[musecode] ALE tools NOT confirmed listed in session ${record.sessionId} — the session may be untrusted; ALE's live-page/verify tools are unavailable to it`)
+        send({ type: 'status', text: 'ALE’s own tools (live page, verify, graphs) were not confirmed in this Muse Code session — it can still work with its native tools. If this persists, the project may not be trusted by Muse Code.' })
+      }
+    }
 
     const turn = await session.sendUserTurn({ input: [{ type: 'text', text: promptText }] })
     const folder = createMusecodeEventFolder()
@@ -213,7 +251,24 @@ export async function pipeMusecodeChatStream(
       return
     }
 
-    send({ type: 'done', usage: folder.usage })
+    // §11 (slice 9): the managed Stop hook fires as this turn
+    // ends and its gate re-check records a verdict against the
+    // session + turn. Wait briefly for it so the verdict rides
+    // the done event as the turn's verification — the same
+    // surface the other engines use. A verdict that settles
+    // later is still recorded (GET /api/musecode/gate-verdicts);
+    // it just misses this event.
+    let verification: VerifySummary | undefined = undefined
+    if (hooksPath) {
+      const turnId = (turn as { turnId?: string }).turnId ?? null
+      const verdictRecord = await waitForGateVerdict(record.sessionId, turnId, 8_000)
+      if (verdictRecord) {
+        verification = verdictRecord.summary
+        console.log(`[musecode] gate re-check for turn ${turnId ?? '?'}: ${verdictRecord.summary.clean ? 'clean' : `layout ${verdictRecord.summary.newLayout ?? 0}, console ${verdictRecord.summary.newConsole ?? 0}`}`)
+      }
+    }
+
+    send({ type: 'done', usage: folder.usage, ...(verification ? { verification } : {}) })
     res.end()
     dbg.finish({})
   } catch (e) {

@@ -396,7 +396,7 @@ export type ChatStreamEvent =
   | { type: 'text-delta'; text: string }
   | { type: 'skills'; skills: { name: string, via: string }[] }
   | { type: 'error'; error: string }
-  | { type: 'done'; usage?: import('./chatSession').TurnUsage | null; model?: string }
+  | { type: 'done'; usage?: import('./chatSession').TurnUsage | null; model?: string; verification?: { ran: boolean, clean?: boolean, newLayout?: number, newConsole?: number, unverified?: string[], skipped?: string } }
 
 export type ChatWorkflow = 'files' | 'sketch'
 
@@ -1173,6 +1173,16 @@ export async function placeTemplate(id: string) {
 /** Seed a chat turn from outside the chat panel (Library "Ask AI", plan execute). */
 export function askAi(text: string) {
   window.dispatchEvent(new CustomEvent('ai-live:ask-ai', { detail: { text } }))
+}
+
+/** Report an agent-opened wizard's outcome (Muse Code wizards,
+ * slice 8): when an agent opened this wizard through
+ * ale_open_wizard, its tool call is waiting on this report —
+ * completion resolves it with the outcome, cancellation with a
+ * cancellation. Fire-and-forget: the first report wins
+ * server-side, so an extra report is harmless. */
+export function reportWizardOutcome(completionId: string, outcome: Record<string, unknown>): void {
+  void postJson('/api/wizards/complete', { completionId, outcome }).catch(() => { /* the completion may already be resolved */ })
 }
 
 /** Launcher-global agent behavior settings (Settings → Agent & Chat). */

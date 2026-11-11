@@ -35,6 +35,8 @@ import {
 import { loadDotEnv } from '../env.js'
 import { EDITOR_ROOT, getFsRoot, setFsRoot } from '../launcher.js'
 import { pipeOpencodeChatStream } from '../opencode/chat.js'
+import { pipeMusecodeChatStream } from '../musecode/chat.js'
+import { getMuseCodeAvailability } from '../musecode/availability.js'
 import { opencodeMappingFor } from '../opencode/config.js'
 import { presetById } from '../providerPresets.js'
 import { listProviderModels } from '../providers.js'
@@ -99,9 +101,7 @@ export async function ensureBenchmarkConnection(model: string): Promise<void> {
  * is that slice's gate), so asking for it fails plainly instead
  * of silently driving a different engine. */
 export function chatPipeForEngine(engine: ChatEngine) {
-  if (engine === 'musecode') {
-    throw new Error('The benchmark runner can’t drive the Muse Code engine yet — it is not wired up in this version.')
-  }
+  if (engine === 'musecode') return pipeMusecodeChatStream
   return engine === 'opencode' ? pipeOpencodeChatStream : pipeAgentChatStream
 }
 
@@ -307,6 +307,14 @@ export async function runBenchmark(opts: BenchmarkRunOptions = {}) {
   let stop = false
   try {
     if (engine === 'opencode') await ensureOpencodeBenchmarkConnection(model)
+    else if (engine === 'musecode') {
+      // No Meta connection to ensure: Muse Code carries its
+      // own sign-in. What the run needs is the binary itself.
+      const availability = await getMuseCodeAvailability()
+      if (!availability.available) {
+        throw new Error('The benchmark can’t run the Muse Code engine: Muse Code is not installed on this machine. Install it (see the Requirement: Muse Code note in Settings) or pick a different --engine.')
+      }
+    }
     else await ensureBenchmarkConnection(model)
     for (const task of tasks) {
       if (stop) break

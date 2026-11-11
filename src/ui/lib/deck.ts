@@ -87,6 +87,7 @@ export type DeckCard =
   | { kind: 'error', text: string }
   | { kind: 'system', text: string }
   | { kind: 'skills', skills: { name: string, via: string }[] }
+  | { kind: 'fix', title: string, evidence: string }
 
 export type TurnStatus = 'done' | 'running' | 'error' | 'pending'
 
@@ -178,6 +179,8 @@ export function groupTurns(log: LogItem[], opts: { sending?: boolean } = {}): De
       ensure().cards.push({ kind: 'error', text: item.text })
     } else if (item.role === 'skills') {
       ensure().cards.push({ kind: 'skills', skills: item.skills })
+    } else if (item.role === 'fix') {
+      ensure().cards.push({ kind: 'fix', title: item.title, evidence: item.evidence })
     } else {
       ensure().cards.push({ kind: 'system', text: item.text })
     }

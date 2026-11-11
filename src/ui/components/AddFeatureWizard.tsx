@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { askAi, getCatalog, getFeatures, type PackSummaryItem } from '../lib/api'
+import { askAi, getCatalog, getFeatures, reportWizardOutcome, type PackSummaryItem } from '../lib/api'
 import { quickAddPrompt } from '../lib/wizards'
 
 /**
@@ -19,9 +19,13 @@ import { quickAddPrompt } from '../lib/wizards'
  * Data is the Library's: the catalog's pack summaries, and the
  * project graph's nodes to tell what is already installed.
  */
-export function AddFeatureWizard({ onClose, onNotice }: {
+export function AddFeatureWizard({ onClose, onNotice, agentCompletionId }: {
   onClose: () => void
   onNotice: (text: string) => void
+  /** When an agent opened this wizard (ale_open_wizard), the
+   * completion id its tool call waits on: finishing or
+   * cancelling reports the outcome before closing. */
+  agentCompletionId?: string
 }) {
   const [packs, setPacks] = useState<PackSummaryItem[] | null>(null)
   const [installed, setInstalled] = useState<Set<string>>(new Set())
@@ -46,26 +50,40 @@ export function AddFeatureWizard({ onClose, onNotice }: {
     return () => { live = false }
   }, [])
 
+  /** Agent-opened completions (slice 8): finishing reports the
+   * outcome to the waiting tool call before closing; leaving
+   * any other way reports a cancellation. The server resolves
+   * on the first report, so the paths can't double-resolve. */
+  function finish(outcome: Record<string, unknown>) {
+    if (agentCompletionId) reportWizardOutcome(agentCompletionId, { wizardId: 'add-feature', ...outcome })
+    onClose()
+  }
+
+  function cancel() {
+    finish({ status: 'cancelled', reason: 'user' })
+  }
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancel() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, agentCompletionId])
 
   function quickAdd(pack: PackSummaryItem) {
     askAi(quickAddPrompt(pack))
     onNotice(`Quick add started — ${pack.name} is being installed with its stated defaults. Watch the chat for its report.`)
-    onClose()
+    finish({ status: 'completed', action: 'quick-add', created: { pack: pack.id } })
   }
 
   function planFirst(pack: PackSummaryItem) {
     const goal = `Install the ${pack.name} feature pack (pack id ${pack.id}) into this app, with its settings at their defaults unless my answers say otherwise`
     window.dispatchEvent(new CustomEvent('ai-live:plan-open', { detail: { goal } }))
-    onClose()
+    finish({ status: 'completed', action: 'plan-first', created: { pack: pack.id } })
   }
 
   return (
-    <div className="wiz-scrim" onPointerDown={onClose}>
+    <div className="wiz-scrim" onPointerDown={cancel}>
       <div className="wiz" role="dialog" aria-label="Add a Feature" onPointerDown={e => e.stopPropagation()}>
         {!selected ? (
           <>
@@ -96,7 +114,7 @@ export function AddFeatureWizard({ onClose, onNotice }: {
             </div>
             {packs && packs.length === 0 && !error && <div className="ap-empty">No feature packs in the catalog.</div>}
             <div className="wiz-actions">
-              <button type="button" className="wiz-btn" onClick={onClose}>Cancel</button>
+              <button type="button" className="wiz-btn" onClick={cancel}>Cancel</button>
             </div>
           </>
         ) : (

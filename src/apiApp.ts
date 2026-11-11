@@ -26,6 +26,10 @@ import { mountConfigApi } from './configregistry/configApi.js'
 import { mountCrossLinksApi } from './facetLinks/crossLinksApi.js'
 import { mountUserFlowApi } from './userflows/userflowApi.js'
 import { mountMcpApi } from './mcp/mcpApi.js'
+import { mountAleMcpApi } from './mcpserver/server.js'
+import { mountWizardApi } from './mcpserver/wizardApi.js'
+import { mountGateHookApi } from './musecode/gateHookApi.js'
+import { mountDispatchApi } from './musecode/dispatchApi.js'
 import { mountSkillsApi } from './skills/skillsApi.js'
 import { mountMemoryApi } from './mastra/memoryApi.js'
 import { mountCodebaseMapApi } from './codebaseMap/codebaseMapApi.js'
@@ -93,6 +97,10 @@ mountConfigApi(app)
 mountCrossLinksApi(app)
 mountUserFlowApi(app)
 mountMcpApi(app)
+  mountAleMcpApi(app)
+  mountWizardApi(app)
+  mountGateHookApi(app)
+  mountDispatchApi(app)
 mountSkillsApi(app)
 mountMemoryApi(app)
   mountCodebaseMapApi(app)

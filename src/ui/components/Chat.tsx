@@ -369,7 +369,19 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
       } else if (ev.type === 'error') {
         const msg = ev.error
         setLog(l => [...l, { role: 'error', text: looksLikeKeyError(msg) ? guidedKeyError(keyKnown === true) : `Chat failed: ${msg.slice(0, 2000)}` }])
-      } else if (ev.type === 'done' && ev.usage) {
+      } else if (ev.type === 'done') {
+        // A gate verdict that came back unclean earns the turn a
+        // "Fix with Muse Code" card (§13 dispatch entry point).
+        if (ev.verification?.ran && !ev.verification.clean) {
+          const v = ev.verification
+          const evidence = [
+            `The verify gate ran after this turn and did not come back clean: ${v.newLayout} new layout finding(s), ${v.newConsole} new console error(s).`,
+            ...(v.unverified?.length ? [`Could not verify: ${v.unverified.join('; ')}`] : []),
+            'The full recorded verdict (findings, console entries) is in the project’s .ai-live/gate-verdicts.json.',
+          ].join('\n')
+          setLog(l => [...l, { role: 'fix', title: 'Fix the problems the verify gate found after this turn', evidence }])
+        }
+        if (!ev.usage) return
         // Attach usage to the turn's last ai/tools entry; tool-only turns
         // get a usage-only marker (Deck renders no empty result card).
         const usage = ev.usage

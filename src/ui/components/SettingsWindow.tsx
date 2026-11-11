@@ -192,7 +192,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
       if (f.id === 'planLevel') return '1'
       if (f.id === 'planMutability') return '5'
       if (f.id === 'mapInjection') return 'auto'
-      if (f.id === 'chatEngine') return 'opencode'
+      if (f.id === 'chatEngine') return 'musecode'
       if (f.id === 'defaultWorkflow') return 'files'
       return ''
     }

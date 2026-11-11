@@ -13,6 +13,8 @@ import { mountPoolPage } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountAgentSettingsApi } from './agentSettingsApi.js'
+import { mountMuseCodeAvailabilityApi } from './musecode/availabilityApi.js'
+import { mountMuseCodeHealthApi } from './musecode/healthApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
@@ -78,6 +80,8 @@ export function createApiApp(opts: { publicUrl?: () => string } = {}) {
   mountWorkflowApi(app)
   mountProjectConfigApi(app)
   mountAgentSettingsApi(app)
+  mountMuseCodeAvailabilityApi(app)
+  mountMuseCodeHealthApi(app)
   mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)
@@ -382,10 +386,19 @@ mountMemoryApi(app)
 
   app.post('/api/chat/stream', async (req, res) => {
     // Chat engine flag, same rule as server.ts: read at turn start.
+    // Resolution is explicit per engine — a 'musecode' turn gets
+    // the plain not-available answer, never a fall through to
+    // another engine.
     const { currentAgentSettings } = await import('./agentSettings.js')
-    if (currentAgentSettings().chatEngine === 'opencode') {
+    const engine = currentAgentSettings().chatEngine
+    if (engine === 'opencode') {
       const { pipeOpencodeChatStream } = await import('./opencode/chat.js')
       await pipeOpencodeChatStream(req.body?.messages, res, req, req.body?.workflow)
+      return
+    }
+    if (engine === 'musecode') {
+      const { pipeMusecodeUnavailable } = await import('./musecode/unavailable.js')
+      await pipeMusecodeUnavailable(res, req)
       return
     }
     await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow, { mcp: true })

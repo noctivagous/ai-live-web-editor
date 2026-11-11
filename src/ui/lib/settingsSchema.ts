@@ -58,7 +58,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
   { id: 'editor', title: 'Editor', scope: 'device', keywords: 'monaco font size tab wrap minimap line numbers code' },
   { id: 'files', title: 'Files & Explorer', scope: 'device', keywords: 'file pane sort hidden dotfiles explorer tree' },
   { id: 'shortcuts', title: 'Keyboard Shortcuts', scope: 'device', custom: 'shortcuts', keywords: 'keys hotkeys bindings rebind f2 delete deck shortcuts' },
-  { id: 'agent', title: 'Agent & Chat', scope: 'global', keywords: 'agent chat default workflow sketch context trimming codebase map injection tokens chat engine opencode advanced overrides' },
+  { id: 'agent', title: 'Agent & Chat', scope: 'global', keywords: 'agent chat default workflow sketch context trimming codebase map injection tokens chat engine musecode muse code opencode sandbox permissions trust posture advanced overrides' },
   { id: 'mcp', title: 'MCP', scope: 'global', custom: 'mcp', keywords: 'mcp servers tools protocol model context protocol chat integration handshake' },
   { id: 'facets', title: 'Facets', scope: 'device', custom: 'facets', keywords: 'facets sections show hide turn off features architecture graphic design tech stack configuration overview facet bar' },
   { id: 'project', title: 'Project', scope: 'project', keywords: 'type format device targets style appkit catalog manifest' },
@@ -90,9 +90,13 @@ export const SETTING_FIELDS: SettingField[] = [
   },
   {
     id: 'chatEngine', section: 'agent', label: 'Chat engine', control: 'select', store: 'agent',
-    hint: 'Which engine answers chat turns. OpenCode (the default) runs the OpenCode server with the editor’s tools, verify gate and console checks attached. Mastra is the editor’s built-in agent. Switching takes effect on the next turn.',
-    options: [{ value: 'opencode', label: 'OpenCode' }, { value: 'mastra', label: 'Mastra' }],
-    keywords: 'engine opencode mastra sidecar chat backend',
+    hint: 'Which engine answers chat turns. Muse Code (specialized) is Meta’s ready-made coding agent, signed in with your Muse account. OpenCode (open) runs the OpenCode server with the editor’s tools, verify gate and console checks attached, using your own provider keys. ALE agent (original) is the editor’s built-in agent. Switching takes effect on the next turn.',
+    options: [
+      { value: 'musecode', label: 'Muse Code (specialized)' },
+      { value: 'opencode', label: 'OpenCode (open)' },
+      { value: 'mastra', label: 'ALE agent (original)' },
+    ],
+    keywords: 'engine musecode muse code opencode mastra sidecar chat backend specialized open original',
   },
   // Advanced — ALE tool overrides for the OpenCode engine. Each
   // switch swaps one group of the editor's tools in over an

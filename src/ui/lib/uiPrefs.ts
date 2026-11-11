@@ -11,6 +11,7 @@
 
 import { sanitizeFacetsOff, sanitizeFacetSectionsOff } from './facetPrefs'
 import type { ProjectFacetId } from './facets'
+import { DEFAULT_SANDBOX_POSTURE, sanitizeSandboxPosture, type SandboxPosture } from './museSandbox'
 import { sanitizeOverrides } from './shortcuts'
 import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, type UiThemeId } from './themes'
 
@@ -80,6 +81,11 @@ export interface UiPrefs {
   /** Sections hidden per facet (Settings → Facets): facet id →
    * section ids from the registry. Display-only (§10.2). */
   facetSectionsOff: Record<string, string[]>
+  /** The device-wide default Muse Code sandbox posture (Muse
+   * Code design §5.2, Q9): a project can override it in its own
+   * project.ai.json; resolution is override → this → 'unblocked'
+   * (lib/museSandbox). */
+  museSandboxPosture: SandboxPosture
 }
 
 export const UI_PREFS_DEFAULTS: UiPrefs = {
@@ -101,6 +107,7 @@ export const UI_PREFS_DEFAULTS: UiPrefs = {
   shortcutOverrides: {},
   facetsOff: [],
   facetSectionsOff: {},
+  museSandboxPosture: DEFAULT_SANDBOX_POSTURE,
 }
 
 export const UI_PREFS_KEY = 'ai-live-editor.uiPrefs'
@@ -144,6 +151,7 @@ export function validateUiPrefs(value: unknown): UiPrefs {
     shortcutOverrides: sanitizeOverrides(v.shortcutOverrides),
     facetsOff: sanitizeFacetsOff(v.facetsOff),
     facetSectionsOff: sanitizeFacetSectionsOff(v.facetSectionsOff),
+    museSandboxPosture: sanitizeSandboxPosture(v.museSandboxPosture) ?? DEFAULT_SANDBOX_POSTURE,
   }
 }
 

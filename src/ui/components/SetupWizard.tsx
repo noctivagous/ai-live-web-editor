@@ -1,10 +1,42 @@
 import React, { useEffect, useState } from 'react'
-import { listFiles, type BraveStatus } from '../lib/api'
+import { getAgentSettings, getMuseCodeAvailability, listFiles, postAgentSettings, type BraveStatus, type MuseCodeAvailability } from '../lib/api'
 import { ModalityPanel, ProviderSetup, hasValidConnection, useConnections } from './ProviderSetup'
 import { SearchSetup } from './SearchSetup'
+import { MuseSandboxSection } from './MuseSandboxSection'
 import { MODALITY_LABELS, type Modality } from '../../providerPresets'
 
-const STEPS = ['Welcome', 'AI provider', 'Models by type', 'Search', 'Project files', 'Preview', 'Done']
+/**
+ * First-launch setup (Muse Code design §5.1). The first real
+ * choice is the AI path — Specialized (Meta Muse via Muse Code)
+ * or Open (OpenCode / the ALE agent, with the user's own provider
+ * keys) — before any provider is mentioned. On the Specialized
+ * path the sandbox step comes immediately after the path choice;
+ * provider keys, modality assignments and the existing checks
+ * follow on both paths, unchanged.
+ */
+type StepId = 'welcome' | 'path' | 'sandbox' | 'provider' | 'models' | 'search' | 'files' | 'preview' | 'done'
+type AiPath = 'specialized' | 'open'
+
+const STEP_LABELS: Record<StepId, string> = {
+  welcome: 'Welcome',
+  path: 'AI path',
+  sandbox: 'Permissions',
+  provider: 'AI provider',
+  models: 'Models by type',
+  search: 'Search',
+  files: 'Project files',
+  preview: 'Preview',
+  done: 'Done',
+}
+
+/** The step sequence for a path choice; the sandbox step exists
+ * only on the Specialized path. */
+function stepsFor(path: AiPath | null): StepId[] {
+  const steps: StepId[] = ['welcome', 'path']
+  if (path === 'specialized') steps.push('sandbox')
+  steps.push('provider', 'models', 'search', 'files', 'preview', 'done')
+  return steps
+}
 
 type Check = { state: 'wait' | 'ok' | 'bad', detail: string }
 
@@ -39,7 +71,14 @@ function CheckRow({ check, title, children }: {
 }
 
 export function SetupWizard({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState(0)
+  const [stepIdx, setStepIdx] = useState(0)
+  const [pathChoice, setPathChoice] = useState<AiPath | null>(null)
+  /** The engine saved on the host, kept current as the path step
+   * writes it: picking Open only writes when a saved Muse Code
+   * choice has to be undone — otherwise the open-path engine
+   * choice stays exactly as it was. */
+  const [savedEngine, setSavedEngine] = useState<string | null>(null)
+  const [availability, setAvailability] = useState<MuseCodeAvailability | null>(null)
   const { payload, reload } = useConnections()
   const [fsCheck, setFsCheck] = useState<Check>({ state: 'wait', detail: 'Checking…' })
   const [hmrCheck, setHmrCheck] = useState<Check>({ state: 'wait', detail: 'Checking…' })
@@ -47,6 +86,36 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
 
   const valid = hasValidConnection(payload)
   const active = payload?.connections.find(c => c.id === payload.activeId)
+
+  const steps = stepsFor(pathChoice)
+  const stepId = steps[Math.min(stepIdx, steps.length - 1)]
+
+  // A wizard replayed over a saved Muse Code choice starts with
+  // the Specialized path already picked; a fresh or Open state
+  // starts unchosen, so the path is a real choice either way.
+  useEffect(() => {
+    let live = true
+    void getAgentSettings().then(s => {
+      if (!live) return
+      setSavedEngine(s.chatEngine)
+      if (s.chatEngine === 'musecode') setPathChoice(prev => prev ?? 'specialized')
+    }).catch(() => { /* host unreachable — the path step still works; the provider step will surface it */ })
+    void getMuseCodeAvailability().then(a => { if (live) setAvailability(a) }).catch(() => { /* unknown — the Specialized card stays enabled, the Permissions step reports what it finds */ })
+    return () => { live = false }
+  }, [])
+
+  const choosePath = (path: AiPath) => {
+    setPathChoice(path)
+    if (path === 'specialized') {
+      void postAgentSettings({ chatEngine: 'musecode' })
+        .then(s => setSavedEngine(s.chatEngine))
+        .catch(() => { /* the Permissions step's health rows show the host state */ })
+    } else if (savedEngine === 'musecode') {
+      void postAgentSettings({ chatEngine: 'opencode' })
+        .then(s => setSavedEngine(s.chatEngine))
+        .catch(() => { /* as above */ })
+    }
+  }
 
   async function runFsCheck() {
     setFsCheck({ state: 'wait', detail: 'Listing project files…' })
@@ -72,14 +141,15 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
   }
 
   useEffect(() => {
-    if (step === 4 && fsCheck.state === 'wait') void runFsCheck()
-    if (step === 5 && hmrCheck.state === 'wait') void runHmrCheck()
+    if (stepId === 'files' && fsCheck.state === 'wait') void runFsCheck()
+    if (stepId === 'preview' && hmrCheck.state === 'wait') void runHmrCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
+  }, [stepId])
 
-  const last = step === STEPS.length - 1
-  const nextDisabled = step === 1 && !valid
-  const wide = step === 1 || step === 2
+  const last = stepId === 'done'
+  const nextDisabled = stepId === 'path' ? !pathChoice : stepId === 'provider' && !valid
+  const wide = stepId === 'provider' || stepId === 'models'
+  const museUnavailable = availability !== null && !availability.available
 
   const providerCheck: Check = valid
     ? {
@@ -93,36 +163,90 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
       }
     : { state: 'bad', detail: 'No validated provider connection yet — add one in the AI provider step.' }
 
+  const pathCheck: Check = pathChoice === 'specialized'
+    ? { state: 'ok', detail: 'Specialized — Muse Code (Meta Muse). Its permissions are set in the Permissions step and in Settings → Agent & Chat.' }
+    : pathChoice === 'open'
+      ? { state: 'ok', detail: 'Open — OpenCode or the ALE agent, with your own provider keys.' }
+      : { state: 'wait', detail: 'Not chosen — revisit the AI path step.' }
+
   return (
     <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Setup wizard">
       <div className={`wizard-card ${wide ? 'wide' : ''}`}>
-        <div style={{ fontSize: 'calc(17px * var(--ui-scale, 1))', fontWeight: 650 }}>Set up your AI provider</div>
+        <div style={{ fontSize: 'calc(17px * var(--ui-scale, 1))', fontWeight: 650 }}>Set up your editor</div>
         <div style={{ fontSize: 'calc(13px * var(--ui-scale, 1))', color: 'var(--muted)', marginTop: 4 }}>
-          Step {step + 1} of {STEPS.length} — {STEPS[step]}
+          Step {Math.min(stepIdx, steps.length - 1) + 1} of {steps.length} — {STEP_LABELS[stepId]}
         </div>
         <div className="wizard-steps" aria-hidden="true">
-          {STEPS.map((s, i) => <span key={s} className={i <= step ? 'done' : ''} />)}
+          {steps.map((s, i) => <span key={s} className={i <= stepIdx ? 'done' : ''} />)}
         </div>
 
-        {step === 0 && (
+        {stepId === 'welcome' && (
           <div style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.65, color: 'var(--text)' }}>
             <p style={{ margin: '0 0 10px' }}>
               This editor lets an AI agent write and change the files in your
-              project while you watch the result update live. For the AI to
-              work, it needs an account with an AI provider — you bring your
-              own key.
+              project while you watch the result update live. Setup starts
+              with one choice — how that agent runs — and everything after
+              it follows from there.
             </p>
-            <div className="check-row ok"><span className="mark">1</span><div>Have your API key ready<small>From a provider like OpenAI, Meta, Anthropic, or OpenRouter. The next step shows where to get one for each.</small></div></div>
-            <div className="check-row ok"><span className="mark">2</span><div>Paste it, pick a model<small>The key is checked against the provider, then you choose which of its models the editor should use — for text, and later for image, video, and audio too.</small></div></div>
-            <div className="check-row ok"><span className="mark">3</span><div>Your key stays on this machine<small>It is stored locally and only ever sent to the provider you picked. You can add more providers later, side by side, in Settings — it is the same screen as the next step.</small></div></div>
+            <div className="check-row ok"><span className="mark">1</span><div>Choose your AI path<small>Specialized runs Meta’s Muse Code, a ready-made coding agent you sign in to. Open runs OpenCode or the editor’s built-in agent with API keys from providers you choose.</small></div></div>
+            <div className="check-row ok"><span className="mark">2</span><div>Permissions come next on the Specialized path<small>Muse Code runs inside a sandbox on this machine. If you choose it, the next step sets what it may do — including trusting this project — and you can revisit it any time in Settings.</small></div></div>
+            <div className="check-row ok"><span className="mark">3</span><div>Your keys stay on this machine<small>Any keys you add later are stored locally and only ever sent to the provider you picked. Settings shows these same screens, so anything set here can be changed there.</small></div></div>
           </div>
         )}
 
-        {step === 1 && (
+        {stepId === 'path' && (
+          <div>
+            <p style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.6, color: 'var(--text)', margin: '0 0 12px' }}>
+              How should the AI agent that edits your project run? You can switch
+              later in Settings → Agent &amp; Chat — switching to Muse Code brings
+              back its permissions step there.
+            </p>
+            <div role="radiogroup" aria-label="AI path">
+              <button
+                type="button" role="radio" aria-checked={pathChoice === 'specialized'}
+                className={`path-card${pathChoice === 'specialized' ? ' on' : ''}`}
+                disabled={museUnavailable}
+                onClick={() => choosePath('specialized')}
+              >
+                <span className="dot" />
+                <span>
+                  Specialized — Muse Code
+                  <small>
+                    Meta’s ready-made coding agent (Meta Muse), signed in with your Muse
+                    account. It brings its own tools and sandbox; the editor adds its live
+                    preview, tools and checks. Its permissions are set in the next step.
+                    {museUnavailable && ' Not available on this machine — Muse Code isn’t installed here.'}
+                  </small>
+                </span>
+              </button>
+              <button
+                type="button" role="radio" aria-checked={pathChoice === 'open'}
+                className={`path-card${pathChoice === 'open' ? ' on' : ''}`}
+                onClick={() => choosePath('open')}
+              >
+                <span className="dot" />
+                <span>
+                  Open — your provider keys
+                  <small>
+                    Chats run on OpenCode or the editor’s built-in ALE agent, using API keys
+                    you bring from providers like OpenAI, Meta, Anthropic or OpenRouter. The
+                    AI provider step, next, takes your first key.
+                  </small>
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {stepId === 'sandbox' && (
+          <MuseSandboxSection />
+        )}
+
+        {stepId === 'provider' && (
           <ProviderSetup payload={payload} reload={reload} />
         )}
 
-        {step === 2 && (
+        {stepId === 'models' && (
           <div>
             <p style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.6, color: 'var(--text)', margin: '0 0 12px' }}>
               Choose which model to use for each kind of work. Only models your
@@ -132,7 +256,7 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        {step === 3 && (
+        {stepId === 'search' && (
           <div>
             <p style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.6, color: 'var(--text)', margin: '0 0 12px' }}>
               Optional: web search for the agent. If your provider's card
@@ -146,14 +270,14 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        {step === 4 && (
+        {stepId === 'files' && (
           <div>
             <CheckRow check={fsCheck} title="Project files" />
             <button className="deck-btn" onClick={() => void runFsCheck()}>Recheck</button>
           </div>
         )}
 
-        {step === 5 && (
+        {stepId === 'preview' && (
           <div>
             <CheckRow check={hmrCheck} title="Preview servers">
               <small>
@@ -165,8 +289,9 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        {step === 6 && (
+        {stepId === 'done' && (
           <div style={{ fontSize: 'calc(13.5px * var(--ui-scale, 1))', lineHeight: 1.65 }}>
+            <CheckRow check={pathCheck} title="AI path" />
             <CheckRow check={providerCheck} title="AI provider" />
             <CheckRow
               check={brave?.configured
@@ -174,8 +299,8 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
                 : { state: 'wait', detail: 'Not set — optional. Add it any time in Settings, under Search.' }}
               title="Search"
             />
-            <CheckRow check={fsCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 5.' } : fsCheck} title="Project files" />
-            <CheckRow check={hmrCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit step 6.' } : hmrCheck} title="Preview" />
+            <CheckRow check={fsCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit the Project files step.' } : fsCheck} title="Project files" />
+            <CheckRow check={hmrCheck.state === 'wait' ? { state: 'wait', detail: 'Not checked — revisit the Preview step.' } : hmrCheck} title="Preview" />
             <p style={{ color: 'var(--muted)', fontSize: 'calc(12.5px * var(--ui-scale, 1))' }}>
               Ask the agent to edit or generate files from the chat panel. Providers
               and models can be changed any time in Settings.
@@ -184,12 +309,12 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-          {step > 0 && (
-            <button className="deck-btn" onClick={() => setStep(s => s - 1)}>Back</button>
+          {stepIdx > 0 && (
+            <button className="deck-btn" onClick={() => setStepIdx(s => s - 1)}>Back</button>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {!last && (
-              <button className="deck-btn primary" disabled={nextDisabled} onClick={() => setStep(s => s + 1)}>Next</button>
+              <button className="deck-btn primary" disabled={nextDisabled} onClick={() => setStepIdx(s => s + 1)}>Next</button>
             )}
             {last && (
               <button className="deck-btn primary" disabled={!valid} onClick={onDone}>Open editor</button>

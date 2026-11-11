@@ -60,6 +60,16 @@ test('sanitize drops junk and dedupes features', () => {
   assert.deepEqual(sanitizeProjectConfig(null), {})
 })
 
+test('Muse sandbox posture override: sanitize keeps valid values, write/clear round-trips', () => {
+  assert.equal(sanitizeProjectConfig({ museSandboxPosture: 'strict' }).museSandboxPosture, 'strict')
+  assert.equal(sanitizeProjectConfig({ museSandboxPosture: 'yolo' }).museSandboxPosture, undefined)
+  const root = tmpRoot()
+  writeProjectConfig({ museSandboxPosture: 'sandboxed' }, root)
+  assert.equal(readProjectConfig(root).museSandboxPosture, 'sandboxed')
+  const cleared = writeProjectConfig({ museSandboxPosture: undefined }, root)
+  assert.equal(cleared.museSandboxPosture, undefined, 'an explicit undefined clears the override — the device default applies again')
+})
+
 test('declared targets default to all three; widths ascend', () => {
   assert.deepEqual(declaredTargets({}), ['phone', 'tablet', 'desktop'])
   assert.deepEqual(targetWidths({}), [375, 768, 1280])

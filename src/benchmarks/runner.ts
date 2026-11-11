@@ -94,8 +94,14 @@ export async function ensureBenchmarkConnection(model: string): Promise<void> {
 }
 
 /** The turn pipe for an engine: the exact function behind
- * POST /api/chat/stream for that engine. */
+ * POST /api/chat/stream for that engine. Muse Code has no pipe
+ * yet (its supervisor lands in a later slice, and the parity run
+ * is that slice's gate), so asking for it fails plainly instead
+ * of silently driving a different engine. */
 export function chatPipeForEngine(engine: ChatEngine) {
+  if (engine === 'musecode') {
+    throw new Error('The benchmark runner can’t drive the Muse Code engine yet — it is not wired up in this version.')
+  }
   return engine === 'opencode' ? pipeOpencodeChatStream : pipeAgentChatStream
 }
 

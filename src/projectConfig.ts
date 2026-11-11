@@ -29,6 +29,7 @@ import { architectureSummary } from './architecture/architecture.js'
 import { techStackSummary } from './techstack/techStack.js'
 import { configSummary } from './configregistry/configRegistry.js'
 import { flowGraphSummary, getUserFlowGraph } from './userflows/userflows.js'
+import { sanitizeSandboxPosture, type SandboxPosture } from './ui/lib/museSandbox.js'
 
 export const PROJECT_CONFIG_FILE = 'project.ai.json'
 
@@ -72,6 +73,11 @@ export interface ProjectConfig {
   planLevel?: 1 | 2 | 3
   /** Default plan mutability, 0–10 (§O). */
   planMutability?: number
+  /** This project's Muse Code sandbox posture override (Muse
+   * Code design §5.2, Q9): travels with the project; absent
+   * means the device-wide default posture applies
+   * (ui/lib/museSandbox resolveSandboxPosture). */
+  museSandboxPosture?: SandboxPosture
 }
 
 /**
@@ -126,6 +132,8 @@ export function sanitizeProjectConfig(value: unknown): ProjectConfig {
   if (typeof v.planMutability === 'number' && Number.isFinite(v.planMutability)) {
     out.planMutability = Math.min(10, Math.max(0, Math.round(v.planMutability)))
   }
+  const posture = sanitizeSandboxPosture(v.museSandboxPosture)
+  if (posture) out.museSandboxPosture = posture
   if (typeof v.styleSet === 'string' && v.styleSet.trim()) out.styleSet = v.styleSet.trim()
   if (Array.isArray(v.features)) {
     const features = v.features.filter((f): f is string => typeof f === 'string' && Boolean(f.trim()))

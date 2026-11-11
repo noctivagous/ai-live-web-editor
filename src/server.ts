@@ -20,6 +20,8 @@ import { mountPoolPage, openPoolBrowser } from './poolPage.js'
 import { mountWorkflowApi } from './workflowApi.js'
 import { mountProjectConfigApi } from './projectConfigApi.js'
 import { mountAgentSettingsApi } from './agentSettingsApi.js'
+import { mountMuseCodeAvailabilityApi } from './musecode/availabilityApi.js'
+import { mountMuseCodeHealthApi } from './musecode/healthApi.js'
 import { mountConnectionsApi } from './connectionsApi.js'
 import { mountResearchApi } from './research/researchApi.js'
 import { mountPlanApi } from './plans/planApi.js'
@@ -82,6 +84,8 @@ mountPoolPage(app)
 mountWorkflowApi(app)
 mountProjectConfigApi(app)
 mountAgentSettingsApi(app)
+mountMuseCodeAvailabilityApi(app)
+mountMuseCodeHealthApi(app)
 mountConnectionsApi(app)
 mountResearchApi(app)
 mountPlanApi(app)
@@ -670,11 +674,19 @@ app.post('/api/chat/stream', async (req, res) => {
   // Chat engine flag (agent settings, read at turn start): the
   // OpenCode sidecar serves the turn through its translator, which
   // emits the same event vocabulary — the UI is unchanged either
-  // way. Anything else falls through to the Mastra path.
+  // way. Resolution is explicit per engine: 'musecode' gets the
+  // plain not-available answer (its supervisor lands in a later
+  // slice), never a fall through to the Mastra path.
   const { currentAgentSettings } = await import('./agentSettings.js')
-  if (currentAgentSettings().chatEngine === 'opencode') {
+  const engine = currentAgentSettings().chatEngine
+  if (engine === 'opencode') {
     const { pipeOpencodeChatStream } = await import('./opencode/chat.js')
     await pipeOpencodeChatStream(req.body?.messages, res, req, req.body?.workflow)
+    return
+  }
+  if (engine === 'musecode') {
+    const { pipeMusecodeUnavailable } = await import('./musecode/unavailable.js')
+    await pipeMusecodeUnavailable(res, req)
     return
   }
   await pipeAgentChatStream(req.body?.messages, res, req, req.body?.workflow, { mcp: true })

@@ -17,6 +17,17 @@ describe('uiPrefs', () => {
     assert.deepEqual(loadUiPrefs(null), UI_PREFS_DEFAULTS)
   })
 
+  it('museSandboxPosture defaults to unblocked, validates, and round-trips', () => {
+    assert.equal(UI_PREFS_DEFAULTS.museSandboxPosture, 'unblocked')
+    assert.equal(validateUiPrefs({}).museSandboxPosture, 'unblocked')
+    assert.equal(validateUiPrefs({ museSandboxPosture: 'strict' }).museSandboxPosture, 'strict')
+    assert.equal(validateUiPrefs({ museSandboxPosture: 'sandboxed' }).museSandboxPosture, 'sandboxed')
+    assert.equal(validateUiPrefs({ museSandboxPosture: 'yolo' }).museSandboxPosture, 'unblocked', 'a junk stored posture falls back to the default')
+    const store = fakeStore()
+    saveUiPrefs({ museSandboxPosture: 'strict' }, store)
+    assert.equal(loadUiPrefs(store).museSandboxPosture, 'strict')
+  })
+
   it('round-trips a patch and merges with stored values', () => {
     const store = fakeStore()
     saveUiPrefs({ chatView: 'panel' }, store)

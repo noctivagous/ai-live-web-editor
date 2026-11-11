@@ -22,6 +22,9 @@ export function mountProjectConfigApi(app: Express) {
       if (req.body && 'type' in req.body && !patch.type) patch.type = undefined
       // An explicit null/empty format returns to the type default.
       if (req.body && 'format' in req.body && !patch.format) patch.format = undefined
+      // An explicit null posture clears the project override —
+      // the device-wide default applies again.
+      if (req.body && 'museSandboxPosture' in req.body && !patch.museSandboxPosture) patch.museSandboxPosture = undefined
       const config = writeProjectConfig(patch)
       if (patch.defaultDeviceTarget) setDeviceTarget(patch.defaultDeviceTarget)
       res.json({ ok: true, config, designated: isDesignated(config) })

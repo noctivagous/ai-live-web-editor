@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import {
-  AGENT_SETTINGS_DEFAULTS, currentAgentSettings, loadAgentSettings, sanitizeAgentSettings, saveAgentSettings, setAgentSettingsPath,
+  AGENT_SETTINGS_DEFAULTS, DEFAULT_CHAT_ENGINE, currentAgentSettings, loadAgentSettings, resolveChatEngine, sanitizeAgentSettings, saveAgentSettings, setAgentSettingsPath,
 } from './agentSettings.js'
 
 describe('agentSettings', () => {
@@ -27,10 +27,27 @@ describe('agentSettings', () => {
       { defaultWorkflow: 'sketch', contextTrim: false, mapInjection: 'always', chatEngine: 'opencode', aleFsTools: false, aleWebTools: false, aleSkillTools: false, consoleCheck: true },
     )
     assert.equal(sanitizeAgentSettings({ chatEngine: 'opencode' }).chatEngine, 'opencode')
+    assert.equal(sanitizeAgentSettings({ chatEngine: 'musecode' }).chatEngine, 'musecode', 'an explicitly saved musecode choice resolves to itself, not to the default')
     assert.equal(sanitizeAgentSettings({ chatEngine: 'mastra' }).chatEngine, 'mastra', 'an explicitly saved mastra choice survives the slice-10 default flip')
     assert.equal(sanitizeAgentSettings({ chatEngine: 'kilo' }).chatEngine, 'opencode', 'unknown engines sanitize to the default (opencode since slice 10)')
     assert.deepEqual(sanitizeAgentSettings({ defaultWorkflow: 'both', contextTrim: 'yes', mapInjection: 'sometimes' }), AGENT_SETTINGS_DEFAULTS)
     assert.deepEqual(sanitizeAgentSettings(null), AGENT_SETTINGS_DEFAULTS)
+  })
+
+  it('resolveChatEngine is explicit per value; the default stays opencode in this slice', () => {
+    assert.equal(resolveChatEngine('musecode'), 'musecode')
+    assert.equal(resolveChatEngine('opencode'), 'opencode')
+    assert.equal(resolveChatEngine('mastra'), 'mastra')
+    assert.equal(resolveChatEngine(undefined), DEFAULT_CHAT_ENGINE, 'absent resolves to the standing default')
+    assert.equal(resolveChatEngine(null), DEFAULT_CHAT_ENGINE)
+    assert.equal(resolveChatEngine('kilo'), DEFAULT_CHAT_ENGINE, 'unrecognized resolves to the standing default')
+    assert.equal(DEFAULT_CHAT_ENGINE, 'opencode', 'the default flips to musecode only in the final Muse Code slice, after parity')
+    assert.equal(AGENT_SETTINGS_DEFAULTS.chatEngine, 'opencode', 'fresh state keeps resolving to opencode in this slice')
+    assert.equal(sanitizeAgentSettings({}).chatEngine, 'opencode')
+    saveAgentSettings({ chatEngine: 'musecode' })
+    assert.equal(currentAgentSettings().chatEngine, 'musecode', 'a saved musecode choice survives a round trip')
+    saveAgentSettings({ chatEngine: 'opencode' })
+    assert.equal(currentAgentSettings().chatEngine, 'opencode')
   })
 
   it('aleFsTools defaults off and only a literal true turns it on', () => {

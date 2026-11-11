@@ -364,6 +364,17 @@ select.pill:disabled{cursor:default; opacity:.7}
 .check-row.wait .mark{background:var(--card-hover); color:var(--muted); border:1px solid var(--border)}
 .check-row small{display:block; color:var(--muted); font-size:calc(12px * var(--ui-scale, 1)); margin-top:2px; line-height:1.5}
 .check-row code{font-family:var(--mono); font-size:calc(11.5px * var(--ui-scale, 1)); color:var(--text-soft)}
+.path-card{
+  display:flex; gap:10px; align-items:flex-start; width:100%; text-align:left;
+  padding:12px; background:var(--card); border:1px solid var(--border-soft); border-radius:10px;
+  margin-bottom:8px; font-size:calc(13px * var(--ui-scale, 1)); color:var(--text); cursor:pointer;
+  font-family:inherit;
+}
+.path-card.on{border-color:var(--blue)}
+.path-card:disabled{opacity:.55; cursor:default}
+.path-card .dot{flex-shrink:0; width:14px; height:14px; margin-top:2px; border-radius:50%; border:1px solid var(--border); background:transparent}
+.path-card.on .dot{background:var(--blue); border-color:var(--blue)}
+.path-card small{display:block; color:var(--muted); font-size:calc(12px * var(--ui-scale, 1)); margin-top:2px; line-height:1.5}
 .chat-tools{
   margin:6px 0 10px; padding:6px 8px;
   background:var(--card); border:1px solid var(--border); border-radius:8px;

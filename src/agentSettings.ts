@@ -12,11 +12,30 @@ import { getEnvPath } from './env.js'
 
 export type MapInjectionMode = 'auto' | 'always' | 'off'
 
-/** Which chat engine serves /api/chat/stream turns: the in-house
- * Mastra agent, or the OpenCode sidecar (opencode/ supervisor +
- * translator). Read at turn start; switching takes effect on the
- * next turn, never mid-stream. */
-export type ChatEngine = 'mastra' | 'opencode'
+/** Which chat engine serves /api/chat/stream turns: Muse Code
+ * (the specialized path — musecode/ supervisor + translator, wired
+ * from slice 4), the OpenCode sidecar (opencode/ supervisor +
+ * translator), or the in-house Mastra agent (the original ALE
+ * agent). Read at turn start; switching takes effect on the next
+ * turn, never mid-stream. */
+export type ChatEngine = 'musecode' | 'opencode' | 'mastra'
+
+/** The engine a fresh state (nothing saved) resolves to. The
+ * Muse Code design (§4) flips this to 'musecode' only in the
+ * final slice, after the parity run; until then the standing
+ * default is 'opencode'. */
+export const DEFAULT_CHAT_ENGINE: ChatEngine = 'opencode'
+
+/** Explicit per-value engine resolution (Muse Code design §4 —
+ * the old "anything not mastra becomes opencode" fall-through is
+ * gone): each saved value resolves to itself, and only an absent
+ * or unrecognized value falls back to the standing default. */
+export function resolveChatEngine(value: unknown): ChatEngine {
+  if (value === 'musecode') return 'musecode'
+  if (value === 'mastra') return 'mastra'
+  if (value === 'opencode') return 'opencode'
+  return DEFAULT_CHAT_ENGINE
+}
 
 export interface AgentSettings {
   /** The workflow a fresh launcher session starts chats in. The
@@ -28,10 +47,11 @@ export interface AgentSettings {
   /** §1 Rung 2 map injection: auto = only at/above the file-count
    * threshold, always = every Files turn, off = never. */
   mapInjection: MapInjectionMode
-  /** Chat engine for streamed turns (OpenCode re-platform slice 1).
-   * Slice 10 flipped the default: unset/fresh state resolves to
-   * 'opencode'; an explicitly saved 'mastra' keeps resolving to
-   * mastra — the legacy engine stays reachable behind this setting. */
+  /** Chat engine for streamed turns. Resolution is explicit per
+   * value (resolveChatEngine): a saved 'musecode', 'opencode' or
+   * 'mastra' resolves to itself; unset/fresh state resolves to
+   * DEFAULT_CHAT_ENGINE ('opencode' until the Muse Code final
+   * slice flips it, after the parity run). */
   chatEngine: ChatEngine
   /** Check the page console around every chat turn (turn-start
    * capture + post-turn findings/footer detail, both engines). Off =
@@ -74,7 +94,7 @@ export const AGENT_SETTINGS_DEFAULTS: AgentSettings = {
   defaultWorkflow: 'files',
   contextTrim: true,
   mapInjection: 'auto',
-  chatEngine: 'opencode',
+  chatEngine: DEFAULT_CHAT_ENGINE,
   aleFsTools: false,
   aleWebTools: false,
   aleSkillTools: false,
@@ -98,7 +118,7 @@ export function sanitizeAgentSettings(value: unknown): AgentSettings {
     defaultWorkflow: v.defaultWorkflow === 'sketch' ? 'sketch' : 'files',
     contextTrim: v.contextTrim !== false,
     mapInjection: v.mapInjection === 'always' || v.mapInjection === 'off' ? v.mapInjection : 'auto',
-    chatEngine: v.chatEngine === 'mastra' ? 'mastra' : 'opencode',
+    chatEngine: resolveChatEngine(v.chatEngine),
     aleFsTools: v.aleFsTools === true,
     aleWebTools: v.aleWebTools === true,
     aleSkillTools: v.aleSkillTools === true,

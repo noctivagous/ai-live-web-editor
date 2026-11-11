@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import {
-  clearServerChatThreads, getAgentSettings, getProjectConfig, getWorkflow, postAgentSettings, postProjectConfig, postWorkflow, setPlaywrightPool,
-  type AgentSettings, type LauncherConfig, type ProjectConfig, type SearchBackendId, type SearchOption,
+  clearServerChatThreads, getAgentSettings, getMuseCodeAvailability, getProjectConfig, getWorkflow, postAgentSettings, postProjectConfig, postWorkflow, setPlaywrightPool,
+  type AgentSettings, type LauncherConfig, type MuseCodeAvailability, type ProjectConfig, type SearchBackendId, type SearchOption,
 } from '../lib/api'
 import { parseWorkflowSnapshot } from '../lib/workflowSync'
 import {
@@ -24,6 +24,7 @@ import { ModalityPanel, ProviderSetup, useConnections } from './ProviderSetup'
 import { SearchSetup } from './SearchSetup'
 import { FacetsSettingsSection } from './FacetsSettingsSection'
 import { McpSettingsSection } from './McpSettingsSection'
+import { MuseSandboxSection } from './MuseSandboxSection'
 
 /* The Settings window: a left rail of sections over one content area.
    Declarative sections render generically from the settings model
@@ -53,6 +54,10 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   const [designated, setDesignated] = useState(false)
   const [prefs, setPrefs] = useState<UiPrefs>(() => loadUiPrefs())
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(null)
+  /** Muse Code availability on this machine (host-computed); the
+   * engine picker marks its Muse Code option with it. Null while
+   * unknown — the option then renders plain. */
+  const [museAvailability, setMuseAvailability] = useState<MuseCodeAvailability | null>(null)
   const [searchSnap, setSearchSnap] = useState<{ backend: SearchBackendId, options: SearchOption[] } | null>(null)
 
   const refreshSearchSnap = useCallback(async () => {
@@ -157,6 +162,7 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
     let live = true
     void getProjectConfig().then(r => { if (live) { setProjectCfg(r.config); setDesignated(r.designated) } }).catch(() => {})
     void getAgentSettings().then(s => { if (live) setAgentSettings(s) }).catch(() => {})
+    void getMuseCodeAvailability().then(a => { if (live) setMuseAvailability(a) }).catch(() => {})
     void refreshSearchSnap()
     return () => { live = false }
   }, [])
@@ -218,7 +224,18 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
         <div className="set-row-control">
           {f.control === 'select' && (
             <select id={`set-${f.id}`} className="deck-select" value={v as string} onChange={e => void applyField(f, e.target.value)}>
-              {f.options!.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {f.options!.map(o => {
+                // The Muse Code engine option carries its
+                // availability on this machine: when the host found
+                // no binary, the option says so and can't be picked.
+                const museUnavailable = f.id === 'chatEngine' && o.value === 'musecode'
+                  && museAvailability !== null && !museAvailability.available
+                return (
+                  <option key={o.value} value={o.value} disabled={museUnavailable}>
+                    {museUnavailable ? `${o.label} — not available on this machine` : o.label}
+                  </option>
+                )
+              })}
             </select>
           )}
           {f.control === 'toggle' && (
@@ -617,6 +634,12 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
           }
           return rows
         })()}
+        {s.id === 'agent' && agentSettings?.chatEngine === 'musecode' && (
+          <>
+            <div className="set-group-label" style={{ marginTop: 16 }}>Muse Code sandbox</div>
+            <MuseSandboxSection />
+          </>
+        )}
       </div>
     )
   }

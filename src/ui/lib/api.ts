@@ -832,6 +832,9 @@ export interface ProjectConfig {
   appkit?: boolean
   planLevel?: 1 | 2 | 3
   planMutability?: number
+  /** This project's Muse Code sandbox posture override; absent
+   * means the device-wide default applies (lib/museSandbox). */
+  museSandboxPosture?: 'unblocked' | 'sandboxed' | 'strict'
 }
 
 export async function getProjectConfig() {
@@ -1177,7 +1180,7 @@ export interface AgentSettings {
   defaultWorkflow: 'files' | 'sketch'
   contextTrim: boolean
   mapInjection: 'auto' | 'always' | 'off'
-  chatEngine: 'mastra' | 'opencode'
+  chatEngine: 'musecode' | 'opencode' | 'mastra'
   consoleCheck: boolean
   aleFsTools: boolean
   aleWebTools: boolean
@@ -1196,6 +1199,59 @@ export async function postAgentSettings(patch: Partial<AgentSettings>): Promise<
   })
   const j = await r.json() as { ok: boolean, settings: AgentSettings }
   return j.settings
+}
+
+/** Whether Muse Code is installed on this machine, and which
+ * version answered — computed by the host (musecode/availability). */
+export interface MuseCodeAvailability {
+  available: boolean
+  version: string | null
+  versionLine: string | null
+  binPath: string | null
+}
+
+export async function getMuseCodeAvailability(): Promise<MuseCodeAvailability> {
+  const r = await fetch('/api/musecode/availability')
+  const j = await r.json() as { ok: boolean, availability: MuseCodeAvailability }
+  return j.availability
+}
+
+/** Muse Code health facts for the sandbox surface (musecode/health):
+ * the binary, the sign-in state, and the sandbox probe's last
+ * result (null until a check has run — reading health never
+ * spends a run). */
+export interface MuseSignIn {
+  state: 'api-key' | 'stored' | 'none-found'
+  detail: string
+}
+
+export interface SandboxProbeResult {
+  state: 'ok' | 'sandbox-failed' | 'indeterminate'
+  detail: string
+  probedAt: string
+}
+
+export interface MuseCodeHealth {
+  availability: MuseCodeAvailability
+  signIn: MuseSignIn
+  sandboxProbe: SandboxProbeResult | null
+}
+
+export async function getMuseCodeHealth(): Promise<MuseCodeHealth> {
+  const r = await fetch('/api/musecode/health')
+  const j = await r.json() as { ok: boolean, health: MuseCodeHealth }
+  return j.health
+}
+
+/** Run (or re-run) the sandbox probe on the host: one capped
+ * sandboxed run in a scratch folder. Cached per binary unless
+ * forced. */
+export async function postMuseSandboxProbe(force = false): Promise<SandboxProbeResult> {
+  const r = await fetch('/api/musecode/health/probe', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ force }),
+  })
+  const j = await r.json() as { ok: boolean, probe: SandboxProbeResult }
+  return j.probe
 }
 
 export interface AppSettingsSnapshot {

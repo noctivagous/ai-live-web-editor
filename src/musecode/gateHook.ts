@@ -28,6 +28,7 @@ import path from 'node:path'
 import { getAgentSettingsPath } from '../agentSettings.js'
 import type { VerifySummary } from '../chatStream.js'
 import { getFsRoot } from '../launcher.js'
+import { maybeCheckpointAfterVerifiedTurn } from '../delivery/checkpoints.js'
 import { runGateVerdict, type GateVerdict } from '../mcpserver/gateVerdict.js'
 import { aleEditorPort } from '../mcpserver/server.js'
 
@@ -177,6 +178,11 @@ export async function handleStopHook(payload: StopHookPayload): Promise<StopHook
   try {
     const verdict = await verdictRunner()
     const record = recordGateVerdict({ at: new Date().toISOString(), projectRoot: root, sessionId, turnId, source: 'stop-hook', verdict, summary: verdictSummary(verdict) })
+    // Delivery checkpoints (§13.3): a verified turn may drop a
+    // checkpoint commit — only on a clean verdict, and only
+    // where the project opted in. The helper checks both and
+    // never throws into this path.
+    if (verdict.ran && verdict.ok) await maybeCheckpointAfterVerifiedTurn(root)
     return { action: 'recorded', record }
   } finally {
     inFlightBySession.delete(sessionId)

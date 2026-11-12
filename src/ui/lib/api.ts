@@ -1116,7 +1116,7 @@ export async function getConfigInventory() {
 
 export interface CrossLinkItem {
   id: string
-  kind: 'uses-component' | 'requires-package' | 'needs-config' | 'follows-rule' | 'styled-by'
+  kind: 'uses-component' | 'requires-package' | 'needs-config' | 'follows-rule' | 'styled-by' | 'proved-by' | 'implements'
   from: string
   to: string
   note?: string
@@ -1291,4 +1291,183 @@ export async function putAppSettings(patch: {
     body: JSON.stringify(patch),
   })
   return r.json()
+}
+
+/* ── Delivery facet: Git (§13.3) ─────────────────────────── */
+
+export interface GitFileChangeItem { path: string, origPath?: string, xy: string }
+export interface GitStatusItem {
+  isRepo: boolean
+  branch?: string
+  head?: string
+  upstream?: string
+  ahead: number
+  behind: number
+  staged: GitFileChangeItem[]
+  unstaged: GitFileChangeItem[]
+  untracked: string[]
+  clean: boolean
+}
+export interface GitLogEntryItem {
+  hash: string, shortHash: string, author: string, date: string,
+  subject: string, refs: string, checkpoint: boolean,
+}
+export interface GitBranchItem { name: string, current: boolean, remote: boolean, upstream?: string, hash: string }
+export interface GitWorktreeItem { path: string, head?: string, branch?: string, detached: boolean, bare: boolean, current: boolean }
+
+export async function getGitStatus() {
+  const r = await fetch(`${API}/api/delivery/git/status`)
+  return r.json() as Promise<{ ok: boolean, status: GitStatusItem, error?: string }>
+}
+export async function getGitLog(limit = 60) {
+  const r = await fetch(`${API}/api/delivery/git/log?limit=${limit}`)
+  return r.json() as Promise<{ ok: boolean, entries: GitLogEntryItem[], error?: string }>
+}
+export async function getGitBranches() {
+  const r = await fetch(`${API}/api/delivery/git/branches`)
+  return r.json() as Promise<{ ok: boolean, branches: GitBranchItem[], error?: string }>
+}
+export async function getGitWorktrees() {
+  const r = await fetch(`${API}/api/delivery/git/worktrees`)
+  return r.json() as Promise<{ ok: boolean, worktrees: GitWorktreeItem[], error?: string }>
+}
+export async function getGitDiff(file: string, staged: boolean) {
+  const r = await fetch(`${API}/api/delivery/git/diff`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file, staged }),
+  })
+  return r.json() as Promise<{ ok: boolean, diff: string, error?: string }>
+}
+
+/* ── Delivery facet: Git actions (§13.3, slice 3) ────────── */
+
+export interface DeliveryActionResult {
+  ok: boolean
+  status?: GitStatusItem
+  hash?: string
+  output?: string
+  checkpoint?: { created: boolean, hash?: string, reason?: string }
+  error?: string
+}
+
+async function gitAction(path: string, body: Record<string, unknown>): Promise<DeliveryActionResult> {
+  const r = await fetch(`${API}/api/delivery/git/${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return r.json() as Promise<DeliveryActionResult>
+}
+
+export const gitStage = (files: string[]) => gitAction('stage', { files })
+export const gitUnstage = (files: string[]) => gitAction('unstage', { files })
+export const gitStageHunks = (file: string, hunks: number[]) => gitAction('stage-hunks', { file, hunks })
+export const gitUnstageHunks = (file: string, hunks: number[]) => gitAction('unstage-hunks', { file, hunks })
+export const gitCommit = (message: string) => gitAction('commit', { message })
+export const gitCreateBranch = (name: string) => gitAction('branch', { name })
+export const gitSwitchBranch = (name: string) => gitAction('switch', { name })
+export const gitFetch = () => gitAction('fetch', {})
+export const gitPull = () => gitAction('pull', {})
+export const gitPush = () => gitAction('push', {})
+export const gitCheckpoint = (note?: string) => gitAction('checkpoint', { note })
+
+export async function gitDraftMessage() {
+  const r = await fetch(`${API}/api/delivery/git/draft-message`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  return r.json() as Promise<{ ok: boolean, message: string, error?: string }>
+}
+
+export interface DeliverySettingsItem { agentCheckpoints: boolean }
+export async function getDeliverySettings() {
+  const r = await fetch(`${API}/api/delivery/settings`)
+  return r.json() as Promise<{ ok: boolean, settings: DeliverySettingsItem, error?: string }>
+}
+export async function saveDeliverySettings(settings: DeliverySettingsItem) {
+  const r = await fetch(`${API}/api/delivery/settings`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  return r.json() as Promise<{ ok: boolean, settings: DeliverySettingsItem, error?: string }>
+}
+
+/* ── Delivery facet: Tests (§13.4) ───────────────────────── */
+
+export interface DiscoveredTestItem { key: string, file: string, name: string, kind: 'unit' | 'integration' | 'e2e' }
+export interface DiscoveredSuiteItem { file: string, kind: 'unit' | 'integration' | 'e2e', runnerId: string, tests: DiscoveredTestItem[] }
+export interface StoredTestResultItem {
+  key: string, file: string, name: string,
+  status: 'pass' | 'fail' | 'skipped', durationMs?: number, failure?: string,
+}
+export interface TestRunItem {
+  id: string, at: string, runnerId: string,
+  scope: { kind: string, file?: string, name?: string, keys?: string[] },
+  results: StoredTestResultItem[],
+  totals: { pass: number, fail: number, skipped: number, total: number, durationMs: number },
+}
+export interface TestsOverviewItem {
+  ok: boolean
+  runners: { id: string, label: string }[]
+  suites: DiscoveredSuiteItem[]
+  latestRun: TestRunItem | null
+  runCount: number
+  flaky: string[]
+  error?: string
+}
+
+export async function getTestsOverview() {
+  const r = await fetch(`${API}/api/delivery/tests`)
+  return r.json() as Promise<TestsOverviewItem>
+}
+export async function runTestsApi(scope: 'all' | 'file' | 'single' | 'failures', file?: string, name?: string) {
+  const r = await fetch(`${API}/api/delivery/tests/run`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope, file, name }),
+  })
+  return r.json() as Promise<{ ok: boolean, runs: TestRunItem[], notes: string[], flaky: string[], error?: string }>
+}
+
+export interface DeployTargetItem {
+  id: string, pluginId: string, name: string, service: string, configFile: string,
+  envNames: Record<string, string[]>,
+}
+export interface ConnectStateItem { connected: boolean, accountLabel?: string, howToConnect: string }
+export interface DeploymentRecordItem {
+  id: string, at: string, pluginId: string, targetId: string, targetName: string,
+  kind: 'preview' | 'production', action: 'deploy' | 'promote' | 'rollback',
+  commit?: string, url?: string, deploymentId?: string,
+  state: 'succeeded' | 'failed', note?: string,
+}
+export interface DeployTargetViewItem {
+  target: DeployTargetItem, pluginLabel: string,
+  connect: ConnectStateItem, lastDeployment: DeploymentRecordItem | null,
+}
+export async function getDeployTargets() {
+  const r = await fetch(`${API}/api/delivery/deploy/targets`)
+  return r.json() as Promise<{ ok: boolean, targets: DeployTargetViewItem[], history: DeploymentRecordItem[] }>
+}
+export interface DeployStatusItem { url?: string, lastDeployAt?: string, state?: string, domains: string[], note?: string }
+export async function getDeployStatus(targetId: string) {
+  const r = await fetch(`${API}/api/delivery/deploy/status?target=${encodeURIComponent(targetId)}`)
+  return r.json() as Promise<{ ok: boolean, status?: DeployStatusItem, error?: string }>
+}
+export async function getDeployLogs(targetId: string, recordId?: string) {
+  const q = recordId ? `&record=${encodeURIComponent(recordId)}` : ''
+  const r = await fetch(`${API}/api/delivery/deploy/logs?target=${encodeURIComponent(targetId)}${q}`)
+  return r.json() as Promise<{ ok: boolean, logs?: { at?: string, text: string }[], error?: string }>
+}
+export interface DeliverySummaryItem {
+  git: { branch: string | null, changed: number, head: string | null } | null
+  tests: { green: boolean, pass: number, fail: number, total: number, at: string } | null
+  deploy: { targetName: string, url?: string, at: string, state: string } | null
+  deployedCommit: string | null
+  upToDate: boolean | null
+}
+export async function getDeliverySummary() {
+  const r = await fetch(`${API}/api/delivery/summary`)
+  return r.json() as Promise<{ ok: boolean, summary: DeliverySummaryItem }>
+}
+export async function runDeployActionApi(action: 'deploy' | 'promote' | 'rollback', targetId: string, kind?: 'preview' | 'production', recordId?: string) {
+  const r = await fetch(`${API}/api/delivery/deploy/action`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, targetId, kind, recordId }),
+  })
+  return r.json() as Promise<{ ok: boolean, record?: DeploymentRecordItem, error?: string }>
 }

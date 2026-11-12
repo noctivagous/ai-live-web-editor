@@ -4,9 +4,9 @@ import { FACETS, FACET_BLURBS, FACET_IDS, FACET_TITLES, facetById, isFacetId, pr
 
 describe('facet registry', () => {
   it('order is Overview (the home) first, then the facets in design order', () => {
-    assert.deepEqual(FACET_IDS, ['overview', 'features', 'architecture', 'graphic-design', 'tech-stack', 'configuration'])
+    assert.deepEqual(FACET_IDS, ['overview', 'features', 'architecture', 'graphic-design', 'tech-stack', 'configuration', 'delivery'])
     assert.equal(FACETS[0].home, true)
-    assert.deepEqual(projectFacets().map(f => f.id), ['features', 'architecture', 'graphic-design', 'tech-stack', 'configuration'])
+    assert.deepEqual(projectFacets().map(f => f.id), ['features', 'architecture', 'graphic-design', 'tech-stack', 'configuration', 'delivery'])
   })
 
   it('every facet is complete: title, blurb, unique sections', () => {
@@ -27,6 +27,14 @@ describe('facet registry', () => {
     assert.equal(isFacetId('styles'), false)
     assert.equal(isFacetId('graphic-design'), true)
     assert.equal(facetById('graphic-design').title, 'Graphic Design')
+  })
+
+  it('delivery sections are the design §13 sections — git, tests, deployment — plus actions and wizards', () => {
+    assert.deepEqual(
+      sectionsForFacet('delivery').map(s => s.id),
+      ['git', 'tests', 'deployment', 'actions', 'wizards'],
+    )
+    assert.equal(facetById('delivery').title, 'Delivery')
   })
 
   it('graphic design sections are the design §3.1 areas, plus actions and wizards', () => {

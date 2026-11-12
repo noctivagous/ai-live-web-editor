@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
-  addCrossLink as apiAddCrossLink, applyDesignPack, askAi, deriveDesignGraph, followArchPack, getArchPacks, getArchitecture, getCatalog, getConfigInventory, getCrossLinks, getDesignGraph, getDesignGuide, getDesignPacks, getFacetCriteria, getFeatures, getProjectConfig, getTechStack, mapDesignImport, planArchPack, previewArchPack, previewDesignPack, removeCrossLink as apiRemoveCrossLink, saveDesignGuide, setDesignTokenValue,
-  type ArchitectureDeclarationItem, type ArchitectureReportItem, type ArchPackItem, type ConfigInventoryItem, type CrossLinkItem, type DesignImportMappingItem, type DesignPackItem, type FacetCriteriaRunItem, type TechStackItem,
+  addCrossLink as apiAddCrossLink, applyDesignPack, askAi, deriveDesignGraph, followArchPack, getArchPacks, getArchitecture, getCatalog, getConfigInventory, getCrossLinks, getDeliverySummary, getDesignGraph, getDesignGuide, getDesignPacks, getFeatures, getProjectConfig, getTechStack, mapDesignImport, planArchPack, previewArchPack, previewDesignPack, removeCrossLink as apiRemoveCrossLink, saveDesignGuide, setDesignTokenValue,
+  type ArchitectureDeclarationItem, type ArchitectureReportItem, type ArchPackItem, type ConfigInventoryItem, type CrossLinkItem, type DeliverySummaryItem, type DesignImportMappingItem, type DesignPackItem, type TechStackItem,
   type DesignGraphItem, type DesignGuideItem, type DesignReportItem, type FeatureGraphItem, type FeatureRollup, type PackSummaryItem, type ProjectConfig,
 } from '../lib/api'
 import {
@@ -13,6 +13,10 @@ import { recordRecent } from '../lib/actionHistory'
 import { STUB_REASON, wizardsForFacet, type WizardDef } from '../lib/wizards'
 import { FACET_BLURBS, FACET_IDS, FACET_TITLES, type FacetId } from '../lib/layoutRoute'
 import { sectionsForFacet, type ProjectFacetId } from '../lib/facets'
+import { FacetCriteriaSection } from './FacetCriteriaSection'
+import { GitSection } from './delivery/GitSection'
+import { TestsSection } from './delivery/TestsSection'
+import { DeploymentSection } from './delivery/DeploymentSection'
 import { facetEnabled, facetTogglePatch, sectionEnabled } from '../lib/facetPrefs'
 import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
 
@@ -40,6 +44,19 @@ interface FacetData {
   stack: TechStackItem | null
   inventory: ConfigInventoryItem | null
   links: CrossLinkItem[]
+  delivery: DeliverySummaryItem | null
+}
+
+/** The Delivery facet's Overview line (§13.6): the ship
+ * state in one breath — tree, tests, what's live. Unknowns
+ * are named as unknowns. */
+function deliveryStateLine(s: DeliverySummaryItem): string {
+  const git = s.git ? `${s.git.branch ?? 'detached HEAD'} · ${s.git.changed === 0 ? 'clean tree' : `${s.git.changed} changed file(s)`}` : 'not a git repo'
+  const tests = s.tests ? (s.tests.green ? `tests green (${s.tests.pass} passed)` : `tests failing (${s.tests.fail} of ${s.tests.total})`) : 'no full test run yet'
+  const deploy = s.deploy
+    ? `live: ${s.deploy.url ?? s.deploy.targetName}${s.upToDate === true ? ' · deployed commit is HEAD' : s.upToDate === false ? ' · HEAD has moved since' : ''}`
+    : 'nothing deployed yet'
+  return `${git} · ${tests} · ${deploy}`
 }
 
 export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNavigateFacet, onOpenWizard, onOpenSettings, onOpenLibrary }: {
@@ -64,7 +81,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
   useEffect(() => {
     let live = true
     void (async () => {
-      const [feats, cat, cfg, gd, dg, ar, ts, ci, xl] = await Promise.all([
+      const [feats, cat, cfg, gd, dg, ar, ts, ci, xl, ds] = await Promise.all([
         getFeatures().catch(() => null),
         getCatalog().catch(() => null),
         getProjectConfig().catch(() => null),
@@ -74,6 +91,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
         getTechStack().catch(() => null),
         getConfigInventory().catch(() => null),
         getCrossLinks().catch(() => null),
+        getDeliverySummary().catch(() => null),
       ])
       if (!live) return
       setData({
@@ -90,6 +108,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
         stack: ts?.stack ?? null,
         inventory: ci?.inventory ?? null,
         links: xl?.links ?? [],
+        delivery: ds?.summary ?? null,
       })
     })()
     return () => { live = false }
@@ -349,6 +368,36 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
         </>
       )
     }
+    if (facet === 'delivery') {
+      // What happens to the project, in pipeline order (§13):
+      // change (Git) → check (Tests) → ship (Deployment). Each
+      // section is its own component with its own data; this
+      // branch only places them under their registry sections,
+      // so Settings → Facets and this screen cannot disagree
+      // about which sections exist (§10.1).
+      return (
+        <>
+          {secOn('git') && (
+            <>
+              <div className="aa-group">Git</div>
+              <GitSection />
+            </>
+          )}
+          {secOn('tests') && (
+            <>
+              <div className="aa-group">Tests</div>
+              <TestsSection />
+            </>
+          )}
+          {secOn('deployment') && (
+            <>
+              <div className="aa-group">Deployment</div>
+              <DeploymentSection />
+            </>
+          )}
+        </>
+      )
+    }
     if (facet === 'graphic-design') {
       // The design system manager (design §3.1): one block per
       // registry section, so Settings → Facets and this screen can
@@ -520,7 +569,9 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
                         ? (data.stack ? `${data.stack.facts.slice(0, 2).join(' · ') || 'Derived'} · ${data.stack.packages.length} package(s) · ${data.stack.report.versionMismatches.length} version mismatch(es)` : 'Not derived yet')
                         : f === 'configuration'
                           ? (data.inventory ? `${data.inventory.groups.map(g => g.label).join(' + ') || 'Nothing recognised'} · ${data.inventory.unrecognised.length} unrecognised file(s)` : 'Not read yet')
-                          : FACET_BLURBS[f]
+                          : f === 'delivery'
+                            ? (data.delivery ? deliveryStateLine(data.delivery) : 'Not read yet')
+                            : FACET_BLURBS[f]
               return (
                 <div className="fs-pack" key={f}>
                   <span><b>{FACET_TITLES[f]}</b> — {stateLine}</span>
@@ -531,6 +582,9 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
               )
             })}
             <div className="aa-group">Across facets</div>
+            {data.delivery && row('Ship readiness — clean tree?', data.delivery.git ? (data.delivery.git.changed === 0 ? 'Yes' : `No — ${data.delivery.git.changed} changed file(s)`) : 'Not a git repository')}
+            {data.delivery && row('Ship readiness — tests green?', data.delivery.tests ? (data.delivery.tests.green ? `Yes — ${data.delivery.tests.pass} passed in the latest full run` : `No — ${data.delivery.tests.fail} failing`) : 'No full test run recorded yet')}
+            {data.delivery && row('Ship readiness — deployed commit is HEAD?', data.delivery.upToDate === null ? 'Unknown — nothing deployed from here, or no commits yet' : data.delivery.upToDate ? 'Yes' : 'No — HEAD has moved since the last deployment')}
             {row('Cross-facet links', data.links.length ? `${data.links.length} — ${data.links.filter(l => !l.resolved).length} broken` : 'None yet')}
             {data.links.filter(l => !l.resolved).map(l => row(`Broken — ${l.kind} (${l.id})`, `${l.from} → ${l.to} (${l.targetLabel} not found)`))}
             {row('Design drift', data.designReport ? `${data.designReport.hardcoded.length} hard-coded value(s), ${data.designReport.unusedTokens.length} unused token(s)` : 'Not derived yet')}
@@ -847,9 +901,11 @@ function CrossLinksSection({ links, onChanged }: {
           <option value="needs-config">needs-config</option>
           <option value="follows-rule">follows-rule</option>
           <option value="styled-by">styled-by</option>
+          <option value="proved-by">proved-by (feature → test key file::name)</option>
+          <option value="implements">implements (from pr:&lt;n&gt; → feature / plan)</option>
         </select>
-        <input className="deck-input" value={from} onChange={e => setFrom(e.target.value)} placeholder="From (feature name)" style={{ width: 150 }} />
-        <input className="deck-input" value={to} onChange={e => setTo(e.target.value)} placeholder="To (component / package / file)" style={{ width: 200 }} />
+        <input className="deck-input" value={from} onChange={e => setFrom(e.target.value)} placeholder="From (feature name / pr:12)" style={{ width: 150 }} />
+        <input className="deck-input" value={to} onChange={e => setTo(e.target.value)} placeholder="To (component / package / file / test key)" style={{ width: 200 }} />
         <button type="button" className="wiz-btn" disabled={!from.trim() || !to.trim()} onClick={() => void add()}>Add link</button>
         {links.filter(l => !l.resolved).map(l => (
           <button key={l.id} type="button" className="wiz-btn" onClick={() => { void apiRemoveCrossLink(l.id).then(r => onChanged(r.links)).catch(() => {}) }}>
@@ -858,30 +914,6 @@ function CrossLinksSection({ links, onChanged }: {
         ))}
       </div>
       {note && <div className="field-hint" style={{ marginTop: 6 }}>{note}</div>}
-    </div>
-  )
-}
-
-/**
- * The per-facet criteria runner (§8.3): one button per facet
- * runs its criteria set against the facet's own reports and
- * shows pass / fail / couldn't-check with evidence.
- */
-function FacetCriteriaSection({ facet }: { facet: 'architecture' | 'graphic-design' | 'configuration' | 'tech-stack' }) {
-  const [run, setRun] = useState<FacetCriteriaRunItem | null>(null)
-  const [note, setNote] = useState('')
-  return (
-    <div style={{ marginTop: 10 }}>
-      <button
-        type="button" className="wiz-btn"
-        onClick={() => { void getFacetCriteria(facet).then(r => setRun(r.run)).catch(e => setNote(e instanceof Error ? e.message : 'Could not run the criteria')) }}
-      >
-        Run this facet's criteria
-      </button>
-      {note && <span className="field-hint" style={{ marginLeft: 7 }}>{note}</span>}
-      {run && run.results.map(r => (
-        <div className="fs-row" key={r.id}><span>{`${r.verdict} — ${r.id}`}</span><b>{`${r.say} · ${r.evidence}`}</b></div>
-      ))}
     </div>
   )
 }

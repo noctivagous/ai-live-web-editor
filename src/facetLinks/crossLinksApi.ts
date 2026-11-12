@@ -4,7 +4,7 @@ import { addCrossLink, getCrossLinks, removeCrossLink, resolveCrossLinks, type C
 import { runFacetCriteria, type FacetCriteriaId } from './facetCriteria.js'
 
 const KINDS: CrossLinkKind[] = ['uses-component', 'requires-package', 'needs-config', 'follows-rule', 'styled-by']
-const CRITERIA_FACETS: FacetCriteriaId[] = ['architecture', 'graphic-design', 'configuration', 'tech-stack']
+const CRITERIA_FACETS: FacetCriteriaId[] = ['architecture', 'graphic-design', 'configuration', 'tech-stack', 'delivery']
 
 /** Cross-facet links + per-facet criteria API (§8), mounted on
  * both servers. */

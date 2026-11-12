@@ -17,6 +17,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { parseWranglerToml } from '../delivery/wranglerToml.js'
 import { getFsRoot, listProjectFiles } from '../launcher.js'
 
 export interface ConfigEntry {
@@ -154,6 +155,41 @@ export const CONFIG_RECOGNIZERS: ConfigRecognizer[] = [
     },
   },
   {
+    // Deployment targets are DETECTED here (§13.2: recognizers
+    // keep detecting) and ACTED ON by the Delivery facet. The
+    // shape is non-secret by construction: parseWranglerToml
+    // records variable names only, never values (§7.3).
+    id: 'cloudflare', label: 'Cloudflare (Wrangler)',
+    detect(ctx) {
+      const entries: ConfigEntry[] = []
+      for (const f of ctx.files.filter(x => /(^|\/)wrangler\.toml$/.test(x))) {
+        const shape = parseWranglerToml(ctx.read(f))
+        const names = [...new Set(Object.values(shape.envVars).flat())].sort()
+        entries.push({
+          file: f, aspect: 'Deployment target',
+          summary: `Wrangler config${shape.name ? ` for "${shape.name}"` : ''} — a Cloudflare ${shape.pages ? 'Pages' : 'Workers'} project. The Delivery facet deploys this target.`,
+          ...(names.length ? { envKeys: names } : {}),
+        })
+      }
+      return entries.length ? entries : null
+    },
+  },
+  {
+    id: 'vercel', label: 'Vercel',
+    detect(ctx) {
+      const entries: ConfigEntry[] = []
+      for (const f of ctx.files.filter(x => /(^|\/)vercel\.json$/.test(x))) {
+        const parsed = ctx.json(f)
+        const framework = typeof parsed?.framework === 'string' ? parsed.framework : ''
+        entries.push({
+          file: f, aspect: 'Deployment target',
+          summary: `Vercel project config${framework ? ` (framework: ${framework})` : ''}. The Delivery facet deploys this target.`,
+        })
+      }
+      return entries.length ? entries : null
+    },
+  },
+  {
     id: 'monorepo', label: 'Monorepo / workspaces',
     detect(ctx) {
       const pkg = ctx.json('package.json')
@@ -172,7 +208,7 @@ export const CONFIG_RECOGNIZERS: ConfigRecognizer[] = [
   },
 ]
 
-const CONFIGISH = /(^|\/)(\.env[^/]*|[^/]*\.config\.[^/]+|tsconfig[^/]*\.json|package\.json|project\.ai\.json|\.eslintrc[^/]*|\.prettierrc[^/]*|biome\.json|docker-compose\.ya?ml|compose\.ya?ml|\.babelrc|babel\.config\.[^/]+|\.editorconfig|\.gitignore|\.npmrc|pnpm-workspace\.yaml)$/
+const CONFIGISH = /(^|\/)(\.env[^/]*|[^/]*\.config\.[^/]+|tsconfig[^/]*\.json|package\.json|project\.ai\.json|\.eslintrc[^/]*|\.prettierrc[^/]*|biome\.json|docker-compose\.ya?ml|compose\.ya?ml|\.babelrc|babel\.config\.[^/]+|\.editorconfig|\.gitignore|\.npmrc|pnpm-workspace\.yaml|wrangler\.toml|vercel\.json)$/
 
 export function deriveConfigInventory(root: string = getFsRoot()): ConfigInventory {
   const ctx = makeCtx(root)

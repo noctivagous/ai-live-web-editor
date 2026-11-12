@@ -9,15 +9,15 @@
  * the two can never drift apart because both read this list.
  *
  * Overview is the project home, not a facet: it owns no data, has
- * no wizards, and cannot be turned off (§9, §10.2). The five
+ * no wizards, and cannot be turned off (§9, §10.2). The six
  * facets are Features, Architecture, Graphic Design (renamed from
- * Styles — a clean rename in code, no migration), Tech Stack, and
- * Configuration; Tech Stack and Configuration join this registry
- * in their build slices, exactly as the design's build order
- * (§11) stages them.
+ * Styles — a clean rename in code, no migration), Tech Stack,
+ * Configuration, and Delivery (§13: what happens to the project —
+ * Git, Tests, Deployment — added after the five, in pipeline
+ * order at the end of the bar).
  */
 
-export type FacetId = 'overview' | 'features' | 'architecture' | 'graphic-design' | 'tech-stack' | 'configuration'
+export type FacetId = 'overview' | 'features' | 'architecture' | 'graphic-design' | 'tech-stack' | 'configuration' | 'delivery'
 
 /** The facets proper — everything except the Overview home. */
 export type ProjectFacetId = Exclude<FacetId, 'overview'>
@@ -103,6 +103,16 @@ export const FACETS: FacetDef[] = [
       { id: 'entries', title: 'Configuration files' },
       { id: 'project', title: 'Project record' },
       { id: 'report', title: 'Report' },
+      ACTIONS, WIZARDS,
+    ],
+  },
+  {
+    id: 'delivery', title: 'Delivery',
+    blurb: 'What happens to the project — change it, check it, ship it',
+    sections: [
+      { id: 'git', title: 'Git' },
+      { id: 'tests', title: 'Tests' },
+      { id: 'deployment', title: 'Deployment' },
       ACTIONS, WIZARDS,
     ],
   },

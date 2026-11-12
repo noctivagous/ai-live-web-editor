@@ -23,6 +23,7 @@ import { mountDesignApi } from './design/designApi.js'
 import { mountArchitectureApi } from './architecture/architectureApi.js'
 import { mountTechStackApi } from './techstack/techStackApi.js'
 import { mountConfigApi } from './configregistry/configApi.js'
+import { mountDeliveryApi } from './delivery/deliveryApi.js'
 import { mountCrossLinksApi } from './facetLinks/crossLinksApi.js'
 import { mountUserFlowApi } from './userflows/userflowApi.js'
 import { mountMcpApi } from './mcp/mcpApi.js'
@@ -94,6 +95,7 @@ mountDesignApi(app)
 mountArchitectureApi(app)
 mountTechStackApi(app)
 mountConfigApi(app)
+mountDeliveryApi(app)
 mountCrossLinksApi(app)
 mountUserFlowApi(app)
 mountMcpApi(app)

@@ -17,8 +17,9 @@ import { checkArchitecture } from '../architecture/architecture.js'
 import { designReport, getDesignGraph } from '../design/designGraph.js'
 import { deriveTechStack } from '../techstack/techStack.js'
 import { deriveConfigInventory } from '../configregistry/configRegistry.js'
+import { flakyTestKeys, lastTestVerdict, latestFullRun, readTestRuns } from '../delivery/testStore.js'
 
-export type FacetCriteriaId = 'architecture' | 'graphic-design' | 'configuration' | 'tech-stack'
+export type FacetCriteriaId = 'architecture' | 'graphic-design' | 'configuration' | 'tech-stack' | 'delivery'
 
 /** The declared criteria per facet, as a verify.json document. */
 export const FACET_CRITERIA: Record<FacetCriteriaId, CriteriaFile> = {
@@ -48,6 +49,17 @@ export const FACET_CRITERIA: Record<FacetCriteriaId, CriteriaFile> = {
     criteria: [
       { id: 'stack-no-mismatch', say: 'Installed versions satisfy the declared ranges', check: 'project-check' },
       { id: 'stack-declared-installed', say: 'Everything declared is installed', check: 'project-check' },
+    ],
+  })),
+  // Delivery (§13.4): the gate consumes test results as
+  // criteria — the verdict reads the recorded runs, it does
+  // not re-run the suites. Tests stay the surface; the gate
+  // stays the judge.
+  delivery: parseCriteriaFile(JSON.stringify({
+    version: 1,
+    criteria: [
+      { id: 'tests-green', say: "The project's tests pass (latest full run)", check: 'project-check' },
+      { id: 'tests-no-flaky', say: 'No test is flagged flaky in the recent run history', check: 'project-check' },
     ],
   })),
 }
@@ -106,6 +118,21 @@ export function runFacetCriteria(facet: FacetCriteriaId, root: string = getFsRoo
     put('config-json-valid',
       jsonFiles.length === 0 ? 'couldnt-check' : bad.length ? 'fail' : 'pass',
       jsonFiles.length === 0 ? 'No JSON config files were recognised.' : bad.length ? `Do not parse: ${bad.join(', ')}` : `${jsonFiles.length} JSON config file(s) parse.`)
+  } else if (facet === 'delivery') {
+    const verdict = lastTestVerdict(root)
+    if (!verdict) {
+      put('tests-green', 'couldnt-check', 'No full test run has been recorded yet — run the tests from the Delivery facet.')
+    } else if (verdict.fail > 0) {
+      const failing = (latestFullRun(root)?.results ?? []).filter(r => r.status === 'fail').map(r => r.key)
+      put('tests-green', 'fail', `${verdict.fail} of ${verdict.total} failing in the run at ${verdict.at}: ${failing.slice(0, 6).join(', ')}`)
+    } else {
+      put('tests-green', 'pass', `${verdict.pass} passed, 0 failed (${verdict.runnerId}, ${verdict.at}).`)
+    }
+    const flaky = flakyTestKeys(root)
+    const anyRuns = readTestRuns(root).runs.length > 0
+    put('tests-no-flaky',
+      !anyRuns ? 'couldnt-check' : flaky.length ? 'fail' : 'pass',
+      !anyRuns ? 'No test runs have been recorded yet.' : flaky.length ? `Flaky: ${flaky.slice(0, 6).join(', ')}` : 'No test has flipped between pass and fail in the recent history.')
   } else {
     const stack = deriveTechStack(root)
     put('stack-no-mismatch',

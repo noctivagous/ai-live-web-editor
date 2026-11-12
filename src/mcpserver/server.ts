@@ -34,7 +34,7 @@
 import type { Express } from 'express'
 import { musecodeHostSlots, setMusecodeHostSlots } from '../musecode/chat.js'
 import type { MusecodeMcpServers } from '../musecode/supervisor.js'
-import { ALE_TOOLS, callAleTool } from './registry.js'
+import { callAleTool, visibleAleTools } from './registry.js'
 
 export const ALE_MCP_SERVER_NAME = 'ale'
 export const ALE_MCP_PATH = '/api/mcp/ale'
@@ -154,7 +154,7 @@ async function handleOne(req: JsonRpcRequest): Promise<{ status: number; body?: 
       return {
         status: 200,
         body: rpcResult(id, {
-          tools: ALE_TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
+          tools: visibleAleTools().map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
         }),
       }
     }

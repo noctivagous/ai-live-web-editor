@@ -13,7 +13,15 @@
  * - feature     needs-config    → a configuration entry (file)
  * - module      follows-rule    → an architecture checkable rule
  * - component   styled-by       → a design pack or token group
+ * - feature     proved-by       → a test, by its discovery key
+ *   (`file::name`, §13.4) — declared on the Features facet,
+ *   resolved against the Delivery facet's test discovery
+ * - pr:<n>      implements      → a feature or a plan (§13.3) —
+ *   the PR side resolves by scanning git history for the #n
+ *   reference (a merge subject or a plain mention); the facet
+ *   never invents a PR that history does not mention
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getFsRoot } from '../launcher.js'
@@ -23,8 +31,10 @@ import { deriveTechStack } from '../techstack/techStack.js'
 import { deriveConfigInventory } from '../configregistry/configRegistry.js'
 import { getArchitecture } from '../architecture/architecture.js'
 import { loadDesignPacks } from '../design/designPacks.js'
+import { discoverTests } from '../delivery/testRunners.js'
+import { listPlans } from '../plans/plans.js'
 
-export type CrossLinkKind = 'uses-component' | 'requires-package' | 'needs-config' | 'follows-rule' | 'styled-by'
+export type CrossLinkKind = 'uses-component' | 'requires-package' | 'needs-config' | 'follows-rule' | 'styled-by' | 'proved-by' | 'implements'
 export interface CrossLink {
   id: string
   kind: CrossLinkKind
@@ -38,7 +48,7 @@ export interface CrossLink {
 }
 export interface CrossLinkFile { version: 1, links: CrossLink[] }
 
-const KINDS: CrossLinkKind[] = ['uses-component', 'requires-package', 'needs-config', 'follows-rule', 'styled-by']
+const KINDS: CrossLinkKind[] = ['uses-component', 'requires-package', 'needs-config', 'follows-rule', 'styled-by', 'proved-by', 'implements']
 
 export function crossLinksPath(root: string): string {
   return path.join(root, 'ai-features', 'cross-links.json')
@@ -115,6 +125,25 @@ export function resolveCrossLinks(root: string = getFsRoot(), file: CrossLinkFil
   try { configFiles = new Set(deriveConfigInventory(root).groups.flatMap(g => g.entries.map(e => e.file))) } catch { /* as above */ }
   try { const a = getArchitecture(root); if (a) ruleIds = new Set(a.rules.map(r => r.id)) } catch { /* as above */ }
   try { packIds = new Set(loadDesignPacks().map(p => p.id)) } catch { /* as above */ }
+  let testKeys = new Set<string>()
+  try { testKeys = new Set(discoverTests(root).flatMap(s => s.tests.map(t => t.key))) } catch { /* as above */ }
+  let planRefs = new Set<string>()
+  try { planRefs = new Set(listPlans(root).flatMap(p => [p.slug, p.title])) } catch { /* as above */ }
+  // PR existence, from history alone: the subjects of the last
+  // 500 commits, scanned lazily only when an implements link
+  // needs it (resolution stays synchronous like the rest here).
+  let subjects: string[] | null = null
+  const prMentioned = (from: string): boolean => {
+    const m = /^pr:(\d+)$/.exec(from.trim())
+    if (!m) return false
+    if (subjects === null) {
+      try {
+        subjects = execFileSync('git', ['log', '--format=%s', '-n', '500'], { cwd: root, encoding: 'utf-8', timeout: 10_000 }).split('\n')
+      } catch { subjects = [] }
+    }
+    const needle = new RegExp(`#${m[1]}(?!\\d)`)
+    return subjects.some(s => needle.test(s))
+  }
 
   return file.links.map(l => {
     let resolved = false
@@ -125,13 +154,15 @@ export function resolveCrossLinks(root: string = getFsRoot(), file: CrossLinkFil
       case 'needs-config': resolved = configFiles.has(l.to); targetLabel = `config ${l.to}`; break
       case 'follows-rule': resolved = ruleIds.has(l.to); targetLabel = `rule ${l.to}`; break
       case 'styled-by': resolved = packIds.has(l.to) || tokenGroups.has(l.to); targetLabel = `pack/token group ${l.to}`; break
+      case 'proved-by': resolved = testKeys.has(l.to); targetLabel = `test ${l.to}`; break
+      case 'implements': resolved = prMentioned(l.from) && (featureNames.has(l.to) || planRefs.has(l.to)); targetLabel = `feature/plan ${l.to} (from ${l.from})`; break
     }
     // The owning side of feature links should also still exist
     // when a feature graph is present.
     if (l.kind !== 'follows-rule' && l.kind !== 'styled-by' && featureNames.size && l.kind !== 'uses-component') {
       // from-side check applies to feature-owned links; component-
       // owned (styled-by) and module-owned (follows-rule) differ.
-      if ((l.kind === 'requires-package' || l.kind === 'needs-config') && !featureNames.has(l.from)) resolved = false
+      if ((l.kind === 'requires-package' || l.kind === 'needs-config' || l.kind === 'proved-by') && !featureNames.has(l.from)) resolved = false
     }
     if (l.kind === 'uses-component' && featureNames.size && !featureNames.has(l.from)) resolved = false
     return { ...l, resolved, targetLabel }

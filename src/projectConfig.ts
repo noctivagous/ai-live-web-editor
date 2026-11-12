@@ -28,6 +28,7 @@ import { designGuideSummary, getDesignGuide } from './design/designGuide.js'
 import { architectureSummary } from './architecture/architecture.js'
 import { techStackSummary } from './techstack/techStack.js'
 import { configSummary } from './configregistry/configRegistry.js'
+import { deliveryBriefLines } from './delivery/deliveryBrief.js'
 import { flowGraphSummary, getUserFlowGraph } from './userflows/userflows.js'
 import { sanitizeSandboxPosture, type SandboxPosture } from './ui/lib/museSandbox.js'
 
@@ -209,6 +210,11 @@ export function projectBrief(config: ProjectConfig = readProjectConfig()): strin
       const cfg = configSummary()
       if (cfg) lines.push(cfg)
     } catch { /* the brief never breaks on the configuration inventory */ }
+  }
+  if (!facetOff('delivery')) {
+    try {
+      for (const line of deliveryBriefLines()) lines.push(line)
+    } catch { /* the brief never breaks on delivery state */ }
   }
   if (config.features?.length) lines.push(`Installed features: ${config.features.join(', ')}.`)
   const catalog = catalogSummary()

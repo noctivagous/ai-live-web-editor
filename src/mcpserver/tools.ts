@@ -28,6 +28,10 @@ export interface AleToolDef {
   name: string
   description: string
   inputSchema: Record<string, unknown>
+  /** The facet that gates this tool, when it belongs to one
+   * (Facets design §10.2): while the facet is off, the tool is
+   * neither listed nor callable. Untagged tools are always on. */
+  facet?: import('../ui/lib/facets.js').ProjectFacetId
   run: (input: Record<string, any>) => Promise<unknown>
 }
 

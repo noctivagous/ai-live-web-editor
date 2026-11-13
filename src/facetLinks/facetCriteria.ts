@@ -9,6 +9,7 @@
  * tech-stack consistency — so a criterion's evidence is the
  * facet's own numbers, not a second scan.
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getFsRoot } from '../launcher.js'
@@ -18,6 +19,7 @@ import { designReport, getDesignGraph } from '../design/designGraph.js'
 import { deriveTechStack } from '../techstack/techStack.js'
 import { deriveConfigInventory } from '../configregistry/configRegistry.js'
 import { flakyTestKeys, lastTestVerdict, latestFullRun, readTestRuns } from '../delivery/testStore.js'
+import { ciRunGreen, latestCiRunOnCommit, readCiSummary } from '../delivery/ciStore.js'
 
 export type FacetCriteriaId = 'architecture' | 'graphic-design' | 'configuration' | 'tech-stack' | 'delivery'
 
@@ -60,6 +62,7 @@ export const FACET_CRITERIA: Record<FacetCriteriaId, CriteriaFile> = {
     criteria: [
       { id: 'tests-green', say: "The project's tests pass (latest full run)", check: 'project-check' },
       { id: 'tests-no-flaky', say: 'No test is flagged flaky in the recent run history', check: 'project-check' },
+      { id: 'ci-green', say: 'CI is green on HEAD (latest recorded run for this commit)', check: 'project-check' },
     ],
   })),
 }
@@ -133,6 +136,27 @@ export function runFacetCriteria(facet: FacetCriteriaId, root: string = getFsRoo
     put('tests-no-flaky',
       !anyRuns ? 'couldnt-check' : flaky.length ? 'fail' : 'pass',
       !anyRuns ? 'No test runs have been recorded yet.' : flaky.length ? `Flaky: ${flaky.slice(0, 6).join(', ')}` : 'No test has flipped between pass and fail in the recent history.')
+    // ci-green (§13.8): the recorded CI summary answers for
+    // HEAD — the criterion reads the cache, it never calls
+    // the provider and never re-runs anything. No recorded
+    // run for this commit is a couldn't-check, not a pass.
+    let head: string | null = null
+    try { head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf-8', timeout: 10_000 }).trim() } catch { head = null }
+    const ciCache = readCiSummary(root)
+    const ciRun = latestCiRunOnCommit(root, head)
+    if (!ciCache) {
+      put('ci-green', 'couldnt-check', 'No CI summary has been recorded yet — open the Delivery facet\'s CI section while a provider is connected.')
+    } else if (!ciRun) {
+      put('ci-green', 'couldnt-check', head
+        ? `No recorded CI run is for HEAD (${head.slice(0, 7)}) — the latest recorded run is for ${ciCache.recentRuns[0]?.commit?.slice(0, 7) ?? 'an unknown commit'}.`
+        : 'The current commit could not be read, so no recorded CI run can be matched to it.')
+    } else if (ciRunGreen(ciRun)) {
+      put('ci-green', 'pass', `"${ciRun.pipelineName}" succeeded on HEAD (ran ${ciRun.createdAt}, recorded ${ciCache.updatedAt}).`)
+    } else if (ciRun.status === 'completed') {
+      put('ci-green', 'fail', `"${ciRun.pipelineName}" concluded ${ciRun.conclusion ?? 'without a conclusion'} on HEAD (ran ${ciRun.createdAt}).`)
+    } else {
+      put('ci-green', 'couldnt-check', `"${ciRun.pipelineName}" on HEAD is still ${ciRun.status.replace('_', ' ')} — no verdict yet.`)
+    }
   } else {
     const stack = deriveTechStack(root)
     put('stack-no-mismatch',

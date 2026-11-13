@@ -181,6 +181,9 @@ export function deriveTechStack(root: string = getFsRoot()): TechStack {
   }
   const engines = (readJson(root, 'package.json')?.engines ?? null) as Record<string, unknown> | null
   if (engines && typeof engines.node === 'string') facts.push(`Node ${engines.node} (declared in engines)`)
+  // CI is a technology in use (§13.8): named here as a fact
+  // of the stack; its runs and actions live in Delivery.
+  if (entries.some(f => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))) facts.push('Continuous integration: GitHub Actions')
 
   const declaredNotInstalled = packages.filter(p => !p.installed && installed.size > 0).map(p => p.name)
   const installedNotDeclared = [...installed.keys()].filter(n => !declaredNames.has(n)).slice(0, 40)

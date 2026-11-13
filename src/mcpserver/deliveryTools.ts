@@ -1,6 +1,6 @@
 /**
  * The Delivery facet's MCP tool family (Facets design §13.6):
- * git, test-run, and deploy tools, every one tagged
+ * git, test-run, CI, and deploy tools, every one tagged
  * `facet: 'delivery'` so the registry withdraws them while the
  * facet is off (§10.2) — the facet's standard gating, applied
  * at the one registration point.
@@ -16,6 +16,9 @@
  * shipping is the user's action in the section.
  */
 import { getFsRoot } from '../launcher.js'
+import { readPipelines } from '../delivery/ci.js'
+import { ALL_CI_PLUGINS } from '../delivery/ciPlugins.js'
+import { latestCiRunOnCommit, readCiSummary } from '../delivery/ciStore.js'
 import { createCheckpoint, readDeliverySettings } from '../delivery/checkpoints.js'
 import { targetViews } from '../delivery/deploy.js'
 import { ALL_DEPLOY_PLUGINS } from '../delivery/deployPlugins.js'
@@ -98,6 +101,42 @@ export const ALE_DELIVERY_TOOLS: AleToolDef[] = [
         runs: outcome.runs.map(r => ({ runnerId: r.runnerId, totals: r.totals, failures: r.results.filter(x => x.status === 'fail') })),
         notes: outcome.notes,
         ...(failed.length ? { error: `${failed.length} test(s) failing: ${failed.slice(0, 6).map(f => f.key).join(', ')}` } : {}),
+      }
+    },
+  },
+  {
+    name: 'ale_ci_status',
+    description: 'Read the project\'s CI state: the pipelines its workflow files define (jobs and steps), each CI provider\'s connect state, and the last-seen run summary recorded while a provider was connected — including the latest recorded run on HEAD. Read-only; runs themselves are provider truth and triggering one is the user\'s action in the Delivery facet.',
+    inputSchema: obj({}),
+    facet: 'delivery',
+    run: async () => {
+      const root = getFsRoot()
+      const providers = []
+      for (const plugin of ALL_CI_PLUGINS) {
+        let detected = false
+        try { detected = plugin.detect(root) } catch { detected = false }
+        if (!detected) { providers.push({ plugin: plugin.label, detected: false }); continue }
+        const connect = await plugin.connectState(root).catch(() => null)
+        providers.push({
+          plugin: plugin.label, detected: true,
+          connected: connect?.connected ?? false,
+          ...(connect?.connected ? {} : { howToConnect: connect?.howToConnect ?? 'The provider could not be checked.' }),
+        })
+      }
+      const cache = readCiSummary(root)
+      const status = await gitStatus(root).catch(() => null)
+      const onHead = status?.head ? latestCiRunOnCommit(root, status.head) : null
+      return {
+        ok: true,
+        pipelines: readPipelines(root).map(p => ({
+          name: p.name, file: p.file, triggers: p.triggers, canDispatch: p.canDispatch,
+          jobs: p.jobs.map(j => ({ id: j.id, steps: j.steps.length })),
+        })),
+        providers,
+        recorded: cache
+          ? { seenAt: cache.updatedAt, provider: cache.provider, recentRuns: cache.recentRuns.slice(0, 5) }
+          : null,
+        latestRunOnHead: onHead,
       }
     },
   },

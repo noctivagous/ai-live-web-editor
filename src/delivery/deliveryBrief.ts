@@ -11,6 +11,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { getFsRoot } from '../launcher.js'
+import { ciRunGreen, latestCiRunOnCommit } from './ciStore.js'
 import { lastDeployment } from './deploy.js'
 import { lastTestVerdict } from './testStore.js'
 
@@ -52,13 +53,26 @@ export function gitBriefLine(root: string): string {
   return `Git: ${where} · ${changed === 0 ? 'clean tree' : `${changed} changed file${changed === 1 ? '' : 's'}`}`
 }
 
-/** "Tests: last full run green — 24 passed" — '' when no full run. */
+/** "Tests: last full run green — 24 passed" — '' when no full run.
+ * CI status folds into this line (§13.8: the brief keeps three
+ * lines — CI is the same checks at the provider, so it rides
+ * the checks line): when a CI run is recorded for HEAD, its
+ * state is appended; when none is, nothing is claimed. */
 export function testsBriefLine(root: string): string {
   const v = lastTestVerdict(root)
   if (!v) return ''
-  return v.fail === 0
+  const base = v.fail === 0
     ? `Tests: last full run green — ${v.pass} passed (${v.runnerId})`
     : `Tests: last full run has ${v.fail} failure${v.fail === 1 ? '' : 's'} of ${v.total} (${v.runnerId})`
+  const head = gitOutSync(root, ['rev-parse', 'HEAD'])?.trim()
+  const ciRun = latestCiRunOnCommit(root, head)
+  if (!ciRun) return base
+  const ciState = ciRunGreen(ciRun)
+    ? 'CI green on HEAD'
+    : ciRun.status === 'completed'
+      ? `CI red on HEAD (${ciRun.conclusion ?? 'no conclusion'})`
+      : `CI ${ciRun.status.replace('_', ' ')} on HEAD`
+  return `${base} · ${ciState}`
 }
 
 /** "Live: https://… (deployed 2h ago from abc1234)" — '' when none. */

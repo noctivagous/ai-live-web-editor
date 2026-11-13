@@ -123,7 +123,7 @@ export function DeploymentSection() {
                 {targetHistory.map(h => (
                   <div className="fs-row" key={h.id}>
                     <span>
-                      {new Date(h.at).toLocaleString()} · {h.action} · {h.kind} · {h.state} · commit {shortCommit(h.commit)}
+                      {new Date(h.at).toLocaleString()} · {h.action} · {h.kind} · {h.state}{h.source === 'ci' ? ' · via CI' : ''} · commit {shortCommit(h.commit)}
                       {h.url ? <> · <a href={h.url} target="_blank" rel="noreferrer">{h.url}</a></> : null}
                     </span>
                     <b style={{ display: 'flex', gap: 6 }}>

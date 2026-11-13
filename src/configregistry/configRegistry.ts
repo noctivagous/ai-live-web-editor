@@ -18,6 +18,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseWranglerToml } from '../delivery/wranglerToml.js'
+import { parseWorkflow } from '../delivery/workflowYaml.js'
 import { getFsRoot, listProjectFiles } from '../launcher.js'
 
 export interface ConfigEntry {
@@ -91,7 +92,19 @@ function commonEntries(ctx: Ctx): { entries: ConfigEntry[], missing: string[] } 
     entries.push(envEntry(ctx, f))
   }
   const ci = ctx.files.filter(f => f.startsWith('.github/workflows/') && /\.ya?ml$/.test(f))
-  for (const f of ci) entries.push({ file: f, aspect: 'CI workflow', profileId: 'github-workflow', summary: 'A GitHub Actions workflow' })
+  for (const f of ci) {
+    // Existence + shape (§13.8): the workflow's name, what
+    // runs it, and how many jobs — from the Delivery facet's
+    // structural extractor. The facet that acts on it is
+    // Delivery's CI section; here it is only recognised.
+    const def = parseWorkflow(ctx.read(f))
+    const name = def.name ?? f.split('/').pop()!.replace(/\.ya?ml$/, '')
+    const shape = [
+      def.triggers.length ? `runs on ${def.triggers.join(', ')}` : 'triggers unread',
+      def.jobs.length ? `${def.jobs.length} job${def.jobs.length === 1 ? '' : 's'}` : 'no jobs read',
+    ].join(' · ')
+    entries.push({ file: f, aspect: 'CI workflow', profileId: 'github-workflow', summary: `GitHub Actions workflow "${name}" — ${shape}. The Delivery facet's CI section shows its runs.` })
+  }
   if (!ci.length) missing.push('CI config (no .github/workflows file)')
   const lint = ctx.find(/(^|\/)(\.eslintrc[^/]*|eslint\.config\.[^/]+|\.prettierrc[^/]*|prettier\.config\.[^/]+|biome\.json)$/)
   if (lint) entries.push({ file: lint, aspect: 'Lint & format', summary: 'Lint and formatting rules' })

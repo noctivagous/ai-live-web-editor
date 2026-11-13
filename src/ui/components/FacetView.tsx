@@ -16,6 +16,7 @@ import { sectionsForFacet, type ProjectFacetId } from '../lib/facets'
 import { FacetCriteriaSection } from './FacetCriteriaSection'
 import { GitSection } from './delivery/GitSection'
 import { TestsSection } from './delivery/TestsSection'
+import { CiSection } from './delivery/CiSection'
 import { DeploymentSection } from './delivery/DeploymentSection'
 import { facetEnabled, facetTogglePatch, sectionEnabled } from '../lib/facetPrefs'
 import { loadUiPrefs, saveUiPrefs } from '../lib/uiPrefs'
@@ -369,31 +370,40 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
       )
     }
     if (facet === 'delivery') {
-      // What happens to the project, in pipeline order (§13):
-      // change (Git) → check (Tests) → ship (Deployment). Each
-      // section is its own component with its own data; this
-      // branch only places them under their registry sections,
-      // so Settings → Facets and this screen cannot disagree
-      // about which sections exist (§10.1).
+      // What happens to the project, in pipeline order (§13,
+      // §13.8): change (Git) → check (Tests) → automate (CI)
+      // → ship (Deployment). Each section is its own component
+      // with its own data; this branch only places them under
+      // their registry sections, so Settings → Facets and this
+      // screen cannot disagree about which sections exist
+      // (§10.1). The section wrappers carry ids so one section
+      // can deep-link to another (a failed CI test step points
+      // at the Tests section).
       return (
         <>
           {secOn('git') && (
-            <>
+            <div id="delivery-git">
               <div className="aa-group">Git</div>
               <GitSection />
-            </>
+            </div>
           )}
           {secOn('tests') && (
-            <>
+            <div id="delivery-tests">
               <div className="aa-group">Tests</div>
               <TestsSection />
-            </>
+            </div>
+          )}
+          {secOn('ci') && (
+            <div id="delivery-ci">
+              <div className="aa-group">CI</div>
+              <CiSection />
+            </div>
           )}
           {secOn('deployment') && (
-            <>
+            <div id="delivery-deployment">
               <div className="aa-group">Deployment</div>
               <DeploymentSection />
-            </>
+            </div>
           )}
         </>
       )
@@ -584,6 +594,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
             <div className="aa-group">Across facets</div>
             {data.delivery && row('Ship readiness — clean tree?', data.delivery.git ? (data.delivery.git.changed === 0 ? 'Yes' : `No — ${data.delivery.git.changed} changed file(s)`) : 'Not a git repository')}
             {data.delivery && row('Ship readiness — tests green?', data.delivery.tests ? (data.delivery.tests.green ? `Yes — ${data.delivery.tests.pass} passed in the latest full run` : `No — ${data.delivery.tests.fail} failing`) : 'No full test run recorded yet')}
+            {data.delivery && row('Ship readiness — CI green on HEAD?', data.delivery.ci ? (data.delivery.ci.green ? `Yes — "${data.delivery.ci.pipelineName}" succeeded on HEAD` : `No — "${data.delivery.ci.pipelineName}" is ${data.delivery.ci.state} on HEAD`) : 'Unknown — no recorded CI run for HEAD')}
             {data.delivery && row('Ship readiness — deployed commit is HEAD?', data.delivery.upToDate === null ? 'Unknown — nothing deployed from here, or no commits yet' : data.delivery.upToDate ? 'Yes' : 'No — HEAD has moved since the last deployment')}
             {row('Cross-facet links', data.links.length ? `${data.links.length} — ${data.links.filter(l => !l.resolved).length} broken` : 'None yet')}
             {data.links.filter(l => !l.resolved).map(l => row(`Broken — ${l.kind} (${l.id})`, `${l.from} → ${l.to} (${l.targetLabel} not found)`))}

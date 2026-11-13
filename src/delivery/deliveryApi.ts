@@ -15,6 +15,9 @@ import { createCheckpoint, readDeliverySettings, writeDeliverySettings } from '.
 import { detectTargets, readDeployments, runDeployAction, targetViews } from './deploy.js'
 import { ALL_DEPLOY_PLUGINS } from './deployPlugins.js'
 import { deliverySummary } from './summary.js'
+import { ciJobLogs, ciOverview, ciRunDetail, runCiAction } from './ci.js'
+import { addCiStarter } from './ciStarter.js'
+import { ALL_CI_PLUGINS } from './ciPlugins.js'
 import type { RunScope } from './testRunners.js'
 import { runTests, testsOverview } from './testRun.js'
 import { flakyTestKeys, latestRun, readTestRuns } from './testStore.js'
@@ -114,6 +117,57 @@ export function mountDeliveryApi(app: Express) {
 
   app.get('/api/delivery/summary', async (_req, res) => {
     res.json({ ok: true, summary: await deliverySummary(getFsRoot()) })
+  })
+
+  /* ── CI (slice 1 of §13.8): pipelines from the definition
+   * files, runs live from a connected provider or from the
+   * last-seen summary cache (the overview says which), and
+   * the action door — trigger / rerun / cancel — which the
+   * core refuses plainly while no provider is connected. */
+  app.get('/api/delivery/ci', async (_req, res) => {
+    res.json({ ok: true, overview: await ciOverview(getFsRoot(), ALL_CI_PLUGINS) })
+  })
+
+  app.get('/api/delivery/ci/runs/:id', async (req, res) => {
+    const r = await ciRunDetail(getFsRoot(), ALL_CI_PLUGINS, req.params.id)
+    if ('error' in r) return res.status(422).json({ ok: false, error: r.error })
+    return res.json({ ok: true, detail: r.detail })
+  })
+
+  app.get('/api/delivery/ci/logs', async (req, res) => {
+    const job = typeof req.query.job === 'string' ? req.query.job : ''
+    if (!job) return res.status(400).json({ ok: false, error: 'Expected ?job=<job id>.' })
+    const r = await ciJobLogs(getFsRoot(), ALL_CI_PLUGINS, job)
+    if ('error' in r) return res.status(422).json({ ok: false, error: r.error })
+    return res.json({ ok: true, lines: r.lines })
+  })
+
+  app.post('/api/delivery/ci/action', async (req, res) => {
+    const body = (req.body ?? {}) as { action?: string, pipelineId?: string, runId?: string, ref?: string }
+    const root = getFsRoot()
+    if (body.action === 'trigger' && typeof body.pipelineId === 'string') {
+      const r = await runCiAction(root, ALL_CI_PLUGINS, {
+        action: 'trigger', pipelineId: body.pipelineId,
+        ...(typeof body.ref === 'string' && body.ref ? { ref: body.ref } : {}),
+      })
+      if ('error' in r) return res.status(422).json({ ok: false, error: r.error })
+      return res.json({ ok: true })
+    }
+    if ((body.action === 'rerun' || body.action === 'rerun-failed' || body.action === 'cancel') && typeof body.runId === 'string') {
+      const r = await runCiAction(root, ALL_CI_PLUGINS, { action: body.action, runId: body.runId })
+      if ('error' in r) return res.status(422).json({ ok: false, error: r.error })
+      return res.json({ ok: true })
+    }
+    return res.status(400).json({ ok: false, error: 'A CI action needs an action (trigger, rerun, rerun-failed or cancel) with its pipeline or run id.' })
+  })
+
+  /* The starter (§13.8): write a test-on-push workflow file
+   * for the detected stack when the project has none. A
+   * plain project file afterwards — never an overwrite. */
+  app.post('/api/delivery/ci/starter', (_req, res) => {
+    const r = addCiStarter(getFsRoot())
+    if (r.ok === false) return res.status(422).json({ ok: false, error: r.error })
+    return res.json({ ok: true, file: r.file })
   })
 
   /* ── deployment ── */

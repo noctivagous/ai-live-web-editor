@@ -98,6 +98,18 @@ export interface DeploymentRecord {
   url?: string
   deploymentId?: string
   state: 'succeeded' | 'failed'
+  /**
+   * Who made this deployment (§13.8): 'manual' for a deploy
+   * launched from ALE; 'ci' for one a pipeline made, when a
+   * record arrives from a provider's own history carrying
+   * that fact — so "deployed with no one pressing deploy in
+   * ALE" is never misread as a manual release. In v1 every
+   * record ALE writes itself is 'manual': no CI-originated
+   * deploy path exists yet; the field lands now so history
+   * can carry the distinction, and records written before
+   * it have no source (unknown, shown as manual-era).
+   */
+  source?: 'manual' | 'ci'
   note?: string
 }
 
@@ -209,6 +221,9 @@ export async function runDeployAction(
     ...(result.url ? { url: result.url } : {}),
     ...(result.deploymentId ? { deploymentId: result.deploymentId } : {}),
     state: result.ok ? 'succeeded' : 'failed',
+    // Launched from ALE by a person (or the agent for them):
+    // the actor is manual (§13.8) — see the field's note.
+    source: 'manual',
     ...(result.ok ? (result.output ? { note: result.output.slice(0, 300) } : {}) : { note: (result.error ?? 'failed').slice(0, 300) }),
   }
   recordDeployment(root, record)

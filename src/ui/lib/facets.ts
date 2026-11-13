@@ -13,7 +13,7 @@
  * facets are Features, Architecture, Graphic Design (renamed from
  * Styles — a clean rename in code, no migration), Tech Stack,
  * Configuration, and Delivery (§13: what happens to the project —
- * Git, Tests, Deployment — added after the five, in pipeline
+ * Git, Tests, CI, Deployment — added after the five, in pipeline
  * order at the end of the bar).
  */
 
@@ -112,6 +112,7 @@ export const FACETS: FacetDef[] = [
     sections: [
       { id: 'git', title: 'Git' },
       { id: 'tests', title: 'Tests' },
+      { id: 'ci', title: 'CI' },
       { id: 'deployment', title: 'Deployment' },
       ACTIONS, WIZARDS,
     ],

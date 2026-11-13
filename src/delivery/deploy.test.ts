@@ -132,6 +132,9 @@ describe('runDeployAction — the facet rules (§13.5)', () => {
       assert.equal(r.record.state, 'succeeded')
       assert.equal(r.record.url, 'https://one.example.com')
       assert.ok(r.record.commit && r.record.commit.length >= 7)
+      // A deploy launched from ALE records its actor (§13.8):
+      // manual. No CI-originated deploy path exists in v1.
+      assert.equal(r.record.source, 'manual')
     }
     assert.equal(plugin.deployed, 1)
     // Promote needs a recorded deployment to act on.

@@ -1433,7 +1433,7 @@ export interface DeploymentRecordItem {
   id: string, at: string, pluginId: string, targetId: string, targetName: string,
   kind: 'preview' | 'production', action: 'deploy' | 'promote' | 'rollback',
   commit?: string, url?: string, deploymentId?: string,
-  state: 'succeeded' | 'failed', note?: string,
+  state: 'succeeded' | 'failed', source?: 'manual' | 'ci', note?: string,
 }
 export interface DeployTargetViewItem {
   target: DeployTargetItem, pluginLabel: string,
@@ -1456,6 +1456,7 @@ export async function getDeployLogs(targetId: string, recordId?: string) {
 export interface DeliverySummaryItem {
   git: { branch: string | null, changed: number, head: string | null } | null
   tests: { green: boolean, pass: number, fail: number, total: number, at: string } | null
+  ci: { green: boolean, state: string, pipelineName: string, at: string, commit: string } | null
   deploy: { targetName: string, url?: string, at: string, state: string } | null
   deployedCommit: string | null
   upToDate: boolean | null
@@ -1470,4 +1471,66 @@ export async function runDeployActionApi(action: 'deploy' | 'promote' | 'rollbac
     body: JSON.stringify({ action, targetId, kind, recordId }),
   })
   return r.json() as Promise<{ ok: boolean, record?: DeploymentRecordItem, error?: string }>
+}
+
+export interface CiStepDefItem { name?: string, uses?: string, run?: string }
+export interface CiJobDefItem { id: string, name?: string, needs: string[], steps: CiStepDefItem[] }
+export interface CiPipelineItem {
+  id: string, pluginId: string, name: string, file: string,
+  triggers: string[], canDispatch: boolean, jobs: CiJobDefItem[],
+}
+export interface CiProviderViewItem {
+  pluginId: string, label: string, detected: boolean, connect: ConnectStateItem | null,
+}
+export interface CiRunSummaryItem {
+  id: string, pipelineName: string, workflowFile?: string,
+  status: string, conclusion: string | null,
+  branch?: string, commit?: string, event?: string,
+  createdAt: string, updatedAt?: string, durationMs?: number, url?: string,
+}
+export interface CiOverviewItem {
+  pipelines: CiPipelineItem[]
+  providers: CiProviderViewItem[]
+  runs: CiRunSummaryItem[]
+  runsSource: 'live' | 'cache' | 'none'
+  cachedAt?: string
+  secretNames: string[]
+}
+export async function getCiOverview() {
+  const r = await fetch(`${API}/api/delivery/ci`)
+  return r.json() as Promise<{ ok: boolean, overview: CiOverviewItem }>
+}
+export interface CiStepRunItem {
+  number: number, name: string, status: string, conclusion: string | null,
+  startedAt?: string, completedAt?: string,
+}
+export interface CiJobRunItem {
+  id: string, name: string, status: string, conclusion: string | null,
+  startedAt?: string, completedAt?: string, steps: CiStepRunItem[],
+}
+export interface CiRunDetailItem { run: CiRunSummaryItem, jobs: CiJobRunItem[] }
+export async function getCiRunDetail(runId: string) {
+  const r = await fetch(`${API}/api/delivery/ci/runs/${encodeURIComponent(runId)}`)
+  return r.json() as Promise<{ ok: boolean, detail?: CiRunDetailItem, error?: string }>
+}
+export async function getCiJobLogs(jobId: string) {
+  const r = await fetch(`${API}/api/delivery/ci/logs?job=${encodeURIComponent(jobId)}`)
+  return r.json() as Promise<{ ok: boolean, lines?: string[], error?: string }>
+}
+export async function runCiActionApi(
+  action: 'trigger' | 'rerun' | 'rerun-failed' | 'cancel',
+  input: { pipelineId?: string, runId?: string, ref?: string },
+) {
+  const r = await fetch(`${API}/api/delivery/ci/action`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...input }),
+  })
+  return r.json() as Promise<{ ok: boolean, error?: string }>
+}
+export async function addCiStarterApi() {
+  const r = await fetch(`${API}/api/delivery/ci/starter`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  return r.json() as Promise<{ ok: boolean, file?: string, error?: string }>
 }

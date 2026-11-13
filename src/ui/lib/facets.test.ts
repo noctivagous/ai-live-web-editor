@@ -29,10 +29,10 @@ describe('facet registry', () => {
     assert.equal(facetById('graphic-design').title, 'Graphic Design')
   })
 
-  it('delivery sections are the design §13 sections — git, tests, deployment — plus actions and wizards', () => {
+  it('delivery sections are the design §13 sections as §13.8 amends them — git, tests, ci, deployment — plus actions and wizards', () => {
     assert.deepEqual(
       sectionsForFacet('delivery').map(s => s.id),
-      ['git', 'tests', 'deployment', 'actions', 'wizards'],
+      ['git', 'tests', 'ci', 'deployment', 'actions', 'wizards'],
     )
     assert.equal(facetById('delivery').title, 'Delivery')
   })

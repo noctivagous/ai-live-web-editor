@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { deliveryBriefLines } from './deliveryBrief.js'
+import { writeCiSummary } from './ciStore.js'
 import { recordDeployment, type DeploymentRecord } from './deploy.js'
 import { deliverySummary } from './summary.js'
 import { makeRun, recordTestRun } from './testStore.js'
@@ -85,5 +86,28 @@ describe('delivery brief lines — the real providers (§13.6)', () => {
     recordTestRun(dir, makeRun('node-test', { kind: 'all' }, [{ file: 'a.test.js', name: 'bad', status: 'fail' }]))
     const lines = deliveryBriefLines(dir)
     assert.match(lines.find(l => l.startsWith('Tests:'))!, /1 failure of 1/)
+  })
+
+  it('CI on HEAD comes from the recorded summary (§13.8); unknown stays null', async () => {
+    const dir = scratchRepo()
+    let s = await deliverySummary(dir)
+    assert.equal(s.ci, null, 'no recorded CI run — the Overview row reads unknown')
+    writeCiSummary(dir, {
+      updatedAt: new Date().toISOString(), provider: 'github-actions', connected: true,
+      recentRuns: [{
+        id: '9', pipelineName: 'CI', status: 'completed', conclusion: 'failure',
+        branch: 'main', commit: headOf(dir), createdAt: new Date().toISOString(),
+      }],
+    })
+    s = await deliverySummary(dir)
+    assert.equal(s.ci?.green, false)
+    assert.equal(s.ci?.state, 'failure')
+    assert.equal(s.ci?.pipelineName, 'CI')
+    // HEAD moves on: the recorded run no longer speaks for it.
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'two\n')
+    execFileSync('git', ['add', '-A'], { cwd: dir })
+    execFileSync('git', ['commit', '-m', 'second'], { cwd: dir })
+    s = await deliverySummary(dir)
+    assert.equal(s.ci, null)
   })
 })

@@ -1197,3 +1197,32 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
   .st-pin, .st-old{animation:none}
   .st-spin{animation-duration:2.4s}
 }
+
+/* Demo mode (Vercel demo): the banner across the top of the app
+   chrome and the plain notice that replaces server-only surfaces. */
+.demo-banner{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:7px 14px; background:#7c2d12; color:#ffedd5;
+  font-size:calc(12.5px * var(--ui-scale, 1)); line-height:1.4;
+}
+.demo-banner a{ color:#fed7aa; font-weight:600; white-space:nowrap; }
+.demo-banner a:hover{ color:#fff7ed; }
+.demo-notice{
+  border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+  background:var(--panel); color:var(--text); line-height:1.55;
+  font-size:calc(13px * var(--ui-scale, 1));
+}
+.demo-notice p{ margin:0 0 6px; }
+.demo-notice p:last-child{ margin-bottom:0; }
+.demo-offer{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--border);
+  color:var(--text); font-size:calc(12.5px * var(--ui-scale, 1)); line-height:1.45;
+}
+.demo-chat-bar{
+  border-top:1px solid var(--border-soft); padding:8px 10px 2px;
+  display:flex; flex-direction:column; gap:6px;
+}
+.demo-chat-label{ color:var(--faint); font-size:calc(11.5px * var(--ui-scale, 1)); font-weight:600; }
+.demo-chat-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.demo-chat-chips .deck-btn{ white-space:normal; text-align:left; line-height:1.35; }

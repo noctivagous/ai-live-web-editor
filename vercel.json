@@ -1,0 +1,1 @@
+{"buildCommand":"npm run ui:build:demo","framework":null,"outputDirectory":"dist-demo","rewrites":[{"destination":"/index.html","source":"/(.*)"}]}

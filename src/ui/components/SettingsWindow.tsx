@@ -26,6 +26,8 @@ import { FacetsSettingsSection } from './FacetsSettingsSection'
 import { McpSettingsSection } from './McpSettingsSection'
 import { MuseSandboxSection } from './MuseSandboxSection'
 import { MuseRequirementNote } from './MuseRequirementNote'
+import { isDemoMode } from '../lib/demoMode'
+import { DemoNotice } from './DemoBanner'
 
 /* The Settings window: a left rail of sections over one content area.
    Declarative sections render generically from the settings model
@@ -236,7 +238,11 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
           {f.hint && <div className="field-hint">{f.hint}</div>}
         </div>
         <div className="set-row-control">
-          {f.control === 'select' && (
+          {f.control === 'select' && isDemoMode() && f.id === 'chatEngine' ? (
+            <select id={`set-${f.id}`} className="deck-select" value="demo" disabled>
+              <option value="demo">Demo — recorded replays</option>
+            </select>
+          ) : f.control === 'select' && (
             <select id={`set-${f.id}`} className="deck-select" value={v as string} onChange={e => void applyField(f, e.target.value)}>
               {f.options!.map(o => {
                 // The Muse Code engine option carries its
@@ -302,7 +308,11 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
           )}
         </div>
       </div>
-      {f.id === 'chatEngine' && museAvailability !== null && (
+      {f.id === 'chatEngine' && isDemoMode() ? (
+        <div style={{ padding: '10px 0 4px' }}>
+          <DemoNotice what="In the demo, the chat replays recorded turns instead of running an engine. Locally you choose the engine: Muse Code, OpenCode, or the built-in agent." />
+        </div>
+      ) : f.id === 'chatEngine' && museAvailability !== null && (
         <div style={{ padding: '10px 0 4px' }}>
           <MuseRequirementNote availability={museAvailability} onRefresh={refreshMuseAvailability} refreshing={museRefreshing} />
         </div>
@@ -421,6 +431,15 @@ export function SettingsWindow({ initialSection, onClose, config, editorTheme, o
   )
 
   const dataSection = () => {
+    // Demo mode: resetting settings and clearing saved chats act on
+    // a real install's stored data; the demo keeps neither.
+    if (isDemoMode()) {
+      return (
+        <div>
+          <DemoNotice what="Resetting device settings and clearing saved chats aren't part of the demo — there's no stored data here to reset or clear." />
+        </div>
+      )
+    }
     let chatCount = 0
     try { chatCount = chatSessionKeys(Object.keys(globalThis.localStorage)).length } catch { /* no storage */ }
     const doExport = async () => {

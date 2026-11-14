@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { chatStream, clearChatHistory, getConfig, getWorkflow, isAbortError, postWorkflow, type ChatStreamEvent, type ChatWorkflow, type SearchBackendId, type WorkflowSnapshot } from '../lib/api'
 import { groupTurns, looksLikeKeyError, slideTurns, workingSet, type TokenPricing } from '../lib/deck'
+import { isDemoMode } from '../lib/demoMode'
+import { DEMO_REPLAYS, DEMO_REPLAY_LABEL } from '../demo/replays'
 import { DeckMode, TurnStrip, TurnView, WorkingSet } from './Deck'
 import { PanelView } from './Panel'
 import { StationaryView } from './Stationary'
@@ -646,6 +648,18 @@ export function Chat({ activePath, keyKnown, onNeedSetup, onAfterChat, embed, pr
           </div>
           <WorkingSet files={touchedFiles} onOpen={onOpenPath} />
         </>
+      )}
+      {isDemoMode() && (
+        <div className="demo-chat-bar">
+          <div className="demo-chat-label">{DEMO_REPLAY_LABEL}</div>
+          <div className="demo-chat-chips">
+            {DEMO_REPLAYS.map(r => (
+              <button key={r.id} type="button" className="deck-btn" disabled={sending} onClick={() => { void sendTextRef.current(r.prompt) }}>
+                {r.prompt}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
       <ChatComposer
         input={input}

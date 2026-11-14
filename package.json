@@ -17,6 +17,8 @@
     "dev:all": "tsx src/server.ts",
     "ui:dev": "vite --port 3000",
     "ui:build": "vite build",
+    "ui:build:demo": "node scripts/build-demo.mjs",
+    "demo:fixture": "tsx scripts/generate-demo-fixture.ts",
     "ui:preview": "vite preview",
     "install:browser": "npx playwright install chromium",
     "install:all": "npm install && cd projects/lumen && npm install"

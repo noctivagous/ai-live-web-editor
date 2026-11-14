@@ -59,6 +59,8 @@ import {
   type LauncherConfig, type ProjectInfo, type ProjectSetupInfo, type ConnectionsPayload,
 } from './lib/api'
 import { pushAppSettings } from './lib/appSettingsSync'
+import { isDemoMode, enterDemoMode, DEMO_LOCAL_NOTE } from './lib/demoMode'
+import { DemoBanner } from './components/DemoBanner'
 
 function connTone(status: string): string {
   if (status.startsWith('real FS:')) return 'good'
@@ -312,6 +314,21 @@ export default function App() {
     } catch { /* non-DOM test env */ }
   }, [uiPrefsState.menuDescriptions])
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE_KEY) === SETUP_DONE_VALUE)
+  // Server-absence fallback (demo mode): when the editor server
+  // doesn't answer its health route at all — a static host, a
+  // stopped launcher — offer the in-browser demo instead of
+  // leaving a dead app. Dismissible; entering reloads into demo
+  // mode via the stored flag (lib/demoMode).
+  const [serverDown, setServerDown] = useState(false)
+  const [demoOfferDismissed, setDemoOfferDismissed] = useState(false)
+  useEffect(() => {
+    if (isDemoMode()) return
+    let live = true
+    fetch('/api/fs/health')
+      .then(r => { if (!r.ok) throw new Error(`health ${r.status}`) })
+      .catch(() => { if (live) setServerDown(true) })
+    return () => { live = false }
+  }, [])
   // App settings converge on boot: the server's SQLite store is the
   // source of truth and overwrites this browser's cache. No migration:
   // an empty server leaves local settings alone, and the first save
@@ -684,6 +701,7 @@ export default function App() {
   }
 
   async function handleNewProject() {
+    if (isDemoMode()) { setNotice(DEMO_LOCAL_NOTE); return }
     const name = prompt('New project name (letters, numbers, dash, underscore)')
     if (!name) return
     setStatus(`creating ${name}…`)
@@ -734,6 +752,7 @@ export default function App() {
   }
 
   async function handleOpenFolder() {
+    if (isDemoMode()) { setNotice(DEMO_LOCAL_NOTE); return }
     if (!isFolderImportSupported()) {
       setNotice('Opening a folder needs Chrome, Edge, or Opera on desktop (the File System Access picker is Chromium-only). Alternatives: run this editor inside your own app directory (Vite-plugin path), or copy the folder into projects/ by hand.')
       return
@@ -836,6 +855,7 @@ export default function App() {
 
   /* Folder sync (Open): pick with readwrite, copy in, then stay synced. */
   async function handleOpenSync() {
+    if (isDemoMode()) { setNotice(DEMO_LOCAL_NOTE); return }
     if (!isFolderImportSupported()) {
       setNotice('Live sync needs Chrome, Edge, or Opera on desktop (the File System Access picker is Chromium-only). Alternatives: run this editor inside your own app directory (Vite-plugin path), or use Import for a copy.')
       return
@@ -1191,6 +1211,10 @@ export default function App() {
   }, [syncSession, activeProject, importProg, overLimit, syncConflicts])
 
   useEffect(() => {
+    // Demo mode has no server to stream from; the fixture transport
+    // answers fetches, but an EventSource would retry against the
+    // static host forever.
+    if (isDemoMode()) return
     const es = new EventSource('/api/projects/events')
     es.onmessage = () => { void loadProjects() }
     return () => es.close()
@@ -1201,6 +1225,7 @@ export default function App() {
   // wizard renders with its completion id so finishing or
   // cancelling reports back to the waiting tool call.
   useEffect(() => {
+    if (isDemoMode()) return
     const es = new EventSource('/api/wizards/events')
     es.addEventListener('wizard-open', (e) => {
       try {
@@ -1312,7 +1337,15 @@ export default function App() {
 
   return (
     <div className="deck-app">
-      {!setupDone && <SetupWizard onDone={finishSetup} />}
+      <DemoBanner />
+      {!isDemoMode() && serverDown && !demoOfferDismissed && (
+        <div className="demo-offer" role="note">
+          <span>The editor server isn't answering — ALE normally runs on your own machine, with the server holding your projects. You can look around the demo instead: a sample project that runs entirely in your browser.</span>
+          <button type="button" className="deck-btn" onClick={() => { enterDemoMode(); window.location.reload() }}>Enter demo mode</button>
+          <button type="button" className="deck-btn" onClick={() => setDemoOfferDismissed(true)}>Dismiss</button>
+        </div>
+      )}
+      {!setupDone && !isDemoMode() && <SetupWizard onDone={finishSetup} />}
 
       {uiPrefsState.headerBar !== 'buttons' && (
         <MenuStrip
@@ -1748,7 +1781,7 @@ export default function App() {
               setup={projects.find(p => p.id === activeProject)?.setup}
               startPage={startPage}
               files={files}
-              hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
+              hmrUrl={isDemoMode() ? 'preview/' : (config?.previewHmrUrl || 'http://localhost:5173')}
               collapsed={collapse.preview}
               onToggleCollapse={() => toggleCollapse('preview')}
               onMaximize={() => expandOnly('preview')}
@@ -1777,7 +1810,7 @@ export default function App() {
                   setup={projects.find(p => p.id === activeProject)?.setup}
                   startPage={startPage}
                   files={files}
-                  hmrUrl={config?.previewHmrUrl || 'http://localhost:5173'}
+                  hmrUrl={isDemoMode() ? 'preview/' : (config?.previewHmrUrl || 'http://localhost:5173')}
                   onChanged={() => { void loadProjects(); loadFiles(); setTimeout(() => loadFile(activePath), 500) }}
                   onResult={setNotice}
                 />

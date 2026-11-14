@@ -30,3 +30,4 @@ projects/*/project.ai.json
 # Self mode (§L): the repo-as-workspace manifest + snapshot state stay local
 /project.ai.json
 .ai-live/
+dist-demo/

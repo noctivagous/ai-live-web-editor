@@ -8,6 +8,8 @@ import {
   museRunConfig, resolveSandboxPosture, type SandboxPosture,
 } from '../lib/museSandbox'
 import { MuseRequirementNote } from './MuseRequirementNote'
+import { isDemoMode } from '../lib/demoMode'
+import { DemoNotice } from './DemoBanner'
 
 /**
  * The Muse Code sandbox surface (Muse Code design §5.2): one
@@ -72,6 +74,7 @@ export function MuseSandboxSection() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (isDemoMode()) return
     let live = true
     void getMuseCodeHealth().then(h => {
       if (!live) return
@@ -122,6 +125,14 @@ export function MuseSandboxSection() {
         : probe.state === 'sandbox-failed'
           ? { state: 'bad' as const, detail: probe.detail }
           : { state: 'wait' as const, detail: probe.detail }
+
+  if (isDemoMode()) {
+    return (
+      <div>
+        <DemoNotice what="Sandbox postures control what Muse Code may do on your machine, so they aren't part of the demo." />
+      </div>
+    )
+  }
 
   return (
     <div>

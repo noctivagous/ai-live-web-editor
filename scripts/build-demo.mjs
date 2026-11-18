@@ -64,9 +64,11 @@ try {
   fs.rmSync(demoConfigPath, { force: true })
 }
 
-// Cloudflare Pages has no vercel.json rewrites: give dist-demo the
-// SPA fallback as a _redirects file (inert on Vercel and elsewhere).
-fs.writeFileSync(path.join(distDemo, '_redirects'), '/* /index.html 200\n')
+// SPA fallback on Cloudflare comes from the host config, NOT a
+// _redirects file: Workers static assets rejects the Pages-style
+// `/* /index.html 200` at publish time as an infinite loop (100324) —
+// wrangler.jsonc's not_found_handling covers the Workers route, and
+// vercel.json's rewrite covers Vercel.
 
 const kb = (p) => (fs.statSync(p).size / 1024).toFixed(0)
 console.log(`\ndist-demo ready: index.html ${kb(path.join(distDemo, 'index.html'))} KB, preview/index.html ${kb(path.join(distDemo, 'preview', 'index.html'))} KB`)

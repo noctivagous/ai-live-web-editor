@@ -1250,6 +1250,23 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
 }
 .demo-banner a{ color:#fed7aa; font-weight:600; white-space:nowrap; }
 .demo-banner a:hover{ color:#fff7ed; }
+.demo-banner-btn{ background:none; border:none; padding:0; font:inherit; color:#fed7aa; font-weight:600; white-space:nowrap; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.demo-banner-btn:hover{ color:#fff7ed; }
+/* The demo Welcome: the demo's front door — one sectioned screen,
+   shown once, re-openable from Help and the banner. */
+.demo-welcome-overlay{ position:fixed; inset:0; background:var(--overlay-bg); display:flex; align-items:center; justify-content:center; z-index:70; padding:22px; }
+.demo-welcome{ background:var(--panel-bg); border:1px solid var(--border); border-radius:12px; width:100%; max-width:900px; max-height:88vh; overflow-y:auto; padding:20px 22px; box-shadow:var(--button-shadow); }
+.dw-head{ display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; }
+.dw-head > div{ flex:1; min-width:0; }
+.dw-head b{ display:block; font-size:calc(19px * var(--ui-scale, 1)); color:var(--text-strong); }
+.dw-head span{ display:block; font-size:calc(12.5px * var(--ui-scale, 1)); color:var(--text-soft); margin-top:3px; }
+.dw-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:10px; }
+.dw-sec{ background:var(--card); border:1px solid var(--border-soft); border-radius:9px; padding:11px 13px; }
+.dw-sec h3{ margin:0 0 5px; font-size:calc(13.5px * var(--ui-scale, 1)); color:var(--text-strong); }
+.dw-sec p{ margin:0; font-size:calc(12.5px * var(--ui-scale, 1)); line-height:1.55; color:var(--text); }
+.dw-actions{ display:flex; gap:7px; flex-wrap:wrap; margin-top:9px; }
+.dw-link{ text-decoration:none; display:inline-flex; align-items:center; }
+.dw-foot{ display:flex; justify-content:flex-end; margin-top:14px; }
 .demo-notice{
   border:1px solid var(--border); border-radius:10px; padding:12px 14px;
   background:var(--panel); color:var(--text); line-height:1.55;

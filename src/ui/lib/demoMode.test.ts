@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectDemoMode, DEMO_HOSTS, type DemoModeSources } from './demoMode'
+import { detectDemoMode, DEMO_HOSTS, DEMO_WELCOME_OPEN_EVENT, DEMO_WELCOME_SEEN_KEY, demoWelcomeSeen, markDemoWelcomeSeen, openDemoWelcome, type DemoModeSources } from './demoMode'
 
 const base: DemoModeSources = { envFlag: false, hostname: 'localhost', search: '', storedFlag: false }
 const on = (patch: Partial<DemoModeSources>) => detectDemoMode({ ...base, ...patch })
@@ -37,5 +37,20 @@ describe('demoMode detection matrix', () => {
 
   it('the stored offer flag turns it on', () => {
     assert.equal(on({ storedFlag: true }), true)
+  })
+})
+
+describe('demo Welcome seen flag', () => {
+  it('has a stable key and event name', () => {
+    assert.equal(DEMO_WELCOME_SEEN_KEY, 'ai-live-editor.demoWelcomeSeen')
+    assert.equal(DEMO_WELCOME_OPEN_EVENT, 'ai-live:open-demo-welcome')
+  })
+
+  it('without storage, the Welcome reads as unseen and marking it never throws', () => {
+    // The node test env has no localStorage: the helpers must
+    // degrade to "show it" rather than crash the app shell.
+    assert.equal(demoWelcomeSeen(), false)
+    assert.doesNotThrow(() => markDemoWelcomeSeen())
+    assert.doesNotThrow(() => openDemoWelcome())
   })
 })

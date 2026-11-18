@@ -59,8 +59,9 @@ import {
   type LauncherConfig, type ProjectInfo, type ProjectSetupInfo, type ConnectionsPayload,
 } from './lib/api'
 import { pushAppSettings } from './lib/appSettingsSync'
-import { isDemoMode, enterDemoMode, DEMO_LOCAL_NOTE } from './lib/demoMode'
+import { isDemoMode, enterDemoMode, openDemoWelcome, DEMO_LOCAL_NOTE } from './lib/demoMode'
 import { DemoBanner } from './components/DemoBanner'
+import { DemoWelcome } from './components/DemoWelcome'
 
 function connTone(status: string): string {
   if (status.startsWith('real FS:')) return 'good'
@@ -218,6 +219,15 @@ export default function App() {
     }
     window.addEventListener('ai-live:plan-open', onPlanOpen)
     return () => window.removeEventListener('ai-live:plan-open', onPlanOpen)
+  }, [])
+  // The demo Welcome's "Browse the wizards" exit: it asks for the
+  // Wizards menu the same way other surfaces ask for the graph
+  // and the planner — an event, answered here where the menu
+  // state lives.
+  useEffect(() => {
+    const onOpenWizards = () => setWizardsMenuOpen(true)
+    window.addEventListener('ai-live:open-wizards', onOpenWizards)
+    return () => window.removeEventListener('ai-live:open-wizards', onOpenWizards)
   }, [])
   useEffect(() => {
     if (!settingsMenuOpen) return
@@ -1338,6 +1348,7 @@ export default function App() {
   return (
     <div className="deck-app">
       <DemoBanner />
+      <DemoWelcome projectName={projects.find(p => p.id === activeProject)?.root.split('/').filter(Boolean).pop() ?? activeProject} />
       {!isDemoMode() && serverDown && !demoOfferDismissed && (
         <div className="demo-offer" role="note">
           <span>The editor server isn't answering — ALE normally runs on your own machine, with the server holding your projects. You can look around the demo instead: a sample project that runs entirely in your browser.</span>
@@ -1562,6 +1573,19 @@ export default function App() {
             <button className="deck-btn" onClick={() => { setSettingsMenuOpen(false); setActionsMenuOpen(false); setWizardsMenuOpen(false); setInsertOpen(false); setProjectOpen(false); setProjectMenuOpen(false); setHelpOpen(o => !o) }} title="Help — search, shortcuts, about" aria-haspopup="menu" aria-expanded={helpOpen}><HelpIcon size={13} />Help<CaretIcon size={11} aria-hidden className="deck-caret" /></button>
             {helpOpen && (
               <div className={rightPopClass} role="menu" aria-label="Help">
+                {isDemoMode() && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ms-row"
+                    onClick={() => { setHelpOpen(false); openDemoWelcome() }}
+                  >
+                    <span className="ms-row-main">
+                      <span className="ms-row-title">Welcome to the demo…</span>
+                      <span className="ms-row-sub">What ALE is, how it works, and what to try first</span>
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"

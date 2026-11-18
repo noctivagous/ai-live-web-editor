@@ -25,6 +25,25 @@
 
 export const DEMO_FLAG_KEY = 'ale-demo-mode'
 
+/** The demo Welcome's seen flag: the introduction shows once per
+ * browser, and re-opens on request (the Help menu, the banner)
+ * through the open event below — never by nagging. */
+export const DEMO_WELCOME_SEEN_KEY = 'ai-live-editor.demoWelcomeSeen'
+export const DEMO_WELCOME_OPEN_EVENT = 'ai-live:open-demo-welcome'
+
+export function demoWelcomeSeen(): boolean {
+  try { return localStorage.getItem(DEMO_WELCOME_SEEN_KEY) === 'v1' } catch { return false }
+}
+
+export function markDemoWelcomeSeen(): void {
+  try { localStorage.setItem(DEMO_WELCOME_SEEN_KEY, 'v1') } catch { /* storage unavailable: it will simply show again */ }
+}
+
+/** Ask the mounted DemoWelcome to open (Help menu, demo banner). */
+export function openDemoWelcome(): void {
+  try { window.dispatchEvent(new CustomEvent(DEMO_WELCOME_OPEN_EVENT)) } catch { /* non-DOM env */ }
+}
+
 export const DEMO_REPO_URL = 'https://github.com/noctivagous/ai-live-web-editor'
 
 /** Hosts that always mean "this is the public demo". The

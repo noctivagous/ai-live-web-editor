@@ -8,6 +8,7 @@ import { FACET_IDS, FACET_TITLES, formatRoute, type AppLayout, type FacetId } fr
 import { SETTING_SECTIONS } from '../lib/settingsSchema'
 import { UI_THEMES, type UiThemeId } from '../lib/themes'
 import { facetEnabled } from '../lib/facetPrefs'
+import { isDemoMode, openDemoWelcome } from '../lib/demoMode'
 import { loadUiPrefs, type HeaderBarPref, type MenuLayoutPref } from '../lib/uiPrefs'
 import { AgentActionsMenu } from './AgentActionsMenu'
 import { WizardsMenu } from './WizardsMenu'
@@ -299,6 +300,7 @@ export function MenuStrip(props: MenuStripProps) {
       case 'Help':
         return (
           <div className={cls} role="menu" aria-label="Help">
+            {isDemoMode() && itemRow({ title: 'Welcome to the demo…', sub: 'What ALE is, how it works, and what to try first', run: () => openDemoWelcome() })}
             {itemRow({ title: 'Search all actions…', sub: 'Every Agent Action, by name', tag: '⌘K', run: props.onOpenCmdk })}
             {itemRow({ title: 'Keyboard shortcuts', sub: 'The shortcut registry, in Settings', run: () => props.onOpenSettings('shortcuts') })}
             <div className="ms-sep" />

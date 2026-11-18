@@ -1,4 +1,4 @@
-import { DEMO_LOCAL_NOTE, DEMO_REPO_URL, isDemoMode } from '../lib/demoMode'
+import { DEMO_LOCAL_NOTE, DEMO_REPO_URL, isDemoMode, openDemoWelcome } from '../lib/demoMode'
 
 /**
  * The demo banner: one line at the top of the app chrome, always
@@ -13,6 +13,7 @@ export function DemoBanner() {
       <span>
         <b>Demo mode</b> — a sample project (Lumen) running entirely in your browser. Nothing here touches a real project or server.
       </span>
+      <button type="button" className="demo-banner-btn" onClick={() => openDemoWelcome()}>About this demo</button>
       <a href={DEMO_REPO_URL} target="_blank" rel="noreferrer">Install ALE locally to edit your own code →</a>
     </div>
   )

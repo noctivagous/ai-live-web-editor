@@ -411,8 +411,8 @@ select.pill:disabled{cursor:default; opacity:.7}
    .seg, with separators between segments.
    Control sizes (apply .ctl-xs … .ctl-xl to .seg or .segf; no size
    class keeps the current small look): */
-.segf { display:inline-flex; background:var(--seg-bg); box-shadow:var(--seg-shadow); border:1px solid var(--border); border-radius:0; overflow:hidden; flex-shrink:0; }
-.segf button { background:transparent; border:0; border-right:1px solid var(--border); color:var(--muted); font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit; }
+.segf { display:inline-flex; flex-wrap:wrap; background:var(--seg-bg); box-shadow:var(--seg-shadow); border:1px solid var(--border); border-radius:0; overflow:hidden; flex-shrink:1; min-width:0; }
+.segf button { background:transparent; border:0; border-right:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:-1px; color:var(--muted); font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit; }
 .segf button:last-child { border-right:0; }
 .segf button svg { flex-shrink:0; }
 .segf button.on { background:var(--button-bg-primary); color:var(--on-primary); }

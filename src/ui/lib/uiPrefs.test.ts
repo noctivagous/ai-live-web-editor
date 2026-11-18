@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { loadUiPrefs, replaceUiPrefs, saveUiPrefs, validateUiPrefs, UI_PREFS_DEFAULTS } from './uiPrefs.js'
+import { freshUiPrefs, loadUiPrefs, replaceUiPrefs, saveUiPrefs, validateUiPrefs, DEMO_DEFAULT_UI_THEME, UI_PREFS_DEFAULTS } from './uiPrefs.js'
 
 function fakeStore(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial))
@@ -129,5 +129,23 @@ describe('uiPrefs shortcut overrides', () => {
     assert.deepEqual(p.shortcutOverrides, { fileRename: 'f4' })
     assert.deepEqual(validateUiPrefs({}).shortcutOverrides, {})
     assert.deepEqual(validateUiPrefs({ shortcutOverrides: 'nope' }).shortcutOverrides, {})
+  })
+})
+
+describe('uiPrefs demo default theme', () => {
+  it('fresh prefs outside demo mode are the plain defaults', () => {
+    assert.deepEqual(freshUiPrefs(false), UI_PREFS_DEFAULTS)
+  })
+
+  it('fresh prefs in demo mode default to Dark Pro Classic, nothing else changed', () => {
+    const p = freshUiPrefs(true)
+    assert.equal(DEMO_DEFAULT_UI_THEME, 'dark-pro-classic')
+    assert.equal(p.uiTheme, 'dark-pro-classic')
+    assert.deepEqual({ ...p, uiTheme: UI_PREFS_DEFAULTS.uiTheme }, UI_PREFS_DEFAULTS)
+  })
+
+  it('a stored theme still wins: loadUiPrefs validates the record, not the demo default', () => {
+    const store = fakeStore({ 'ai-live-editor.uiPrefs': JSON.stringify({ uiTheme: 'light-gray-2020s' }) })
+    assert.equal(loadUiPrefs(store).uiTheme, 'light-gray-2020s')
   })
 })

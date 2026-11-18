@@ -14,6 +14,7 @@ import type { ProjectFacetId } from './facets'
 import { DEFAULT_SANDBOX_POSTURE, sanitizeSandboxPosture, type SandboxPosture } from './museSandbox'
 import { sanitizeOverrides } from './shortcuts'
 import { isUiThemeId, UI_FONT_SIZE_DEFAULT, UI_FONT_SIZE_MAX, UI_FONT_SIZE_MIN, type UiThemeId } from './themes'
+import { isDemoMode } from './demoMode'
 
 /** Best-effort server push (dynamic import keeps this module — and the
  * server store built on it — free of the fetch layer at load time). */
@@ -155,14 +156,25 @@ export function validateUiPrefs(value: unknown): UiPrefs {
   }
 }
 
+/** The demo's first-visit theme: the public demo opens in Dark Pro
+ * Classic. Only the fresh-visitor default changes — a stored pref
+ * (the visitor's own choice in Settings) always wins. */
+export const DEMO_DEFAULT_UI_THEME: UiThemeId = 'dark-pro-classic'
+
+/** Defaults for a visitor with nothing stored. In demo mode the
+ * theme default is the demo's; everything else is unchanged. */
+export function freshUiPrefs(demo: boolean = isDemoMode()): UiPrefs {
+  return demo ? { ...UI_PREFS_DEFAULTS, uiTheme: DEMO_DEFAULT_UI_THEME } : { ...UI_PREFS_DEFAULTS }
+}
+
 export function loadUiPrefs(store: Store | null = defaultStore()): UiPrefs {
-  if (!store) return { ...UI_PREFS_DEFAULTS }
+  if (!store) return freshUiPrefs()
   try {
     const raw = store.getItem(KEY)
-    if (!raw) return { ...UI_PREFS_DEFAULTS }
+    if (!raw) return freshUiPrefs()
     return validateUiPrefs(JSON.parse(raw))
   } catch {
-    return { ...UI_PREFS_DEFAULTS }
+    return freshUiPrefs()
   }
 }
 

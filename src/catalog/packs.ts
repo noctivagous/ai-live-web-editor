@@ -104,6 +104,9 @@ export interface PackSummary {
   nodes: number
   settings: number
   configures: string[]
+  /** The scenario the pack belongs to, when it declares one —
+   * the Features facet groups its pack list by it. */
+  scenario?: string
 }
 
 const CATALOG_DIR = path.join(
@@ -147,6 +150,7 @@ export function packSummary(pack: FeaturePack): PackSummary {
     nodes: pack.nodes.length,
     settings: pack.nodes.filter(n => n.kind === 'setting').length,
     configures: pack.externalLinks.filter(l => l.type === 'configures').map(l => l.role),
+    ...(pack.scenario ? { scenario: pack.scenario } : {}),
   }
 }
 

@@ -977,6 +977,7 @@ export interface PackSummaryItem {
   nodes: number
   settings: number
   configures: string[]
+  scenario?: string
 }
 
 export interface DesignPackSummaryItem {

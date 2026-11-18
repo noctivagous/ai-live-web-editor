@@ -1041,6 +1041,49 @@ button.ft-mark-icon { background: none; border: none; cursor: pointer; padding: 
 .facet-next { margin-top: 9px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--accent-soft-text); background: var(--accent-soft-bg); border: 1px solid var(--accent-soft-border); border-radius: 8px; padding: 8px 11px; }
 .facet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
 .facet-grid .aa-card { height: 100%; box-sizing: border-box; }
+/* Facet screen layout (design integration): header + suggested
+   next step, then a main column of section cards and a right rail
+   carrying the facet's Actions and Wizards. */
+.facet-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; margin-top: 10px; }
+@media (max-width: 980px) { .facet-layout { grid-template-columns: minmax(0, 1fr); } }
+.facet-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.facet-rail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.facet-card { background: var(--panel-bg); border: 1px solid var(--border-soft); border-radius: var(--radius-panel); padding: 10px 12px 12px; box-shadow: var(--button-shadow); }
+.facet-card > .aa-group:first-child { margin-top: 0; }
+.facet-rail .facet-card { padding-bottom: 10px; }
+.facet-rail-cards { display: flex; flex-direction: column; gap: 6px; }
+.facet-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--faint); }
+.facet-dot.st-ok { background: var(--green); }
+.facet-dot.st-drift { background: var(--amber); }
+.facet-dot.st-none { background: var(--faint); opacity: 0.55; }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 8px; }
+.ov-card { text-align: left; background: var(--card); border: 1px solid var(--border-soft); border-radius: 9px; padding: 9px 11px; color: var(--text); font-family: inherit; display: flex; flex-direction: column; gap: 3px; }
+.ov-card b { font-size: calc(13px * var(--ui-scale, 1)); font-weight: 600; color: var(--text-strong); display: flex; align-items: center; }
+.ov-card span { font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-soft); line-height: 1.4; flex: 1; }
+.ov-card .wiz-btn { align-self: flex-start; margin-top: 5px; }
+.facet-areas { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.facet-area { background: var(--card); border: 1px solid var(--border-soft); color: var(--text-soft); border-radius: 999px; padding: 3px 11px; font-size: calc(12px * var(--ui-scale, 1)); cursor: pointer; font-family: inherit; }
+.facet-area:hover { background: var(--card-hover); color: var(--text-strong); }
+.facet-area.on { background: var(--button-bg-primary); color: var(--on-primary); border-color: var(--accent-soft-border); font-weight: 600; }
+.fs-table { width: 100%; border-collapse: collapse; font-size: calc(12.5px * var(--ui-scale, 1)); }
+.fs-table th { text-align: left; font-size: calc(10.5px * var(--ui-scale, 1)); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-soft); font-weight: 700; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border-soft); }
+.fs-table td { padding: 4px 8px 4px 0; color: var(--text); border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+.fs-table tr:last-child td { border-bottom: none; }
+.fs-table tr.flag td { color: var(--amber-text); }
+.feat-region { margin-top: 8px; }
+.feat-region:first-of-type { margin-top: 2px; }
+.feat-nodes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.feat-node { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border-soft); border-radius: 999px; padding: 2px 9px; font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--text); }
+.feat-node i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+.feat-node i.done, .feat-node i.verified { background: var(--green); }
+.feat-node i.building { background: var(--blue); }
+.feat-node i.blocked { background: var(--red); }
+.feat-node i.planned, .feat-node i.proposed { background: var(--amber); }
+.feat-node em { font-style: normal; color: var(--text-soft); }
+.fs-pack > .pack-state { flex: 0 0 auto; }
+.pack-state { font-size: calc(10.5px * var(--ui-scale, 1)); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 99px; padding: 1px 8px; border: 1px solid var(--border-strong); color: var(--text-soft); white-space: nowrap; }
+.pack-state.installed { color: var(--green-text); border-color: var(--green); }
+.pack-state.available { color: var(--accent-soft-text); border-color: var(--accent-soft-border); }
 .set-overlay { position: fixed; inset: 0; background: var(--overlay-bg); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
 .set-window { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 980px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
 .set-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border-soft); }

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import {
   addCrossLink as apiAddCrossLink, applyDesignPack, askAi, deriveDesignGraph, followArchPack, getArchPacks, getArchitecture, getCatalog, getConfigInventory, getCrossLinks, getDeliverySummary, getDesignGraph, getDesignGuide, getDesignPacks, getFeatures, getProjectConfig, getTechStack, mapDesignImport, planArchPack, previewArchPack, previewDesignPack, removeCrossLink as apiRemoveCrossLink, saveDesignGuide, setDesignTokenValue,
   type ArchitectureDeclarationItem, type ArchitectureReportItem, type ArchPackItem, type ConfigInventoryItem, type CrossLinkItem, type DeliverySummaryItem, type DesignImportMappingItem, type DesignPackItem, type TechStackItem,
-  type DesignGraphItem, type DesignGuideItem, type DesignReportItem, type FeatureGraphItem, type FeatureRollup, type PackSummaryItem, type ProjectConfig,
+  type DesignGraphItem, type DesignGuideItem, type DesignReportItem, type FeatureGraphItem, type FeatureNodeItem, type FeatureRollup, type PackSummaryItem, type ProjectConfig,
 } from '../lib/api'
 import {
   actionAvailability, actionsForFacet, AGENT_ACTIONS,
@@ -72,6 +72,10 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
   onOpenLibrary: () => void
 }) {
   const [data, setData] = useState<FacetData | null>(null)
+  // Graphic Design shows one area at a time (design: the facet's
+  // area list switches the visible area instead of stacking all
+  // nine sections down one long column).
+  const [gdArea, setGdArea] = useState<string>('guide')
   // Facet on/off state (design §10): a device-scope pref. App
   // re-renders this view when the prefs change (it listens for
   // UI_PREFS_CHANGED_EVENT), so reading the prefs in the render
@@ -168,45 +172,94 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
     if (!data) return <div className="ap-empty">Loading…</div>
     if (facet === 'features') {
       const r = data.rollup?.overall
+      const nodes = data.graph?.nodes ?? []
+      const regions = nodes.filter(n => n.kind === 'region')
+      const orphans = nodes.filter(n => n.kind !== 'region' && !n.parent)
+      const regionRollup = (id: string) => data.rollup?.regions.find(x => x.node.id === id)?.rollup
+      const chip = (n: FeatureNodeItem) => (
+        <span
+          className="feat-node"
+          key={n.id}
+          title={`${n.name} — ${n.status}${n.component ? ` · component ${n.component}` : ''}${n.pack ? ` · from the ${n.pack} pack` : ''}`}
+        >
+          <i className={n.status} />{n.name}
+          {n.component && <em>{n.component}</em>}
+        </span>
+      )
+      const packGroups = new Map<string, PackSummaryItem[]>()
+      for (const p of data.packs) {
+        const key = p.scenario ?? 'General'
+        packGroups.set(key, [...(packGroups.get(key) ?? []), p])
+      }
       return (
         <>
           {secOn('graph') && (
-            <>
+            <section className="facet-card">
+              <div className="aa-group">Feature graph</div>
               {data.graph && r ? (
                 <>
-                  {row('Feature graph', `${r.pct}% built — ${r.built} of ${r.total} nodes done${r.blocked ? `, ${r.blocked} blocked` : ''}`)}
-                  {data.rollup!.regions.map(({ node, rollup }) => row(node.name, `${rollup.pct}% · ${rollup.built}/${rollup.total}`))}
+                  {row('Built', `${r.pct}% — ${r.built} of ${r.total} nodes done${r.blocked ? `, ${r.blocked} blocked` : ''}`)}
+                  {regions.map(region => {
+                    const rr = regionRollup(region.id)
+                    return (
+                      <div className="feat-region" key={region.id}>
+                        <div className="fs-row"><span>{region.name}</span><b>{rr ? `${rr.pct}% · ${rr.built}/${rr.total}` : ''}</b></div>
+                        <div className="feat-nodes">{nodes.filter(n => n.parent === region.id).map(chip)}</div>
+                      </div>
+                    )
+                  })}
+                  {orphans.length > 0 && (
+                    <div className="feat-region">
+                      <div className="fs-row"><span>Not in a region</span><b>{orphans.length} node{orphans.length === 1 ? '' : 's'}</b></div>
+                      <div className="feat-nodes">{orphans.map(chip)}</div>
+                    </div>
+                  )}
                 </>
               ) : row('Feature graph', 'None yet — install a feature pack and the graph starts')}
               <div style={{ display: 'flex', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
                 <button type="button" className="wiz-btn" onClick={() => window.dispatchEvent(new CustomEvent('ai-live:graph-open', {}))}>Open the feature graph</button>
               </div>
-            </>
+            </section>
           )}
           {secOn('packs') && (
             <>
-              <div className="aa-group">Feature packs</div>
-              {row('Packs installed', installedPacks.size > 0 ? [...installedPacks].join(', ') : 'None')}
-              <div style={{ display: 'flex', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
-                <button type="button" className="wiz-btn primary" onClick={() => onOpenWizard('add-feature')}>Add a Feature…</button>
-              </div>
-              {data.packs.filter(p => !installedPacks.has(p.id)).length > 0 && (
-                <>
-                  <div className="aa-group">Available to add</div>
-                  {data.packs.filter(p => !installedPacks.has(p.id)).map(p => (
-                    <div className="fs-pack" key={p.id}>
-                      <span><b>{p.name}</b> — {p.nodes} nodes · {p.settings} settings</span>
-                      <button type="button" className="wiz-btn" onClick={() => onOpenWizard('add-feature')}>Add…</button>
-                    </div>
-                  ))}
-                </>
-              )}
+              <section className="facet-card">
+                <div className="aa-group">Add a Feature</div>
+                <div className="fs-row"><span>Quick add</span><b>Add a pack on the spot — the agent installs it and reports back.</b></div>
+                <div className="fs-row"><span>Plan it first</span><b>Questions first, then a written plan you approve before anything is built.</b></div>
+                <div style={{ display: 'flex', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="wiz-btn primary" onClick={() => onOpenWizard('add-feature')}>Add a Feature…</button>
+                </div>
+                <div className="field-hint">Both depths start by picking a pack; the wizard offers the depth for the pack you pick.</div>
+              </section>
+              <section className="facet-card">
+                <div className="aa-group">Feature packs</div>
+                {[...packGroups.entries()].map(([scenario, packs]) => (
+                  <div key={scenario}>
+                    {packGroups.size > 1 && <div className="aa-group">{scenario}</div>}
+                    {packs.map(p => {
+                      const installed = installedPacks.has(p.id)
+                      const pending = (data.graph?.pendingLinks ?? []).filter(l => l.pack === p.id).length
+                      return (
+                        <div className="fs-pack" key={p.id}>
+                          <span><b>{p.name}</b> — {p.description} · {p.nodes} nodes · {p.settings} settings{pending ? ` · ${pending} link${pending === 1 ? '' : 's'} waiting` : ''}</span>
+                          <span className={`pack-state ${installed ? 'installed' : 'available'}`}>{installed ? 'Installed' : 'Available'}</span>
+                          {!installed && <button type="button" className="wiz-btn" onClick={() => onOpenWizard('add-feature')}>Add…</button>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+                {!data.packs.length && row('Feature packs', 'The catalog has no packs for this project yet')}
+              </section>
             </>
           )}
-          <CrossLinksSection
-            links={data.links}
-            onChanged={links => setData(d => (d ? { ...d, links } : d))}
-          />
+          <section className="facet-card">
+            <CrossLinksSection
+              links={data.links}
+              onChanged={links => setData(d => (d ? { ...d, links } : d))}
+            />
+          </section>
         </>
       )
     }
@@ -220,7 +273,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
       return (
         <>
           {secOn('state') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Current state</div>
               {row('Project type', c?.type ?? 'Not designated yet')}
               {row('Architecture', decl ? (decl.name ?? 'Declared') : 'Not designated — the plan packs below are a starting point')}
@@ -229,43 +282,45 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
               <div style={{ marginTop: 10 }}>
                 <button type="button" className="wiz-btn" onClick={() => onOpenSettings('project')}>Project settings…</button>
               </div>
-            </>
+            </section>
           )}
           {secOn('plan') && decl && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Architecture plan</div>
               {decl.layers.length ? row('Layers', decl.layers.join(' → ')) : null}
               {decl.modules.map(m => row(`Module — ${m.name}`, `${m.path}${m.responsibility ? ` — ${m.responsibility}` : ''}`))}
               {decl.allowedDependencies.map(d => row('May depend', `${d.from} → ${d.to}`))}
               {!decl.modules.length && row('Modules', 'None declared yet')}
-            </>
+            </section>
           )}
           {secOn('guide') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Philosophy & guide</div>
               {data.archGuide.trim()
                 ? <div className="field-hint" style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto' }}>{data.archGuide.slice(0, 4000)}</div>
                 : row('Guide', 'No philosophy or briefed rules written yet — a plan pack writes its own, or ask the agent to draft one')}
-            </>
+            </section>
           )}
           {secOn('report') && rep && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Report</div>
               {rep.rules.length
-                ? rep.rules.map(r => row(`${r.verdict} — ${r.id}`, `${r.say} · ${r.evidence}`))
+                ? rep.rules.map(r => row(`${r.verdict} — ${r.id}`, r.verdict === 'fail'
+                  ? <span style={{ color: 'var(--red-text)' }}>{r.say} · {r.evidence}</span>
+                  : `${r.say} · ${r.evidence}`))
                 : row('Checkable rules', rep.designated ? 'None declared' : 'Nothing to check until an architecture is designated')}
               {rep.drift.declaredNotFound.length ? row('Declared, not on disk', rep.drift.declaredNotFound.join(', ')) : null}
               {rep.drift.foundNotDeclared.length ? row('On disk, not declared', rep.drift.foundNotDeclared.join(', ')) : null}
               <FacetCriteriaSection facet="architecture" />
-            </>
+            </section>
           )}
           {secOn('packs') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Architecture plan packs</div>
               <ArchPacksSection
                 onFollowed={(declaration, report) => setData(d => (d ? { ...d, arch: declaration, archReport: report } : d))}
               />
-            </>
+            </section>
           )}
         </>
       )
@@ -278,43 +333,58 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
       return (
         <>
           {secOn('state') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Stack summary</div>
               {s.languages.map(l => row(`Language — ${l.name}`, `${l.files} files · ${l.locations.slice(0, 3).join(', ')}`))}
               {s.facts.map(f => row('Stack fact', f))}
               {row('Ecosystems', s.ecosystems.length ? s.ecosystems.join(', ') : 'None recognised')}
               {!s.languages.length && row('Languages', 'No source files found yet')}
-            </>
+            </section>
           )}
           {secOn('packages') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Packages</div>
-              {s.packages.slice(0, 40).map(p => row(
-                p.name,
-                `${p.kind === 'dev' ? 'dev · ' : ''}declared ${p.declared ?? '—'} · installed ${p.installed ?? 'not installed'}${p.usedBy.length ? ` · used in ${p.usedBy.length} file${p.usedBy.length === 1 ? '' : 's'}` : ''}`,
-              ))}
-              {s.packages.length > 40 ? row('…', `and ${s.packages.length - 40} more`) : null}
+              {s.packages.length > 0 && (
+                <table className="fs-table">
+                  <thead><tr><th>Package</th><th>Declared</th><th>Installed</th><th>Kind</th><th>Used by</th></tr></thead>
+                  <tbody>
+                    {s.packages.slice(0, 40).map(p => {
+                      const mismatch = s.report.versionMismatches.find(m => m.name === p.name)
+                      return (
+                        <tr key={p.name} className={mismatch ? 'flag' : undefined} title={mismatch ? `Version mismatch — declared ${mismatch.declared}, installed ${mismatch.installed}` : undefined}>
+                          <td>{p.name}</td>
+                          <td>{p.declared ?? '—'}</td>
+                          <td>{p.installed ?? 'not installed'}</td>
+                          <td>{p.kind === 'dev' ? 'dev' : 'runtime'}</td>
+                          <td>{p.usedBy.length ? `${p.usedBy.length} file${p.usedBy.length === 1 ? '' : 's'}` : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {s.packages.length > 40 && <div className="field-hint">…and {s.packages.length - 40} more</div>}
               {!s.packages.length && row('Packages', 'No manifest found — nothing declared yet')}
               <PackageTurns packages={s.packages} />
-            </>
+            </section>
           )}
           {secOn('files') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Files of note</div>
               {s.filesOfNote.map(f => row(f.path, f.what))}
               {!s.filesOfNote.length && row('Files of note', 'None — no manifests or config files found')}
               <div className="field-hint">These files are edited in the Configuration facet; Tech Stack only refers to them.</div>
-            </>
+            </section>
           )}
           {secOn('report') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Report</div>
               {row('Declared, not installed', s.report.declaredNotInstalled.length ? s.report.declaredNotInstalled.join(', ') : 'None')}
               {row('Installed, not declared', s.report.installedNotDeclared.length ? s.report.installedNotDeclared.slice(0, 12).join(', ') : 'None')}
               {row('Version mismatches', s.report.versionMismatches.length ? s.report.versionMismatches.map(m => `${m.name} (declared ${m.declared}, installed ${m.installed})`).join(' · ') : 'None')}
               {row('Candidate unused', s.report.candidateUnused.length ? `${s.report.candidateUnused.join(', ')} — candidates only: nothing here is asserted unused, dynamic references lie` : 'None')}
               <FacetCriteriaSection facet="tech-stack" />
-            </>
+            </section>
           )}
         </>
       )
@@ -329,23 +399,31 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
       return (
         <>
           {secOn('state') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Current state</div>
               {row('Recognised as', inv.groups.length ? inv.groups.map(g => g.label).join(' + ') : 'Nothing recognised yet')}
               {row('Config files', `${total}`)}
-            </>
+            </section>
           )}
           {secOn('entries') && inv.groups.map(g => (
-            <div key={g.id}>
+            <section className="facet-card" key={g.id}>
               <div className="aa-group">{g.label}</div>
-              {g.entries.map(e => row(
-                `${e.aspect} — ${e.file}`,
-                e.envKeys ? `${e.summary} (${e.envKeys.join(', ')})` : e.summary,
-              ))}
-            </div>
+              <table className="fs-table">
+                <thead><tr><th>Aspect</th><th>File</th><th>Summary</th></tr></thead>
+                <tbody>
+                  {g.entries.map(e => (
+                    <tr key={`${e.aspect}-${e.file}`}>
+                      <td>{e.aspect}</td>
+                      <td className="mono">{e.file}</td>
+                      <td>{e.envKeys ? `${e.summary} (${e.envKeys.join(', ')})` : e.summary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           ))}
           {secOn('project') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Project record</div>
               {row('Project type', inv.projectRecord?.type ?? data.config?.type ?? 'Not designated yet')}
               {row('Format', inv.projectRecord?.format ?? data.config?.format ?? 'App (viewport-fit)')}
@@ -355,16 +433,16 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
               <div style={{ marginTop: 8 }}>
                 <button type="button" className="wiz-btn" onClick={() => onOpenSettings('project')}>Project settings…</button>
               </div>
-            </>
+            </section>
           )}
           {secOn('report') && (
-            <>
+            <section className="facet-card">
               <div className="aa-group">Report</div>
               {row('Unrecognised config files', inv.unrecognised.length ? inv.unrecognised.join(', ') : 'None — every config-looking file is recognised')}
               {row('Aspects with no file', inv.groups.flatMap(g => g.missingAspects).length ? inv.groups.flatMap(g => g.missingAspects).join(' · ') : 'None')}
               <div className="field-hint">Environment files are listed with variable names only — their values never appear here (§7.3). Open the file itself to see or change a value.</div>
               <FacetCriteriaSection facet="configuration" />
-            </>
+            </section>
           )}
         </>
       )
@@ -382,28 +460,28 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
       return (
         <>
           {secOn('git') && (
-            <div id="delivery-git">
+            <section className="facet-card" id="delivery-git">
               <div className="aa-group">Git</div>
               <GitSection />
-            </div>
+            </section>
           )}
           {secOn('tests') && (
-            <div id="delivery-tests">
+            <section className="facet-card" id="delivery-tests">
               <div className="aa-group">Tests</div>
               <TestsSection />
-            </div>
+            </section>
           )}
           {secOn('ci') && (
-            <div id="delivery-ci">
+            <section className="facet-card" id="delivery-ci">
               <div className="aa-group">CI</div>
               <CiSection />
-            </div>
+            </section>
           )}
           {secOn('deployment') && (
-            <div id="delivery-deployment">
+            <section className="facet-card" id="delivery-deployment">
               <div className="aa-group">Deployment</div>
               <DeploymentSection />
-            </div>
+            </section>
           )}
         </>
       )
@@ -445,7 +523,9 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
                 <>
                   {row('Token source', data.designGraph?.source ? `${data.designGraph.source.file} (${data.designGraph.source.kind})` : 'Derived')}
                   {[...groups.entries()].map(([grp, n]) => row(`Group — ${grp}`, `${n} token${n === 1 ? '' : 's'}`))}
-                  {graphTokens.slice(0, 12).map(t => row(`--${t.name}`, t.value ?? ''))}
+                  {graphTokens.slice(0, 12).map(t => row(`--${t.name}`, /^#|^rgb|^hsl/i.test(t.value ?? '')
+                    ? <><span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: 3, background: t.value, border: '1px solid var(--border-strong)', marginRight: 6, verticalAlign: -1 }} />{t.value}</>
+                    : (t.value ?? '')))}
                   {graphTokens.length > 12 ? row('…', `and ${graphTokens.length - 12} more`) : null}
                   <TokenEditor
                     tokens={graphTokens}
@@ -466,7 +546,9 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
             return g?.typography
               ? <>
                   {g.typography.families.map(f => row(`Family — ${f.name}`, [f.role, f.source].filter(Boolean).join(' · ') || '—'))}
-                  {g.typography.scale.map(t => row(`Step — ${t.step}`, `${t.size}${t.weight ? ` · ${t.weight}` : ''}${t.lineHeight ? ` · line ${t.lineHeight}` : ''}`))}
+                  {g.typography.scale.map(t => row(`Step — ${t.step}`, /^[\d.]+(px|rem|em)$/.test(t.size)
+                    ? <span style={{ fontSize: t.size, lineHeight: 1.25 }}>Ag — {t.size}{t.weight ? ` · ${t.weight}` : ''}{t.lineHeight ? ` · line ${t.lineHeight}` : ''}</span>
+                    : `${t.size}${t.weight ? ` · ${t.weight}` : ''}${t.lineHeight ? ` · line ${t.lineHeight}` : ''}`))}
                 </>
               : row('Type families', 'Not designated yet')
           case 'layout':
@@ -538,16 +620,31 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
             return null
         }
       }
+      const areas = sectionsForFacet('graphic-design')
+        .filter(sec => sec.id !== 'actions' && sec.id !== 'wizards' && secOn(sec.id))
+      const activeArea = areas.find(a => a.id === gdArea) ?? areas[0]
       return (
         <>
-          {sectionsForFacet('graphic-design')
-            .filter(sec => sec.id !== 'actions' && sec.id !== 'wizards' && secOn(sec.id))
-            .map(sec => (
-              <div key={sec.id}>
-                <div className="aa-group">{sec.title}</div>
-                {sectionBody(sec.id)}
-              </div>
+          <div className="facet-areas" role="tablist" aria-label="Graphic Design areas">
+            {areas.map(sec => (
+              <button
+                key={sec.id}
+                type="button"
+                role="tab"
+                aria-selected={activeArea?.id === sec.id}
+                className={`facet-area${activeArea?.id === sec.id ? ' on' : ''}`}
+                onClick={() => setGdArea(sec.id)}
+              >
+                {sec.title}
+              </button>
             ))}
+          </div>
+          {activeArea && (
+            <section className="facet-card">
+              <div className="aa-group">{activeArea.title}</div>
+              {sectionBody(activeArea.id)}
+            </section>
+          )}
         </>
       )
     }
@@ -555,14 +652,17 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
     const r = data.rollup?.overall
     return (
       <>
-        {row('Project', projectName)}
-        {row('Files', `${filesCount}`)}
-        {row('Project type', data.config?.type ?? 'Not designated yet')}
-        {row('Start page', data.config?.entry ?? startPage ?? 'Not set')}
-        {row('Feature graph', r ? `${r.pct}% built (${r.built}/${r.total})` : 'None yet')}
+        <section className="facet-card">
+          <div className="aa-group">At a glance</div>
+          {row('Project', projectName)}
+          {row('Files', `${filesCount}`)}
+          {row('Project type', data.config?.type ?? 'Not designated yet')}
+          {row('Start page', data.config?.entry ?? startPage ?? 'Not set')}
+          {row('Feature graph', r ? `${r.pct}% built (${r.built}/${r.total})` : 'None yet')}
+        </section>
         {sectionEnabled(prefs, 'overview', 'facets') && (
           <>
-            <div className="aa-group">Facets</div>
+            <div className="ov-grid">
             {FACET_IDS.filter(f => f !== 'overview').map(f => {
               const on = facetEnabled(prefs, f)
               // One state line per facet (§9): what stands there,
@@ -583,14 +683,17 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
                             ? (data.delivery ? deliveryStateLine(data.delivery) : 'Not read yet')
                             : FACET_BLURBS[f]
               return (
-                <div className="fs-pack" key={f}>
-                  <span><b>{FACET_TITLES[f]}</b> — {stateLine}</span>
+                <div className="ov-card" key={f}>
+                  <b>{facetStatus(f) && <span className={`facet-dot st-${facetStatus(f)}`} />}{FACET_TITLES[f]}</b>
+                  <span>{stateLine}</span>
                   {on
                     ? <button type="button" className="wiz-btn" onClick={() => onNavigateFacet(f)}>Open</button>
                     : <button type="button" className="wiz-btn" onClick={() => saveUiPrefs(facetTogglePatch(prefs, f, true))}>Turn on</button>}
                 </div>
               )
             })}
+            </div>
+            <section className="facet-card">
             <div className="aa-group">Across facets</div>
             {data.delivery && row('Ship readiness — clean tree?', data.delivery.git ? (data.delivery.git.changed === 0 ? 'Yes' : `No — ${data.delivery.git.changed} changed file(s)`) : 'Not a git repository')}
             {data.delivery && row('Ship readiness — tests green?', data.delivery.tests ? (data.delivery.tests.green ? `Yes — ${data.delivery.tests.pass} passed in the latest full run` : `No — ${data.delivery.tests.fail} failing`) : 'No full test run recorded yet')}
@@ -600,6 +703,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
             {data.links.filter(l => !l.resolved).map(l => row(`Broken — ${l.kind} (${l.id})`, `${l.from} → ${l.to} (${l.targetLabel} not found)`))}
             {row('Design drift', data.designReport ? `${data.designReport.hardcoded.length} hard-coded value(s), ${data.designReport.unusedTokens.length} unused token(s)` : 'Not derived yet')}
             {row('Architecture drift', data.archReport ? (data.archReport.designated ? `${data.archReport.drift.declaredNotFound.length} declared module(s) missing` : 'Not designated') : 'Not read yet')}
+            </section>
           </>
         )}
       </>
@@ -620,6 +724,35 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
     return ''
   }
 
+  /** Tab state marker (design: in good shape / drift to review /
+   * not yet designated), from the facet's own data — the same
+   * facts its Overview state line reports. */
+  function facetStatus(f: FacetId): 'ok' | 'drift' | 'none' | null {
+    if (!data || f === 'overview') return null
+    switch (f) {
+      case 'features':
+        if (!data.graph) return 'none'
+        return (data.rollup?.overall.blocked ?? 0) > 0 ? 'drift' : 'ok'
+      case 'architecture':
+        if (!data.arch) return 'none'
+        return (data.archReport?.rules.some(r => r.verdict === 'fail') || (data.archReport?.drift.declaredNotFound.length ?? 0) > 0) ? 'drift' : 'ok'
+      case 'graphic-design':
+        if (!data.guide) return 'none'
+        return (data.designReport?.hardcoded.length ?? 0) > 0 ? 'drift' : 'ok'
+      case 'tech-stack':
+        if (!data.stack) return 'none'
+        return data.stack.report.versionMismatches.length > 0 ? 'drift' : 'ok'
+      case 'configuration':
+        if (!data.inventory) return 'none'
+        return data.inventory.unrecognised.length > 0 ? 'drift' : 'ok'
+      case 'delivery':
+        if (!data.delivery) return 'none'
+        return ((data.delivery.tests && !data.delivery.tests.green) || (data.delivery.ci && !data.delivery.ci.green) || (data.delivery.git?.changed ?? 0) > 0) ? 'drift' : 'ok'
+      default:
+        return null
+    }
+  }
+
   const facetActions = facet === 'overview'
     ? AGENT_ACTIONS.filter(a => a.facet === 'any')
     : actionsForFacet(facet)
@@ -636,6 +769,7 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
             className={`facet-tab${facet === f ? ' on' : ''}`}
             onClick={() => onNavigateFacet(f)}
           >
+            {facetStatus(f) && <span className={`facet-dot st-${facetStatus(f)}`} />}
             {FACET_TITLES[f]}
           </button>
         ))}
@@ -646,24 +780,34 @@ export function FacetView({ facet, projectName, filesCount, startPage, ctx, onNa
           <b>{FACET_TITLES[facet]}</b>
           <span>{FACET_BLURBS[facet]}</span>
         </div>
-
-        <div className="aa-group">Current state</div>
-        <div className="facet-state">{stateBlock()}</div>
         {nextStep() && <div className="facet-next">{nextStep()}</div>}
 
-        {secOn('actions') && (
-          <>
-            <div className="aa-group">{FACET_TITLES[facet]} actions</div>
-            <div className="facet-grid">{facetActions.map(actionCard)}</div>
-          </>
-        )}
-
-        {facet !== 'overview' && secOn('wizards') && (
-          <>
-            <div className="aa-group">{FACET_TITLES[facet]} wizards</div>
-            <div className="facet-grid">{wizardsForFacet(facet as ProjectFacetId).map(wizardCard)}</div>
-          </>
-        )}
+        <div className="facet-layout">
+          <div className="facet-main">{stateBlock()}</div>
+          <aside className="facet-rail">
+            {facet === 'delivery' && data?.delivery && (
+              <section className="facet-card">
+                <div className="aa-group">Ship readiness</div>
+                {row('Clean tree', data.delivery.git ? (data.delivery.git.changed === 0 ? 'Yes' : `No — ${data.delivery.git.changed} changed file(s)`) : 'Not a git repository')}
+                {row('Tests green', data.delivery.tests ? (data.delivery.tests.green ? `Yes — ${data.delivery.tests.pass} passed in the latest full run` : `No — ${data.delivery.tests.fail} failing`) : 'No full test run recorded yet')}
+                {row('CI green', data.delivery.ci ? (data.delivery.ci.green ? `Yes — "${data.delivery.ci.pipelineName}" succeeded on HEAD` : `No — "${data.delivery.ci.pipelineName}" is ${data.delivery.ci.state} on HEAD`) : 'Unknown — no recorded CI run for HEAD')}
+                {row('Deployed = HEAD', data.delivery.upToDate === null ? 'Unknown — nothing deployed from here' : data.delivery.upToDate ? 'Yes' : 'No — HEAD has moved since the last deployment')}
+              </section>
+            )}
+            {secOn('actions') && (
+              <section className="facet-card">
+                <div className="aa-group">{FACET_TITLES[facet]} actions</div>
+                <div className="facet-rail-cards">{facetActions.map(actionCard)}</div>
+              </section>
+            )}
+            {facet !== 'overview' && secOn('wizards') && (
+              <section className="facet-card">
+                <div className="aa-group">{FACET_TITLES[facet]} wizards</div>
+                <div className="facet-rail-cards">{wizardsForFacet(facet as ProjectFacetId).map(wizardCard)}</div>
+              </section>
+            )}
+          </aside>
+        </div>
       </div>
     </div>
   )

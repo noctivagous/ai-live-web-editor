@@ -4,6 +4,22 @@ A local-first AI coding host: real files on disk, a live Vite app, and a Mastra 
 
 Ask: *"list the files in this project"* or *"add a counter button"* — the agent uses `grep` / ranged `read-real-file` / `str-replace` (exact unique hunk; fail closed). `write-real-file` is for new files. Vite HMR shows the change.
 
+## Screenshots
+
+The editor running the Lumen sample project, in three of its UI themes:
+
+**Dark 2020s** (default)
+
+![AI Live Editor in the Dark 2020s theme](docs/screenshots/ale-dark-2020s.png)
+
+**Gray Pro Classic**
+
+![AI Live Editor in the Gray Pro Classic theme](docs/screenshots/ale-gray-pro-classic.png)
+
+**Light Gray 2020s**
+
+![AI Live Editor in the Light Gray 2020s theme](docs/screenshots/ale-light-gray-2020s.png)
+
 ## Path 1 — this repo (host)
 
 This product owns a **workspace** of apps. Each child of `projects/` is one project (its own Vite app). Switching is among those children.
@@ -116,4 +132,4 @@ Archived (not started by `npm run dev`): [`archive/extension/`](archive/extensio
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE) for the full text.

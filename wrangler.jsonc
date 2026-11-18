@@ -1,0 +1,11 @@
+{
+  // Cloudflare Workers static-assets deploy of the ALE demo.
+  // Build first (npm run ui:build:demo -> dist-demo/), then
+  // `npx wrangler deploy` serves dist-demo with SPA fallback.
+  "name": "ai-live-web-editor",
+  "compatibility_date": "2026-11-18",
+  "assets": {
+    "directory": "./dist-demo",
+    "not_found_handling": "single-page-application"
+  }
+}
